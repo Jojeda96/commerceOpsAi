@@ -1,0 +1,28 @@
+{
+  "name": "commerce-ops-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=api",
+    "dev:web": "turbo run dev --filter=web",
+    "dev:ml": "cd apps/ml-service && uvicorn app.main:app --reload --port 8000",
+    "build": "turbo run build",
+    "build:api": "turbo run build --filter=api",
+    "build:web": "turbo run build --filter=web",
+    "db:migrate": "npm run db:migrate --workspace=apps/api",
+    "db:generate": "npm run db:generate --workspace=apps/api",
+    "db:seed": "npx ts-node --transpile-only -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/import-olist.ts",
+    "test": "turbo run test",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.7.0"
+  }
+}

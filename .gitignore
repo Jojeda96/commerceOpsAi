@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+*.env
+!*.env.example
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/fixtures/**
+*.pyc
+__pycache__/
+.venv/
+*.log
+coverage/
+.next/
+.turbo/

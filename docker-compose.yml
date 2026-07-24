@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: commerce_ops_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: commerce_ops_db
+      POSTGRES_USER: jose
+      POSTGRES_PASSWORD: jose123
+    ports:
+      - "5434:5432"
+    volumes:
+      - commerce_ops_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jose -d commerce_ops_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: commerce_ops_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ml-service:
+    build:
+      context: ./apps/ml-service
+      dockerfile: Dockerfile
+    container_name: commerce_ops_ml
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://jose:jose123@postgres:5432/commerce_ops_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: commerce_ops_api
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://jose:jose123@postgres:5432/commerce_ops_db
+      - REDIS_URL=redis://redis:6379
+      - ML_SERVICE_URL=http://ml-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+    env_file:
+      - .env
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: commerce_ops_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5051:80"
+    depends_on:
+      - postgres
+    profiles:
+      - debug
+
+volumes:
+  commerce_ops_postgres_data:

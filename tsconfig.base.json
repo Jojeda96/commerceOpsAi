@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "baseUrl": "./",
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "paths": {
+      "@commerce-ops/shared-types": ["packages/shared-types/src/index.ts"],
+      "@commerce-ops/agent-contracts": ["packages/agent-contracts/src/index.ts"],
+      "@commerce-ops/observability": ["packages/observability/src/index.ts"],
+      "@commerce-ops/evaluation": ["packages/evaluation/src/index.ts"]
+    }
+  }
+}

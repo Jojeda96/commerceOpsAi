@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ---- TABLAS OLIST (importadas desde CSV) ----
+// ==========================================
+
+model OlistCustomer {
+  id                    String       @id @default(uuid())
+  customerUniqueId      String       @map("customer_unique_id")
+  customerZipCodePrefix String       @map("customer_zip_code_prefix")
+  customerCity          String       @map("customer_city")
+  customerState         String       @map("customer_state")
+  orders                OlistOrder[]
+
+  @@map("olist_customers")
+  @@index([customerState])
+  @@index([customerCity])
+}
+
+model OlistSeller {
+  id                  String           @id @default(uuid())
+  sellerZipCodePrefix String           @map("seller_zip_code_prefix")
+  sellerCity          String           @map("seller_city")
+  sellerState         String           @map("seller_state")
+  orderItems          OlistOrderItem[]
+
+  @@map("olist_sellers")
+  @@index([sellerState])
+}
+
+model OlistOrder {
+  id                         String              @id @default(uuid())
+  orderId                    String              @unique @map("order_id")
+  customerId                 String              @map("customer_id")
+  orderStatus                String              @map("order_status")
+  orderPurchaseTimestamp      DateTime            @map("order_purchase_timestamp")
+  orderApprovedAt            DateTime?           @map("order_approved_at")
+  orderDeliveredCarrierDate  DateTime?           @map("order_delivered_carrier_date")
+  orderDeliveredCustomerDate DateTime?           @map("order_delivered_customer_date")
+  orderEstimatedDeliveryDate DateTime            @map("order_estimated_delivery_date")
+  customer                   OlistCustomer       @relation(fields: [customerId], references: [id])
+  items                      OlistOrderItem[]
+  payments                   OlistOrderPayment[]
+  reviews                    OlistOrderReview[]
+
+  @@map("olist_orders")
+  @@index([orderPurchaseTimestamp])
+  @@index([orderStatus])
+  @@index([customerId])
+}
+
+model OlistOrderItem {
+  id                String       @id @default(uuid())
+  orderId           String       @map("order_id")
+  orderItemId       Int          @map("order_item_id")
+  productId         String       @map("product_id")
+  sellerId          String       @map("seller_id")
+  shippingLimitDate DateTime     @map("shipping_limit_date")
+  price             Float
+  freightValue      Float        @map("freight_value")
+  order             OlistOrder   @relation(fields: [orderId], references: [id])
+  product           OlistProduct @relation(fields: [productId], references: [id])
+  seller            OlistSeller  @relation(fields: [sellerId], references: [id])
+
+  @@map("olist_order_items")
+  @@index([sellerId])
+  @@index([productId])
+  @@index([orderId])
+}
+
+model OlistOrderPayment {
+  id                 String     @id @default(uuid())
+  orderId            String     @map("order_id")
+  paymentSequential  Int        @map("payment_sequential")
+  paymentType        String     @map("payment_type")
+  paymentInstallments Int       @map("payment_installments")
+  paymentValue       Float      @map("payment_value")
+  order              OlistOrder @relation(fields: [orderId], references: [id])
+
+  @@map("olist_order_payments")
+  @@index([orderId])
+}
+
+model OlistOrderReview {
+  id                    String     @id @default(uuid())
+  reviewId              String     @map("review_id")
+  orderId               String     @map("order_id")
+  reviewScore           Int        @map("review_score")
+  reviewCommentTitle    String?    @map("review_comment_title")
+  reviewCommentMessage  String?    @map("review_comment_message")
+  reviewCreationDate    DateTime   @map("review_creation_date")
+  reviewAnswerTimestamp DateTime   @map("review_answer_timestamp")
+  order                 OlistOrder @relation(fields: [orderId], references: [id])
+
+  // Campos enriquecidos para NLP / Búsqueda semántica
+  embedding       Float[]
+  sentiment       String?
+  primaryTopic    String?  @map("primary_topic")
+  secondaryTopics String[] @map("secondary_topics")
+  translatedText  String?  @map("translated_text")
+
+  @@map("olist_order_reviews")
+  @@index([reviewScore])
+  @@index([orderId])
+}
+
+model OlistProduct {
+  id                       String           @id @default(uuid())
+  productCategoryName      String?          @map("product_category_name")
+  productNameLength        Int?             @map("product_name_length")
+  productDescriptionLength Int?             @map("product_description_length")
+  productPhotosQty         Int?             @map("product_photos_qty")
+  productWeightG           Float?           @map("product_weight_g")
+  productLengthCm          Float?           @map("product_length_cm")
+  productHeightCm          Float?           @map("product_height_cm")
+  productWidthCm           Float?           @map("product_width_cm")
+  items                    OlistOrderItem[]
+
+  @@map("olist_products")
+  @@index([productCategoryName])
+}
+
+model OlistGeolocation {
+  id                       String @id @default(uuid())
+  geolocationZipCodePrefix String @map("geolocation_zip_code_prefix")
+  geolocationLat           Float  @map("geolocation_lat")
+  geolocationLng           Float  @map("geolocation_lng")
+  geolocationCity          String @map("geolocation_city")
+  geolocationState         String @map("geolocation_state")
+
+  @@map("olist_geolocation")
+  @@index([geolocationZipCodePrefix])
+}
+
+model ProductCategoryTranslation {
+  id                         String @id @default(uuid())
+  productCategoryName        String @unique @map("product_category_name")
+  productCategoryNameEnglish String @map("product_category_name_english")
+
+  @@map("product_category_translation")
+}
+
+// ==========================================
+// ---- TABLAS DE LA PLATAFORMA MULTIAGENTE ----
+// ==========================================
+
+model Investigation {
+  id                String              @id @default(uuid())
+  title             String
+  question          String
+  status            String              @default("PENDING")
+  dateFrom          DateTime?           @map("date_from")
+  dateTo            DateTime?           @map("date_to")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  completedAt       DateTime?           @map("completed_at")
+  iterationCount    Int                 @default(0) @map("iteration_count")
+  finalQualityScore Float?              @map("final_quality_score")
+  tasks             InvestigationTask[]
+  agentRuns         AgentRun[]
+  findings          Finding[]
+  criticFeedback    CriticFeedback[]
+  recommendations   Recommendation[]
+
+  @@map("investigations")
+}
+
+model InvestigationTask {
+  id              String        @id @default(uuid())
+  investigationId String        @map("investigation_id")
+  agentName       String        @map("agent_name")
+  objective       String
+  status          String        @default("PENDING")
+  dependsOn       String[]      @map("depends_on")
+  startedAt       DateTime?     @map("started_at")
+  completedAt     DateTime?     @map("completed_at")
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@map("investigation_tasks")
+}
+
+model AgentRun {
+  id              String          @id @default(uuid())
+  investigationId String          @map("investigation_id")
+  agentName       String          @map("agent_name")
+  model           String?
+  promptVersion   String?         @map("prompt_version")
+  status          String          @default("RUNNING")
+  inputTokens     Int?            @map("input_tokens")
+  outputTokens    Int?            @map("output_tokens")
+  estimatedCost   Float?          @map("estimated_cost")
+  durationMs      Int?            @map("duration_ms")
+  startedAt       DateTime        @default(now()) @map("started_at")
+  completedAt     DateTime?       @map("completed_at")
+  investigation   Investigation   @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  toolExecutions  ToolExecution[]
+  findings        Finding[]
+
+  @@map("agent_runs")
+}
+
+model ToolExecution {
+  id             String     @id @default(uuid())
+  agentRunId     String     @map("agent_run_id")
+  toolName       String     @map("tool_name")
+  parametersJson Json       @map("parameters_json")
+  resultSummary  String?    @map("result_summary")
+  rawResultPath  String?    @map("raw_result_path")
+  status         String     @default("RUNNING")
+  durationMs     Int?       @map("duration_ms")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  agentRun       AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  evidence       Evidence[]
+
+  @@map("tool_executions")
+}
+
+model Finding {
+  id              String            @id @default(uuid())
+  investigationId String            @map("investigation_id")
+  agentRunId      String?           @map("agent_run_id")
+  agentName       String            @default("UNKNOWN") @map("agent_name")
+  title           String
+  description     String
+  findingType     String            @map("finding_type")
+  confidence      Float
+  createdAt       DateTime          @default(now()) @map("created_at")
+  investigation   Investigation     @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  agentRun        AgentRun?         @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  evidence        FindingEvidence[]
+  criticFeedback  CriticFeedback[]
+
+  @@map("findings")
+}
+
+model Evidence {
+  id              String            @id @default(uuid())
+  toolExecutionId String?           @map("tool_execution_id")
+  evidenceType    String            @map("evidence_type")
+  summary         String
+  rowCount        Int?              @map("row_count")
+  sampleSize      Int?              @map("sample_size")
+  queryHash       String?           @map("query_hash")
+  rawReference    String?           @map("raw_reference")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  toolExecution   ToolExecution?    @relation(fields: [toolExecutionId], references: [id], onDelete: SetNull)
+  findings        FindingEvidence[]
+
+  @@map("evidence")
+}
+
+model FindingEvidence {
+  findingId  String   @map("finding_id")
+  evidenceId String   @map("evidence_id")
+  finding    Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  evidence   Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@id([findingId, evidenceId])
+  @@map("finding_evidence")
+}
+
+model CriticFeedback {
+  id              String        @id @default(uuid())
+  investigationId String        @map("investigation_id")
+  findingId       String?       @map("finding_id")
+  severity        String
+  message         String
+  requiredAction  String?       @map("required_action")
+  status          String        @default("PENDING")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  finding         Finding?      @relation(fields: [findingId], references: [id], onDelete: SetNull)
+
+  @@map("critic_feedback")
+}
+
+model Recommendation {
+  id              String        @id @default(uuid())
+  investigationId String        @map("investigation_id")
+  title           String
+  description     String
+  priority        String
+  expectedImpact  String?       @map("expected_impact")
+  assumptionsJson Json?         @map("assumptions_json")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@map("recommendations")
+}
+
+model BusinessAlert {
+  id          String   @id @default(uuid())
+  alertType   String   @map("alert_type")
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  severity    String
+  detectedAt  DateTime @map("detected_at")
+  metricsJson Json     @map("metrics_json")
+  status      String   @default("ACTIVE")
+
+  @@map("business_alerts")
+}
+
+model ModelPrediction {
+  id              String   @id @default(uuid())
+  modelVersion    String   @map("model_version")
+  entityType      String   @map("entity_type")
+  entityId        String   @map("entity_id")
+  prediction      String
+  probability     Float?
+  featuresJson    Json     @map("features_json")
+  explanationJson Json?    @map("explanation_json")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("model_predictions")
+}
