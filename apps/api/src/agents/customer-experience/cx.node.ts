@@ -10,20 +10,50 @@ import { createCustomerExperienceTools } from './cx.tools';
  */
 function extractCategory(question: string): string | undefined {
   const categoryPatterns = [
-    'informatica_acessorios', 'moveis_decoracao', 'beleza_saude', 'esporte_lazer',
-    'cama_mesa_banho', 'utilidades_domesticas', 'relogios_presentes', 'telefonia',
-    'automotivo', 'brinquedos', 'cool_stuff', 'ferramentas_jardim', 'perfumaria',
-    'bebes', 'eletronicos', 'papelaria', 'fashion_bolsas_e_acessorios', 'pet_shop',
-    'moveis_escritorio', 'consoles_games', 'malas_acessorios', 'construcao_ferramentas',
-    'eletrodomesticos', 'livros_interesse_geral', 'alimentos_bebidas', 'musica',
-    'moveis_sala', 'climatizacao', 'moveis_cozinha_area_de_servico_jantar_e_jardim',
-    'watches_gifts', 'computers_accessories', 'furniture_decor', 'health_beauty',
-    'sports_leisure', 'bed_bath_table', 'housewares',
+    'informatica_acessorios',
+    'moveis_decoracao',
+    'beleza_saude',
+    'esporte_lazer',
+    'cama_mesa_banho',
+    'utilidades_domesticas',
+    'relogios_presentes',
+    'telefonia',
+    'automotivo',
+    'brinquedos',
+    'cool_stuff',
+    'ferramentas_jardim',
+    'perfumaria',
+    'bebes',
+    'eletronicos',
+    'papelaria',
+    'fashion_bolsas_e_acessorios',
+    'pet_shop',
+    'moveis_escritorio',
+    'consoles_games',
+    'malas_acessorios',
+    'construcao_ferramentas',
+    'eletrodomesticos',
+    'livros_interesse_geral',
+    'alimentos_bebidas',
+    'musica',
+    'moveis_sala',
+    'climatizacao',
+    'moveis_cozinha_area_de_servico_jantar_e_jardim',
+    'watches_gifts',
+    'computers_accessories',
+    'furniture_decor',
+    'health_beauty',
+    'sports_leisure',
+    'bed_bath_table',
+    'housewares',
   ];
 
   const lower = question.toLowerCase().replace(/\s+/g, '_');
   for (const cat of categoryPatterns) {
-    if (lower.includes(cat) || question.toLowerCase().includes(cat.replace(/_/g, ' '))) {
+    if (
+      lower.includes(cat) ||
+      question.toLowerCase().includes(cat.replace(/_/g, ' '))
+    ) {
       return cat;
     }
   }
@@ -37,11 +67,16 @@ function extractCategory(question: string): string | undefined {
   return undefined;
 }
 
-export function createCustomerExperienceNode(prisma: PrismaService, streaming: StreamingService) {
+export function createCustomerExperienceNode(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
 
-    streaming.emit(investigationId, 'agent.started', { agent: 'CUSTOMER_EXPERIENCE' });
+    streaming.emit(investigationId, 'agent.started', {
+      agent: 'CUSTOMER_EXPERIENCE',
+    });
 
     const tools = createCustomerExperienceTools(prisma);
     const ratingTool = tools.find((t) => t.name === 'get_rating_summary')!;
@@ -49,13 +84,19 @@ export function createCustomerExperienceNode(prisma: PrismaService, streaming: S
     // Extract category from user question if present
     const detectedCategory = extractCategory(userQuestion);
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'CUSTOMER_EXPERIENCE', tool: 'get_rating_summary' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'CUSTOMER_EXPERIENCE',
+      tool: 'get_rating_summary',
+    });
     const ratingResult = await ratingTool.invoke({
       dateFrom: state.filters.dateFrom,
       dateTo: state.filters.dateTo,
       category: detectedCategory,
     });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'CUSTOMER_EXPERIENCE', tool: 'get_rating_summary' });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'CUSTOMER_EXPERIENCE',
+      tool: 'get_rating_summary',
+    });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -88,7 +129,10 @@ Genera un hallazgo técnico objetivo en formato JSON:
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -104,7 +148,11 @@ Genera un hallazgo técnico objetivo en formato JSON:
     const evidenceItem = {
       id: evidenceId,
       toolName: 'get_rating_summary',
-      parameters: { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo, category: detectedCategory },
+      parameters: {
+        dateFrom: state.filters.dateFrom,
+        dateTo: state.filters.dateTo,
+        category: detectedCategory,
+      },
       resultSummary: ratingResult,
       generatedAt: new Date().toISOString(),
     };
@@ -121,11 +169,19 @@ Genera un hallazgo técnico objetivo en formato JSON:
       createdAt: new Date().toISOString(),
     };
 
-    streaming.emit(investigationId, 'finding.created', { agent: 'CUSTOMER_EXPERIENCE', finding: findingItem });
-    streaming.emit(investigationId, 'agent.completed', { agent: 'CUSTOMER_EXPERIENCE' });
+    streaming.emit(investigationId, 'finding.created', {
+      agent: 'CUSTOMER_EXPERIENCE',
+      finding: findingItem,
+    });
+    streaming.emit(investigationId, 'agent.completed', {
+      agent: 'CUSTOMER_EXPERIENCE',
+    });
 
     return {
-      completedAgents: [...state.completedAgents, 'CUSTOMER_EXPERIENCE' as const],
+      completedAgents: [
+        ...state.completedAgents,
+        'CUSTOMER_EXPERIENCE' as const,
+      ],
       findings: [findingItem],
       evidence: [evidenceItem],
     };

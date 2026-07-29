@@ -45,8 +45,10 @@ def validate():
 
     if all_ok:
         print("\n[SUCCESS] ¡Todos los archivos CSV pasaron la validacion exitosamente!")
+        sys.exit(0)
     else:
-        print("\n[WARNING] Hubo errores en la validacion del dataset.")
+        print("\n[ERROR] Hubo errores en la validacion del dataset.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     validate()

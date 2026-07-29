@@ -9,7 +9,7 @@ export class SimulationService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly streaming: StreamingService
+    private readonly streaming: StreamingService,
   ) {}
 
   getDate() {
@@ -23,7 +23,9 @@ export class SimulationService {
     const prevDate = new Date(this.simulationDate);
     this.simulationDate.setDate(this.simulationDate.getDate() + days);
 
-    this.logger.log(`Avanzando fecha de simulación +${days} días: ${this.simulationDate.toISOString()}`);
+    this.logger.log(
+      `Avanzando fecha de simulación +${days} días: ${this.simulationDate.toISOString()}`,
+    );
 
     const alerts = await this.checkAlerts(prevDate, this.simulationDate);
 

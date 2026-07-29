@@ -28,6 +28,7 @@ async function runEvaluations() {
   }
 
   let md = `# Reporte de Evaluaciones Comparativas - CommerceOps AI\n\n`;
+  md += `> ⚠️ **Nota:** Las métricas mostradas reflejan valores de referencia del framework de evaluación. Para métricas en vivo, ejecutar contra el pipeline multiagente activo.\n\n`;
   md += `## Resultados por Configuración\n\n`;
   md += `| Configuración | Exactitud Numérica | Agent Routing | Groundedness | Tasa Alucinación | Latencia Prom. |\n`;
   md += `|---|---|---|---|---|---|\n`;
@@ -44,7 +45,7 @@ async function runEvaluations() {
   }
 
   md += `\n## Conclusión de Evaluaciones\n\n`;
-  md += `La arquitectura **MULTI_AGENT_WITH_CRITIC** supera al enfoque **SINGLE_AGENT** en groundedness (+20%), precisión de routing (+40%) y reducción de alucinaciones (-6%).\n`;
+  md += `El análisis del framework indica que la arquitectura **MULTI_AGENT_WITH_CRITIC** mejora el groundedness y precisión de routing frente a un **SINGLE_AGENT**.\n`;
 
   fs.writeFileSync(reportPath, md, 'utf-8');
   console.log(`✅ Reporte de evaluaciones generado exitosamente en ${reportPath}`);

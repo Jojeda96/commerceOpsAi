@@ -28,7 +28,8 @@ export function createLogisticsTools(prisma: PrismaService) {
       for (const order of deliveredOrders) {
         if (order.orderDeliveredCustomerDate && order.orderPurchaseTimestamp) {
           const delDays =
-            (order.orderDeliveredCustomerDate.getTime() - order.orderPurchaseTimestamp.getTime()) /
+            (order.orderDeliveredCustomerDate.getTime() -
+              order.orderPurchaseTimestamp.getTime()) /
             (1000 * 3600 * 24);
           totalDeliveryDays += delDays;
 
@@ -38,7 +39,8 @@ export function createLogisticsTools(prisma: PrismaService) {
           ) {
             lateOrdersCount++;
             const delayDays =
-              (order.orderDeliveredCustomerDate.getTime() - order.orderEstimatedDeliveryDate.getTime()) /
+              (order.orderDeliveredCustomerDate.getTime() -
+                order.orderEstimatedDeliveryDate.getTime()) /
               (1000 * 3600 * 24);
             totalDelayDays += delayDays;
           }
@@ -46,9 +48,12 @@ export function createLogisticsTools(prisma: PrismaService) {
       }
 
       const totalDelivered = deliveredOrders.length;
-      const lateRate = totalDelivered > 0 ? (lateOrdersCount / totalDelivered) * 100 : 0;
-      const avgDeliveryDays = totalDelivered > 0 ? totalDeliveryDays / totalDelivered : 0;
-      const avgDelayDays = lateOrdersCount > 0 ? totalDelayDays / lateOrdersCount : 0;
+      const lateRate =
+        totalDelivered > 0 ? (lateOrdersCount / totalDelivered) * 100 : 0;
+      const avgDeliveryDays =
+        totalDelivered > 0 ? totalDeliveryDays / totalDelivered : 0;
+      const avgDelayDays =
+        lateOrdersCount > 0 ? totalDelayDays / lateOrdersCount : 0;
 
       return JSON.stringify({
         deliveredOrders: totalDelivered,
@@ -60,12 +65,13 @@ export function createLogisticsTools(prisma: PrismaService) {
     },
     {
       name: 'get_delivery_summary',
-      description: 'Calcula métricas generales de entregas, tasa de atrasos (%) y días promedio de demora.',
+      description:
+        'Calcula métricas generales de entregas, tasa de atrasos (%) y días promedio de demora.',
       schema: z.object({
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),
       }),
-    }
+    },
   );
 
   return [getDeliverySummary];

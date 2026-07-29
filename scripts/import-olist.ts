@@ -49,8 +49,9 @@ async function readCsvInBatches<T>(
   let totalProcessed = 0;
 
   return new Promise((resolve, reject) => {
-    fs.createReadStream(filepath)
-      .pipe(csv())
+    const stream = fs.createReadStream(filepath).pipe(csv());
+
+    stream
       .on('data', (rawRow) => {
         try {
           const row = cleanRow(rawRow);
@@ -61,7 +62,11 @@ async function readCsvInBatches<T>(
               const currentBatch = batch;
               batch = [];
               totalProcessed += currentBatch.length;
-              onBatch(currentBatch).catch(reject);
+
+              stream.pause();
+              onBatch(currentBatch)
+                .then(() => stream.resume())
+                .catch(reject);
             }
           }
         } catch (err) {
@@ -69,11 +74,15 @@ async function readCsvInBatches<T>(
         }
       })
       .on('end', async () => {
-        if (batch.length > 0) {
-          totalProcessed += batch.length;
-          await onBatch(batch).catch(reject);
+        try {
+          if (batch.length > 0) {
+            totalProcessed += batch.length;
+            await onBatch(batch);
+          }
+          resolve(totalProcessed);
+        } catch (err) {
+          reject(err);
         }
-        resolve(totalProcessed);
       })
       .on('error', (error) => reject(error));
   });

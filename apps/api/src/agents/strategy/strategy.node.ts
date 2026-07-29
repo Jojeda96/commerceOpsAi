@@ -23,8 +23,8 @@ Hallazgos aprobados de los agentes:
 ${JSON.stringify(findings, null, 2)}
 
 Instrucciones para "expectedImpact":
-- Calcula o proyecta la mejora basándote en los datos numéricos reales de los hallazgos (ej. si hay 7,826 pedidos atrasados con 9.6 días de retraso promedio, proyecta el porcentaje de reducción razonable al resolver el cuello de botella).
-- Formato sugerido: "Reducción estimada del X% en atrasos (~Y pedidos recuperados)." o "Mejora proyectada del X% en tiempos de despacho."
+- IMPORTANTE: NO inventes cifras ni proyectes reducciones porcentuales arbitrarias. Solo cita datos numéricos que aparezcan explícitamente en los hallazgos.
+- Formato sugerido: "Área de impacto: [métrica o volumen citado en hallazgos]. Acción: [descripción de la mejora]." Si se requieren estimaciones cuantitativas proyectadas, indica "Se requiere simulación cuantitativa."
 
 Genera 2 recomendaciones ejecutivas en formato JSON estricto:
 {
@@ -43,7 +43,10 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -53,9 +56,11 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
               id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               investigationId,
               title: item.title || 'Recomendación operacional',
-              description: item.description || 'Implementar monitoreo continuo.',
+              description:
+                item.description || 'Implementar monitoreo continuo.',
               priority: item.priority || 'MEDIUM',
-              expectedImpact: item.expectedImpact || 'Impacto positivo en la operación.',
+              expectedImpact:
+                item.expectedImpact || 'Impacto positivo en la operación.',
               supportingFindingIds: findings.map((f) => f.id),
               assumptions: item.assumptions || [],
               createdAt: new Date().toISOString(),
@@ -77,7 +82,8 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
         id: `rec-default-${Date.now()}`,
         investigationId,
         title: 'Establecer monitoreo de SLA en rutas con mayor retraso',
-        description: 'Revisar acuerdos con transportistas y capacidad del vendedor.',
+        description:
+          'Revisar acuerdos con transportistas y capacidad del vendedor.',
         priority: 'HIGH',
         expectedImpact: 'Mejora en la satisfacción del cliente.',
         supportingFindingIds: findings.map((f) => f.id),

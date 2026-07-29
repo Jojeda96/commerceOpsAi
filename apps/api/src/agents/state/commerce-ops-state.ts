@@ -66,6 +66,18 @@ export const CommerceOpsAnnotation = Annotation.Root({
     value: (_, next) => next ?? false,
     default: () => false,
   }),
+  criticDecision: Annotation<string>({
+    value: (_, next) => next ?? 'PENDING',
+    default: () => 'PENDING',
+  }),
+  criticScore: Annotation<number>({
+    value: (_, next) => next ?? 0,
+    default: () => 0,
+  }),
+  requestedAgents: Annotation<AgentName[]>({
+    value: (_, next) => next ?? [],
+    default: () => [],
+  }),
 });
 
 export type CommerceOpsStateType = typeof CommerceOpsAnnotation.State;

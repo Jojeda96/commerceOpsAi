@@ -4,21 +4,32 @@ import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createAnomalyTools } from './anomaly.tools';
 
-export function createAnomalyNode(prisma: PrismaService, streaming: StreamingService) {
+export function createAnomalyNode(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
 
     streaming.emit(investigationId, 'agent.started', { agent: 'ANOMALY' });
 
     const tools = createAnomalyTools(prisma);
-    const anomalyTool = tools.find((t) => t.name === 'detect_metric_anomalies')!;
+    const anomalyTool = tools.find(
+      (t) => t.name === 'detect_metric_anomalies',
+    )!;
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'ANOMALY', tool: 'detect_metric_anomalies' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'ANOMALY',
+      tool: 'detect_metric_anomalies',
+    });
     const anomalyResult = await anomalyTool.invoke({
       metric: 'late_delivery_rate',
       threshold: 3.0,
     });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'ANOMALY', tool: 'detect_metric_anomalies' });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'ANOMALY',
+      tool: 'detect_metric_anomalies',
+    });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -41,12 +52,16 @@ Genera un hallazgo técnico sobre anomalías en JSON:
 }`;
 
     let title = 'Análisis de anomalías operacionales completado';
-    let description = 'Se evaluó la presencia de valores atípicos en la operación.';
+    let description =
+      'Se evaluó la presencia de valores atípicos en la operación.';
     let confidence = 0.93;
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -79,7 +94,10 @@ Genera un hallazgo técnico sobre anomalías en JSON:
       createdAt: new Date().toISOString(),
     };
 
-    streaming.emit(investigationId, 'finding.created', { agent: 'ANOMALY', finding: findingItem });
+    streaming.emit(investigationId, 'finding.created', {
+      agent: 'ANOMALY',
+      finding: findingItem,
+    });
     streaming.emit(investigationId, 'agent.completed', { agent: 'ANOMALY' });
 
     return {

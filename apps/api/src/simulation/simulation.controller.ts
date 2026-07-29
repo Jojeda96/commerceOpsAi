@@ -26,7 +26,9 @@ export class SimulationController {
   }
 
   @Get('alerts')
-  @ApiOperation({ summary: 'Obtener alertas operacionales detectadas durante la simulación' })
+  @ApiOperation({
+    summary: 'Obtener alertas operacionales detectadas durante la simulación',
+  })
   getAlerts() {
     return this.simulationService.getAlerts();
   }

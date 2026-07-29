@@ -128,6 +128,9 @@ export interface CommerceOpsState {
   iteration: number;
   maxIterations: number;
   requiresHumanReview: boolean;
+  criticDecision: string;
+  criticScore: number;
+  requestedAgents: AgentName[];
 }
 
 export type InvestigationEventType =

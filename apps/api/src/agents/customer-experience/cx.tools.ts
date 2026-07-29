@@ -10,7 +10,8 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
       // Filtro por fecha
       if (dateFrom || dateTo) {
         where.order = { orderPurchaseTimestamp: {} };
-        if (dateFrom) where.order.orderPurchaseTimestamp.gte = new Date(dateFrom);
+        if (dateFrom)
+          where.order.orderPurchaseTimestamp.gte = new Date(dateFrom);
         if (dateTo) where.order.orderPurchaseTimestamp.lte = new Date(dateTo);
       }
 
@@ -59,14 +60,79 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
     },
     {
       name: 'get_rating_summary',
-      description: 'Calcula la calificación promedio, total de reseñas y distribución de estrellas (1 a 5), opcionalmente filtrado por categoría de producto.',
+      description:
+        'Calcula la calificación promedio, total de reseñas y distribución de estrellas (1 a 5), opcionalmente filtrado por categoría de producto.',
       schema: z.object({
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),
-        category: z.string().optional().describe('Nombre de la categoría de producto a filtrar (ej: informatica_acessorios, moveis_decoracao)'),
+        category: z
+          .string()
+          .optional()
+          .describe(
+            'Nombre de la categoría de producto a filtrar (ej: informatica_acessorios, moveis_decoracao)',
+          ),
       }),
-    }
+    },
   );
 
-  return [getRatingSummary];
+  const searchReviewsSemantic = tool(
+    async ({ query, topK = 5 }) => {
+      const mlServiceUrl =
+        process.env.ML_SERVICE_URL || 'http://localhost:8000';
+      try {
+        const response = await fetch(`${mlServiceUrl}/nlp/reviews/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, top_k: topK }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return JSON.stringify(data);
+        }
+      } catch (err) {
+        console.warn(
+          '[CX Tools] ML Service NLP endpoint no disponible, usando fallback SQL:',
+          err,
+        );
+      }
+
+      // Fallback SQL
+      const reviews = await prisma.olistOrderReview.findMany({
+        where: {
+          reviewCommentMessage: { contains: query, mode: 'insensitive' },
+        },
+        take: topK,
+        select: {
+          reviewId: true,
+          reviewScore: true,
+          reviewCommentMessage: true,
+        },
+      });
+
+      return JSON.stringify({
+        query,
+        method: 'sql_text_search_fallback',
+        results: reviews,
+      });
+    },
+    {
+      name: 'search_reviews_semantic',
+      description:
+        'Busca reseñas de clientes semánticamente relevantes utilizando el servicio de NLP o fallback por palabras clave.',
+      schema: z.object({
+        query: z
+          .string()
+          .describe(
+            'Término de búsqueda o consulta semántica sobre las reseñas',
+          ),
+        topK: z
+          .number()
+          .default(5)
+          .describe('Cantidad máxima de reseñas a devolver'),
+      }),
+    },
+  );
+
+  return [getRatingSummary, searchReviewsSemantic];
 }

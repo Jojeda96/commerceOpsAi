@@ -10,8 +10,10 @@ export class AnalyticsService {
     const where: any = {};
     if (query.dateFrom || query.dateTo) {
       where.orderPurchaseTimestamp = {};
-      if (query.dateFrom) where.orderPurchaseTimestamp.gte = new Date(query.dateFrom);
-      if (query.dateTo) where.orderPurchaseTimestamp.lte = new Date(query.dateTo);
+      if (query.dateFrom)
+        where.orderPurchaseTimestamp.gte = new Date(query.dateFrom);
+      if (query.dateTo)
+        where.orderPurchaseTimestamp.lte = new Date(query.dateTo);
     }
 
     const items = await this.prisma.olistOrderItem.aggregate({
@@ -24,10 +26,11 @@ export class AnalyticsService {
 
     const totalOrders = await this.prisma.olistOrder.count({ where });
 
-    const revenue = items._sum.price || 0;
-    const freightTotal = items._sum.freightValue || 0;
+    const revenue = Number(items._sum.price || 0);
+    const freightTotal = Number(items._sum.freightValue || 0);
     const totalItems = items._count.id || 0;
-    const avgOrderValue = totalOrders > 0 ? (revenue + freightTotal) / totalOrders : 0;
+    const avgOrderValue =
+      totalOrders > 0 ? (revenue + freightTotal) / totalOrders : 0;
 
     return {
       revenue,
@@ -42,8 +45,10 @@ export class AnalyticsService {
     const where: any = { orderStatus: 'delivered' };
     if (query.dateFrom || query.dateTo) {
       where.orderPurchaseTimestamp = {};
-      if (query.dateFrom) where.orderPurchaseTimestamp.gte = new Date(query.dateFrom);
-      if (query.dateTo) where.orderPurchaseTimestamp.lte = new Date(query.dateTo);
+      if (query.dateFrom)
+        where.orderPurchaseTimestamp.gte = new Date(query.dateFrom);
+      if (query.dateTo)
+        where.orderPurchaseTimestamp.lte = new Date(query.dateTo);
     }
 
     const deliveredOrders = await this.prisma.olistOrder.findMany({
@@ -62,7 +67,8 @@ export class AnalyticsService {
     for (const order of deliveredOrders) {
       if (order.orderDeliveredCustomerDate && order.orderPurchaseTimestamp) {
         const delDays =
-          (order.orderDeliveredCustomerDate.getTime() - order.orderPurchaseTimestamp.getTime()) /
+          (order.orderDeliveredCustomerDate.getTime() -
+            order.orderPurchaseTimestamp.getTime()) /
           (1000 * 3600 * 24);
         totalDeliveryDays += delDays;
 
@@ -72,7 +78,8 @@ export class AnalyticsService {
         ) {
           lateOrdersCount++;
           const delayDays =
-            (order.orderDeliveredCustomerDate.getTime() - order.orderEstimatedDeliveryDate.getTime()) /
+            (order.orderDeliveredCustomerDate.getTime() -
+              order.orderEstimatedDeliveryDate.getTime()) /
             (1000 * 3600 * 24);
           totalDelayDays += delayDays;
         }
@@ -80,9 +87,12 @@ export class AnalyticsService {
     }
 
     const totalDelivered = deliveredOrders.length;
-    const lateRate = totalDelivered > 0 ? (lateOrdersCount / totalDelivered) * 100 : 0;
-    const avgDeliveryDays = totalDelivered > 0 ? totalDeliveryDays / totalDelivered : 0;
-    const avgDelayDays = lateOrdersCount > 0 ? totalDelayDays / lateOrdersCount : 0;
+    const lateRate =
+      totalDelivered > 0 ? (lateOrdersCount / totalDelivered) * 100 : 0;
+    const avgDeliveryDays =
+      totalDelivered > 0 ? totalDeliveryDays / totalDelivered : 0;
+    const avgDelayDays =
+      lateOrdersCount > 0 ? totalDelayDays / lateOrdersCount : 0;
 
     return {
       deliveredOrders: totalDelivered,
@@ -99,8 +109,10 @@ export class AnalyticsService {
       where.order = {
         orderPurchaseTimestamp: {},
       };
-      if (query.dateFrom) where.order.orderPurchaseTimestamp.gte = new Date(query.dateFrom);
-      if (query.dateTo) where.order.orderPurchaseTimestamp.lte = new Date(query.dateTo);
+      if (query.dateFrom)
+        where.order.orderPurchaseTimestamp.gte = new Date(query.dateFrom);
+      if (query.dateTo)
+        where.order.orderPurchaseTimestamp.lte = new Date(query.dateTo);
     }
 
     const agg = await this.prisma.olistOrderReview.aggregate({

@@ -1,5 +1,8 @@
 import { StateGraph, END, Send } from '@langchain/langgraph';
-import { CommerceOpsAnnotation, CommerceOpsStateType } from '../state/commerce-ops-state';
+import {
+  CommerceOpsAnnotation,
+  CommerceOpsStateType,
+} from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createSupervisorNode } from '../supervisor/supervisor.node';
@@ -13,7 +16,10 @@ import { createCriticNode } from '../critic/critic.node';
 import { createStrategyNode } from '../strategy/strategy.node';
 import { createReportNode } from './report.node';
 
-export function buildInvestigationGraph(prisma: PrismaService, streaming: StreamingService) {
+export function buildInvestigationGraph(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   const supervisorNode = createSupervisorNode(prisma, streaming);
   const salesNode = createSalesNode(prisma, streaming);
   const logisticsNode = createLogisticsNode(prisma, streaming);
@@ -76,8 +82,10 @@ export function buildInvestigationGraph(prisma: PrismaService, streaming: Stream
     .addEdge('ds_agent', 'critic')
 
     .addConditionalEdges('critic', (state: CommerceOpsStateType) => {
-      const lastFeedback = state.criticFeedback[state.criticFeedback.length - 1];
-      if (lastFeedback?.severity === 'HIGH' && state.iteration < state.maxIterations) {
+      if (
+        state.criticDecision === 'REQUIRES_MORE_ANALYSIS' &&
+        state.iteration < state.maxIterations
+      ) {
         return 'supervisor';
       }
       return 'strategy';

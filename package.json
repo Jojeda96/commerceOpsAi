@@ -18,6 +18,9 @@
     "db:migrate": "npm run db:migrate --workspace=apps/api",
     "db:generate": "npm run db:generate --workspace=apps/api",
     "db:seed": "npx ts-node --transpile-only -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/import-olist.ts",
+    "data:download": "echo 'Descarga el dataset desde https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce y coloca los CSV en data/raw/'",
+    "data:validate": "python scripts/validate-dataset.py",
+    "data:fixtures": "npx ts-node --transpile-only scripts/create-fixtures.ts",
     "test": "turbo run test",
     "lint": "turbo run lint"
   },

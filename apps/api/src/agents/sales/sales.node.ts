@@ -4,7 +4,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createSalesTools } from './sales.tools';
 
-export function createSalesNode(prisma: PrismaService, streaming: StreamingService) {
+export function createSalesNode(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
 
@@ -14,20 +17,32 @@ export function createSalesNode(prisma: PrismaService, streaming: StreamingServi
     const revSummaryTool = tools.find((t) => t.name === 'get_revenue_summary')!;
     const revCatTool = tools.find((t) => t.name === 'get_sales_by_category')!;
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'SALES', tool: 'get_revenue_summary' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'SALES',
+      tool: 'get_revenue_summary',
+    });
     const revSummaryResult = await revSummaryTool.invoke({
       dateFrom: state.filters.dateFrom,
       dateTo: state.filters.dateTo,
     });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'SALES', tool: 'get_revenue_summary' });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'SALES',
+      tool: 'get_revenue_summary',
+    });
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'SALES', tool: 'get_sales_by_category' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'SALES',
+      tool: 'get_sales_by_category',
+    });
     const revCatResult = await revCatTool.invoke({
       dateFrom: state.filters.dateFrom,
       dateTo: state.filters.dateTo,
       topN: 5,
     });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'SALES', tool: 'get_sales_by_category' });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'SALES',
+      tool: 'get_sales_by_category',
+    });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -51,12 +66,16 @@ Analiza estos datos y genera un hallazgo técnico claro en JSON con el siguiente
 }`;
 
     let title = 'Análisis de ventas e ingresos completado';
-    let description = 'Se analizaron los totales de facturación y distribución por categoría.';
+    let description =
+      'Se analizaron los totales de facturación y distribución por categoría.';
     let confidence = 0.9;
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -72,7 +91,10 @@ Analiza estos datos y genera un hallazgo técnico claro en JSON con el siguiente
     const evidenceItem = {
       id: evidenceId,
       toolName: 'get_revenue_summary',
-      parameters: { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo },
+      parameters: {
+        dateFrom: state.filters.dateFrom,
+        dateTo: state.filters.dateTo,
+      },
       resultSummary: revSummaryResult,
       generatedAt: new Date().toISOString(),
     };
@@ -89,7 +111,10 @@ Analiza estos datos y genera un hallazgo técnico claro en JSON con el siguiente
       createdAt: new Date().toISOString(),
     };
 
-    streaming.emit(investigationId, 'finding.created', { agent: 'SALES', finding: findingItem });
+    streaming.emit(investigationId, 'finding.created', {
+      agent: 'SALES',
+      finding: findingItem,
+    });
     streaming.emit(investigationId, 'agent.completed', { agent: 'SALES' });
 
     return {

@@ -42,7 +42,10 @@ Responde estrictamente en formato JSON con la siguiente estructura:
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -57,7 +60,11 @@ Responde estrictamente en formato JSON con la siguiente estructura:
     const criticFeedbackItem = {
       id: `critic-${Date.now()}`,
       investigationId,
-      severity: decision === 'APPROVED' ? ('LOW' as const) : ('MEDIUM' as const),
+      severity: (() => {
+        if (decision === 'APPROVED') return 'LOW' as const;
+        if (decision === 'APPROVED_WITH_WARNINGS') return 'MEDIUM' as const;
+        return 'HIGH' as const; // REQUIRES_MORE_ANALYSIS o REJECTED
+      })(),
       message: feedback,
       status: 'RESOLVED' as const,
       createdAt: new Date().toISOString(),
@@ -70,11 +77,17 @@ Responde estrictamente en formato JSON con la siguiente estructura:
       feedback,
     });
 
-    streaming.emit(investigationId, 'agent.completed', { agent: 'CRITIC', decision });
+    streaming.emit(investigationId, 'agent.completed', {
+      agent: 'CRITIC',
+      decision,
+    });
 
     return {
       completedAgents: [...state.completedAgents, 'CRITIC' as const],
       criticFeedback: [criticFeedbackItem],
+      criticDecision: decision,
+      criticScore: score,
+      iteration: state.iteration + 1,
     };
   };
 }

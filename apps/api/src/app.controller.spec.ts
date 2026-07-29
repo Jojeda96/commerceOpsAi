@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -8,15 +7,19 @@ describe('AppController', () => {
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
     }).compile();
 
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('getHealth', () => {
+    it('should return health status object', () => {
+      const health = appController.getHealth();
+      expect(health).toBeDefined();
+      expect(health.name).toBe('CommerceOps AI API');
+      expect(health.status).toBe('online');
+      expect(health.endpoints).toBeDefined();
+      expect(health.endpoints.investigations).toBe('/api/investigations');
     });
   });
 });

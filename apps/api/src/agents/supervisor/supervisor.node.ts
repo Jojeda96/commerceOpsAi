@@ -4,7 +4,10 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 
-export function createSupervisorNode(prisma: PrismaService, streaming: StreamingService) {
+export function createSupervisorNode(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   return async (state: CommerceOpsStateType) => {
     const { userQuestion, investigationId } = state;
 
@@ -46,16 +49,26 @@ Responde estrictamente en formato JSON con la siguiente estructura:
   ]
 }`;
 
-    let selectedAgents: AgentName[] = ['SALES', 'LOGISTICS', 'CUSTOMER_EXPERIENCE'];
+    let selectedAgents: AgentName[] = [
+      'SALES',
+      'LOGISTICS',
+      'CUSTOMER_EXPERIENCE',
+    ];
     let planTasks: any[] = [];
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        if (Array.isArray(parsed.selectedAgents) && parsed.selectedAgents.length > 0) {
+        if (
+          Array.isArray(parsed.selectedAgents) &&
+          parsed.selectedAgents.length > 0
+        ) {
           selectedAgents = parsed.selectedAgents as AgentName[];
         }
         if (Array.isArray(parsed.plan)) {
@@ -63,7 +76,10 @@ Responde estrictamente en formato JSON con la siguiente estructura:
         }
       }
     } catch (err) {
-      console.warn('[SupervisorNode] Error parsing LLM response, using default fallback plan:', err);
+      console.warn(
+        '[SupervisorNode] Error parsing LLM response, using default fallback plan:',
+        err,
+      );
     }
 
     const tasks = planTasks.map((t, idx) => ({

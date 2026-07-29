@@ -49,7 +49,7 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: commerce_ops_api
     ports:
-      - "3001:3000"
+      - "3001:3001"
     environment:
       - DATABASE_URL=postgresql://jose:jose123@postgres:5432/commerce_ops_db
       - REDIS_URL=redis://redis:6379

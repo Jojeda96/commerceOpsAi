@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import health
+from app.api.routes import health, predictions, anomalies, nlp
 
 app = FastAPI(
     title="CommerceOps AI - ML Service",
@@ -17,6 +17,9 @@ app.add_middleware(
 )
 
 app.include_router(health.router, tags=["Health"])
+app.include_router(predictions.router)
+app.include_router(anomalies.router)
+app.include_router(nlp.router)
 
 if __name__ == "__main__":
     import uvicorn

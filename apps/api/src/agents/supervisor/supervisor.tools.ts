@@ -13,8 +13,12 @@ export function createSupervisorTools(prisma: PrismaService) {
         });
         return JSON.stringify({
           entity: 'orders',
-          minDate: result._min.orderPurchaseTimestamp?.toISOString().split('T')[0],
-          maxDate: result._max.orderPurchaseTimestamp?.toISOString().split('T')[0],
+          minDate: result._min.orderPurchaseTimestamp
+            ?.toISOString()
+            .split('T')[0],
+          maxDate: result._max.orderPurchaseTimestamp
+            ?.toISOString()
+            .split('T')[0],
           totalRows: result._count.id,
           availableFields: [
             'order_status',
@@ -35,11 +39,15 @@ export function createSupervisorTools(prisma: PrismaService) {
     },
     {
       name: 'get_dataset_coverage',
-      description: 'Determina qué periodos, entidades y campos están disponibles en el dataset de Olist.',
+      description:
+        'Determina qué periodos, entidades y campos están disponibles en el dataset de Olist.',
       schema: z.object({
-        entity: z.string().default('orders').describe('Entidad a consultar (ej: orders, sellers, reviews)'),
+        entity: z
+          .string()
+          .default('orders')
+          .describe('Entidad a consultar (ej: orders, sellers, reviews)'),
       }),
-    }
+    },
   );
 
   const resolveBusinessEntities = tool(
@@ -50,8 +58,18 @@ export function createSupervisorTools(prisma: PrismaService) {
         const matches = await prisma.productCategoryTranslation.findMany({
           where: {
             OR: [
-              { productCategoryName: { contains: categoryName, mode: 'insensitive' } },
-              { productCategoryNameEnglish: { contains: categoryName, mode: 'insensitive' } },
+              {
+                productCategoryName: {
+                  contains: categoryName,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                productCategoryNameEnglish: {
+                  contains: categoryName,
+                  mode: 'insensitive',
+                },
+              },
             ],
           },
           take: 5,
@@ -67,13 +85,23 @@ export function createSupervisorTools(prisma: PrismaService) {
     },
     {
       name: 'resolve_business_entities',
-      description: 'Convierte nombres de categorías, vendedores o estados ingresados por el usuario en identificadores internos.',
+      description:
+        'Convierte nombres de categorías, vendedores o estados ingresados por el usuario en identificadores internos.',
       schema: z.object({
-        categoryName: z.string().optional().describe('Nombre de categoría en español, inglés o portugués'),
-        sellerAlias: z.string().optional().describe('Alias o ID aproximado de vendedor'),
-        stateName: z.string().optional().describe('Nombre o sigla de estado (ej: SP, Rio de Janeiro)'),
+        categoryName: z
+          .string()
+          .optional()
+          .describe('Nombre de categoría en español, inglés o portugués'),
+        sellerAlias: z
+          .string()
+          .optional()
+          .describe('Alias o ID aproximado de vendedor'),
+        stateName: z
+          .string()
+          .optional()
+          .describe('Nombre o sigla de estado (ej: SP, Rio de Janeiro)'),
       }),
-    }
+    },
   );
 
   return [getDatasetCoverage, resolveBusinessEntities];

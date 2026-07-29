@@ -20,18 +20,23 @@ import { StreamingService } from '../streaming/streaming.service';
 export class InvestigationsController {
   constructor(
     private readonly investigationsService: InvestigationsService,
-    private readonly streamingService: StreamingService
+    private readonly streamingService: StreamingService,
   ) {}
 
   @Post()
   @ApiOperation({ summary: 'Crear una nueva investigación multiagente' })
-  @ApiResponse({ status: 201, description: 'Investigación creada exitosamente' })
+  @ApiResponse({
+    status: 201,
+    description: 'Investigación creada exitosamente',
+  })
   create(@Body() dto: CreateInvestigationDto) {
     return this.investigationsService.create(dto);
   }
 
   @Post(':id/run')
-  @ApiOperation({ summary: 'Ejecutar el workflow multiagente para una investigación' })
+  @ApiOperation({
+    summary: 'Ejecutar el workflow multiagente para una investigación',
+  })
   run(@Param('id') id: string) {
     return this.investigationsService.run(id);
   }
@@ -44,7 +49,7 @@ export class InvestigationsController {
   findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query('status') status?: string
+    @Query('status') status?: string,
   ) {
     return this.investigationsService.findAll(page, limit, status);
   }
@@ -62,7 +67,9 @@ export class InvestigationsController {
   }
 
   @Get(':id/agent-runs')
-  @ApiOperation({ summary: 'Obtener ejecuciones de agentes de una investigación' })
+  @ApiOperation({
+    summary: 'Obtener ejecuciones de agentes de una investigación',
+  })
   getAgentRuns(@Param('id') id: string) {
     return this.investigationsService.getAgentRuns(id);
   }
@@ -74,7 +81,9 @@ export class InvestigationsController {
   }
 
   @Sse(':id/stream')
-  @ApiOperation({ summary: 'Suscribirse a eventos Server-Sent Events (SSE) en tiempo real' })
+  @ApiOperation({
+    summary: 'Suscribirse a eventos Server-Sent Events (SSE) en tiempo real',
+  })
   stream(@Param('id') id: string): Observable<{ data: any }> {
     return this.streamingService.getStream(id);
   }

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { StreamingService } from '../streaming/streaming.service';
 import { InvestigationOrchestratorService } from '../agents/orchestrator/investigation-orchestrator.service';
@@ -9,17 +14,26 @@ export class InvestigationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly streaming: StreamingService,
-    private readonly orchestrator: InvestigationOrchestratorService
+    private readonly orchestrator: InvestigationOrchestratorService,
   ) {}
 
   async create(dto: CreateInvestigationDto) {
     const investigation = await this.prisma.investigation.create({
       data: {
-        title: dto.question.substring(0, 80) + (dto.question.length > 80 ? '...' : ''),
+        title:
+          dto.question.substring(0, 80) +
+          (dto.question.length > 80 ? '...' : ''),
         question: dto.question,
         status: 'PENDING',
         dateFrom: dto.dateFrom ? new Date(dto.dateFrom) : null,
         dateTo: dto.dateTo ? new Date(dto.dateTo) : null,
+        sellerIdsJson: dto.sellerIds ? (dto.sellerIds as any) : Prisma.DbNull,
+        categoriesJson: dto.categories
+          ? (dto.categories as any)
+          : Prisma.DbNull,
+        customerStatesJson: dto.customerStates
+          ? (dto.customerStates as any)
+          : Prisma.DbNull,
       },
     });
 
@@ -33,14 +47,22 @@ export class InvestigationsService {
 
   async run(id: string) {
     const investigation = await this.findOne(id);
-    if (investigation.status !== 'PENDING' && investigation.status !== 'FAILED') {
-      throw new BadRequestException(`La investigación ${id} ya fue ejecutada (status: ${investigation.status})`);
+    if (
+      investigation.status !== 'PENDING' &&
+      investigation.status !== 'FAILED'
+    ) {
+      throw new BadRequestException(
+        `La investigación ${id} ya fue ejecutada (status: ${investigation.status})`,
+      );
     }
 
     // Disparar en segundo plano
     setImmediate(() => {
       this.orchestrator.runInvestigation(id).catch((err) => {
-        console.error(`Error en orchestrator para la investigación ${id}:`, err);
+        console.error(
+          `Error en orchestrator para la investigación ${id}:`,
+          err,
+        );
       });
     });
 
@@ -139,7 +161,9 @@ export class InvestigationsService {
   async getReport(id: string) {
     const investigation = await this.findOne(id);
     if (investigation.status !== 'COMPLETED') {
-      throw new BadRequestException(`La investigación ${id} aún no ha sido completada (status: ${investigation.status})`);
+      throw new BadRequestException(
+        `La investigación ${id} aún no ha sido completada (status: ${investigation.status})`,
+      );
     }
 
     return {

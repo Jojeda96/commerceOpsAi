@@ -4,7 +4,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createLogisticsTools } from './logistics.tools';
 
-export function createLogisticsNode(prisma: PrismaService, streaming: StreamingService) {
+export function createLogisticsNode(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
 
@@ -13,12 +16,18 @@ export function createLogisticsNode(prisma: PrismaService, streaming: StreamingS
     const tools = createLogisticsTools(prisma);
     const delTool = tools.find((t) => t.name === 'get_delivery_summary')!;
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'LOGISTICS', tool: 'get_delivery_summary' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'LOGISTICS',
+      tool: 'get_delivery_summary',
+    });
     const delResult = await delTool.invoke({
       dateFrom: state.filters.dateFrom,
       dateTo: state.filters.dateTo,
     });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'LOGISTICS', tool: 'get_delivery_summary' });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'LOGISTICS',
+      tool: 'get_delivery_summary',
+    });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -41,12 +50,16 @@ Genera un hallazgo técnico objetivo en formato JSON:
 }`;
 
     let title = 'Análisis de comportamiento logístico completado';
-    let description = 'Se evaluó la tasa de entregas a tiempo y días promedio de transporte.';
+    let description =
+      'Se evaluó la tasa de entregas a tiempo y días promedio de transporte.';
     let confidence = 0.92;
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -62,7 +75,10 @@ Genera un hallazgo técnico objetivo en formato JSON:
     const evidenceItem = {
       id: evidenceId,
       toolName: 'get_delivery_summary',
-      parameters: { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo },
+      parameters: {
+        dateFrom: state.filters.dateFrom,
+        dateTo: state.filters.dateTo,
+      },
       resultSummary: delResult,
       generatedAt: new Date().toISOString(),
     };
@@ -79,7 +95,10 @@ Genera un hallazgo técnico objetivo en formato JSON:
       createdAt: new Date().toISOString(),
     };
 
-    streaming.emit(investigationId, 'finding.created', { agent: 'LOGISTICS', finding: findingItem });
+    streaming.emit(investigationId, 'finding.created', {
+      agent: 'LOGISTICS',
+      finding: findingItem,
+    });
     streaming.emit(investigationId, 'agent.completed', { agent: 'LOGISTICS' });
 
     return {

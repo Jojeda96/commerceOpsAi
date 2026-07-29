@@ -4,10 +4,15 @@ import { StreamingService } from '../../streaming/streaming.service';
 
 export function createReportNode(streaming: StreamingService) {
   return async (state: CommerceOpsStateType) => {
-    const { investigationId, userQuestion, findings, evidence, recommendations, criticFeedback } = state;
+    const {
+      investigationId,
+      userQuestion,
+      findings,
+      evidence,
+      recommendations,
+    } = state;
 
-    const lastCritic = criticFeedback[criticFeedback.length - 1];
-    const score = lastCritic?.severity === 'LOW' ? 95 : 85;
+    const score = state.criticScore > 0 ? state.criticScore : 85;
 
     const report: FinalReport = {
       investigationId,

@@ -16,47 +16,69 @@ export function createSellerPerformanceTools(prisma: PrismaService) {
         },
       });
 
-      const totalItems = items.length;
+      const orderMap = new Map<string, (typeof items)[0]['order']>();
       let revenue = 0;
-      let lateCount = 0;
-      let totalRating = 0;
-      let ratingCount = 0;
 
       for (const item of items) {
-        revenue += item.price;
-        if (
-          item.order.orderDeliveredCustomerDate &&
-          item.order.orderEstimatedDeliveryDate &&
-          item.order.orderDeliveredCustomerDate > item.order.orderEstimatedDeliveryDate
-        ) {
-          lateCount++;
-        }
-
-        for (const r of item.order.reviews) {
-          totalRating += r.reviewScore;
-          ratingCount++;
+        revenue += Number(item.price);
+        if (!orderMap.has(item.orderId)) {
+          orderMap.set(item.orderId, item.order);
         }
       }
 
-      const lateRate = totalItems > 0 ? (lateCount / totalItems) * 100 : 0;
-      const averageRating = ratingCount > 0 ? totalRating / ratingCount : 0;
+      const uniqueOrders = Array.from(orderMap.values());
+      const deliveredOrders = uniqueOrders.filter(
+        (o) => o.orderDeliveredCustomerDate && o.orderEstimatedDeliveryDate,
+      );
+
+      let lateCount = 0;
+      for (const order of deliveredOrders) {
+        if (
+          order.orderDeliveredCustomerDate! > order.orderEstimatedDeliveryDate
+        ) {
+          lateCount++;
+        }
+      }
+
+      const reviewMap = new Map<string, number>();
+      for (const order of uniqueOrders) {
+        for (const r of order.reviews) {
+          if (!reviewMap.has(r.reviewId)) {
+            reviewMap.set(r.reviewId, r.reviewScore);
+          }
+        }
+      }
+
+      const uniqueRatings = Array.from(reviewMap.values());
+      const totalRating = uniqueRatings.reduce((sum, r) => sum + r, 0);
+      const averageRating =
+        uniqueRatings.length > 0 ? totalRating / uniqueRatings.length : 0;
+      const lateRate =
+        deliveredOrders.length > 0
+          ? (lateCount / deliveredOrders.length) * 100
+          : 0;
 
       return JSON.stringify({
         sellerId,
-        totalItemsSold: totalItems,
-        totalRevenue: revenue,
+        totalItemsSold: items.length,
+        totalUniqueOrders: uniqueOrders.length,
+        totalRevenue: Math.round(revenue * 100) / 100,
+        deliveredOrders: deliveredOrders.length,
+        lateOrders: lateCount,
         lateRate: Math.round(lateRate * 10) / 10,
         averageRating: Math.round(averageRating * 100) / 100,
+        totalReviews: uniqueRatings.length,
         riskScore: lateRate > 20 || averageRating < 3.0 ? 'HIGH' : 'LOW',
       });
     },
     {
       name: 'get_seller_scorecard',
-      description: 'Genera una ficha completa de desempeño y riesgo operacional de un vendedor.',
+      description:
+        'Genera una ficha completa de desempeño y riesgo operacional de un vendedor agrupado por pedido único.',
       schema: z.object({
         sellerId: z.string().describe('ID único del vendedor'),
       }),
-    }
+    },
   );
 
   return [getSellerScorecard];

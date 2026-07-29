@@ -12,14 +12,21 @@ export function createDataScienceNode(streaming: StreamingService) {
     const tools = createDataScienceTools();
     const predictTool = tools.find((t) => t.name === 'predict_delivery_delay')!;
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'DATA_SCIENCE', tool: 'predict_delivery_delay' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'DATA_SCIENCE',
+      tool: 'predict_delivery_delay',
+    });
+    const filters = state.filters || {};
     const predictResult = await predictTool.invoke({
-      sellerState: 'SP',
-      customerState: 'RJ',
+      sellerState: filters.customerStates?.[0] || 'SP',
+      customerState: filters.customerStates?.[1] || 'RJ',
       freightValue: 45,
       itemCount: 2,
     });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'DATA_SCIENCE', tool: 'predict_delivery_delay' });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'DATA_SCIENCE',
+      tool: 'predict_delivery_delay',
+    });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -30,24 +37,28 @@ export function createDataScienceNode(streaming: StreamingService) {
     const prompt = `Eres el Data Science Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
-Resultado del modelo predictivo ejecutado:
+Resultado del modelo predictivo (baseline heurístico):
 ${predictResult}
 
 Genera un hallazgo técnico explicable en JSON:
 {
-  "title": "Predicción de riesgo de retraso mediante Machine Learning",
-  "description": "Explicación basada en la probabilidad calculada y la contribución de características (SHAP).",
-  "confidence": 0.89,
+  "title": "Estimación de riesgo de retraso (Baseline Heurístico)",
+  "description": "Explicación basada en la probabilidad calculada y factores de riesgo.",
+  "confidence": 0.85,
   "findingType": "ML_PREDICTION"
 }`;
 
-    let title = 'Modelo predictivo de atrasos ejecutado';
-    let description = 'Se evaluó la probabilidad de retraso mediante XGBoost y SHAP.';
-    let confidence = 0.89;
+    let title = 'Modelo predictivo / baseline de atrasos ejecutado';
+    let description =
+      'Se evaluó la probabilidad de retraso mediante heurística baseline.';
+    let confidence = 0.85;
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -63,7 +74,7 @@ Genera un hallazgo técnico explicable en JSON:
     const evidenceItem = {
       id: evidenceId,
       toolName: 'predict_delivery_delay',
-      parameters: { modelVersion: 'delay-xgb-v1' },
+      parameters: { modelVersion: 'delay-heuristic-v1' },
       resultSummary: predictResult,
       generatedAt: new Date().toISOString(),
     };
@@ -80,8 +91,13 @@ Genera un hallazgo técnico explicable en JSON:
       createdAt: new Date().toISOString(),
     };
 
-    streaming.emit(investigationId, 'finding.created', { agent: 'DATA_SCIENCE', finding: findingItem });
-    streaming.emit(investigationId, 'agent.completed', { agent: 'DATA_SCIENCE' });
+    streaming.emit(investigationId, 'finding.created', {
+      agent: 'DATA_SCIENCE',
+      finding: findingItem,
+    });
+    streaming.emit(investigationId, 'agent.completed', {
+      agent: 'DATA_SCIENCE',
+    });
 
     return {
       completedAgents: [...state.completedAgents, 'DATA_SCIENCE' as const],

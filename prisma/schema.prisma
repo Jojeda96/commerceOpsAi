@@ -63,12 +63,13 @@ model OlistOrderItem {
   productId         String       @map("product_id")
   sellerId          String       @map("seller_id")
   shippingLimitDate DateTime     @map("shipping_limit_date")
-  price             Float
-  freightValue      Float        @map("freight_value")
+  price             Decimal      @db.Decimal(10, 2)
+  freightValue      Decimal      @map("freight_value") @db.Decimal(10, 2)
   order             OlistOrder   @relation(fields: [orderId], references: [id])
   product           OlistProduct @relation(fields: [productId], references: [id])
   seller            OlistSeller  @relation(fields: [sellerId], references: [id])
 
+  @@unique([orderId, orderItemId])
   @@map("olist_order_items")
   @@index([sellerId])
   @@index([productId])
@@ -81,9 +82,10 @@ model OlistOrderPayment {
   paymentSequential  Int        @map("payment_sequential")
   paymentType        String     @map("payment_type")
   paymentInstallments Int       @map("payment_installments")
-  paymentValue       Float      @map("payment_value")
+  paymentValue       Decimal    @map("payment_value") @db.Decimal(10, 2)
   order              OlistOrder @relation(fields: [orderId], references: [id])
 
+  @@unique([orderId, paymentSequential])
   @@map("olist_order_payments")
   @@index([orderId])
 }
@@ -106,6 +108,7 @@ model OlistOrderReview {
   secondaryTopics String[] @map("secondary_topics")
   translatedText  String?  @map("translated_text")
 
+  @@unique([reviewId, orderId])
   @@map("olist_order_reviews")
   @@index([reviewScore])
   @@index([orderId])
@@ -158,6 +161,9 @@ model Investigation {
   status            String              @default("PENDING")
   dateFrom          DateTime?           @map("date_from")
   dateTo            DateTime?           @map("date_to")
+  sellerIdsJson      Json?               @map("seller_ids_json")
+  categoriesJson     Json?               @map("categories_json")
+  customerStatesJson Json?               @map("customer_states_json")
   createdAt         DateTime            @default(now()) @map("created_at")
   completedAt       DateTime?           @map("completed_at")
   iterationCount    Int                 @default(0) @map("iteration_count")

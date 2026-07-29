@@ -3,8 +3,10 @@ import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateInvestigationDto {
   @ApiProperty({
-    description: 'Pregunta empresarial u objetivo de investigación para el equipo multiagente',
-    example: '¿Por qué disminuyó la calificación promedio durante febrero de 2018?',
+    description:
+      'Pregunta empresarial u objetivo de investigación para el equipo multiagente',
+    example:
+      '¿Por qué disminuyó la calificación promedio durante febrero de 2018?',
   })
   @IsString()
   @MinLength(10)

@@ -6,7 +6,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true,
+  });
   app.setGlobalPrefix('api');
 
   app.useGlobalPipes(
@@ -14,13 +17,17 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
-    })
+    }),
   );
 
   const config = new DocumentBuilder()
     .setTitle('CommerceOps AI API')
-    .setDescription('Plataforma multiagente para análisis operacional de e-commerce')
+    .setDescription(
+      'Plataforma multiagente para análisis operacional de e-commerce',
+    )
     .setVersion('0.1.0')
+    .addBearerAuth()
+    .addTag('Auth', 'Autenticación y usuarios demo')
     .addTag('Investigations', 'Gestión de investigaciones multiagente')
     .addTag('Analytics', 'Consultas deterministas de negocio')
     .addTag('Models', 'Modelos predictivos y ML')
@@ -32,8 +39,12 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`💻 Dashboard Web (Frontend) disponible en http://localhost:3000`);
-  console.log(`🚀 CommerceOps AI API Gateway disponible en http://localhost:${port}/api`);
+  console.log(
+    `💻 Dashboard Web (Frontend) disponible en http://localhost:3000`,
+  );
+  console.log(
+    `🚀 CommerceOps AI API Gateway disponible en http://localhost:${port}/api`,
+  );
   console.log(`📚 Documentación Swagger en http://localhost:${port}/api/docs`);
 }
 

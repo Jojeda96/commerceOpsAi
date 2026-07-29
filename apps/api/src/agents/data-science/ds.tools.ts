@@ -4,7 +4,35 @@ import { z } from 'zod';
 export function createDataScienceTools() {
   const predictDeliveryDelay = tool(
     async ({ sellerState, customerState, freightValue, itemCount }) => {
-      // Proxy determinista / heurística base (en Fase 6 se conecta directamente al FastAPI ML Service)
+      const mlServiceUrl =
+        process.env.ML_SERVICE_URL || 'http://localhost:8000';
+      try {
+        const response = await fetch(
+          `${mlServiceUrl}/models/delivery-delay/predict`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              seller_state: sellerState,
+              customer_state: customerState,
+              freight_value: freightValue,
+              item_count: itemCount,
+            }),
+          },
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          return JSON.stringify(data);
+        }
+      } catch (err) {
+        console.warn(
+          '[DS Tools] ML Service no disponible, usando fallback heurístico:',
+          err,
+        );
+      }
+
+      // Fallback determinista / heurística base
       let probability = 0.15;
       if (sellerState !== customerState) probability += 0.25;
       if (freightValue > 50) probability += 0.15;
@@ -15,23 +43,26 @@ export function createDataScienceTools() {
       return JSON.stringify({
         probability: Math.round(probability * 100) / 100,
         riskLevel: probability > 0.5 ? 'HIGH' : 'LOW',
-        modelVersion: 'delay-xgb-v1',
-        topFeatures: [
-          { feature: 'interstate_route', contribution: 0.35 },
-          { feature: 'freight_value', contribution: 0.25 },
+        modelVersion: 'delay-heuristic-v1',
+        heuristicFactors: [
+          { factor: 'interstate_route', weight: 0.25 },
+          { factor: 'freight_value_above_50', weight: 0.15 },
+          { factor: 'item_count_above_2', weight: 0.1 },
         ],
+        note: 'Baseline heurístico (ML Service fallback).',
       });
     },
     {
       name: 'predict_delivery_delay',
-      description: 'Ejecuta el modelo ML para predecir la probabilidad de atraso en un pedido según sus características.',
+      description:
+        'Ejecuta o consulta el modelo ML para predecir la probabilidad de atraso en un pedido.',
       schema: z.object({
         sellerState: z.string().default('SP'),
         customerState: z.string().default('RJ'),
         freightValue: z.number().default(30),
         itemCount: z.number().default(1),
       }),
-    }
+    },
   );
 
   return [predictDeliveryDelay];

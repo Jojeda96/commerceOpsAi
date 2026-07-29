@@ -9,19 +9,26 @@ export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('revenue')
-  @ApiOperation({ summary: 'Obtener resumen determinista de ingresos y ventas' })
+  @ApiOperation({
+    summary: 'Obtener resumen determinista de ingresos y ventas',
+  })
   getRevenueSummary(@Query() query: AnalyticsQueryDto) {
     return this.analyticsService.getRevenueSummary(query);
   }
 
   @Get('deliveries')
-  @ApiOperation({ summary: 'Obtener resumen determinista de entregas y atrasos' })
+  @ApiOperation({
+    summary: 'Obtener resumen determinista de entregas y atrasos',
+  })
   getDeliveriesSummary(@Query() query: AnalyticsQueryDto) {
     return this.analyticsService.getDeliveriesSummary(query);
   }
 
   @Get('reviews')
-  @ApiOperation({ summary: 'Obtener resumen determinista de calificaciones y distribución de estrellas' })
+  @ApiOperation({
+    summary:
+      'Obtener resumen determinista de calificaciones y distribución de estrellas',
+  })
   getReviewsSummary(@Query() query: AnalyticsQueryDto) {
     return this.analyticsService.getReviewsSummary(query);
   }

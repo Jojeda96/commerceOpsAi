@@ -4,11 +4,16 @@ import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createSellerPerformanceTools } from './seller.tools';
 
-export function createSellerPerformanceNode(prisma: PrismaService, streaming: StreamingService) {
+export function createSellerPerformanceNode(
+  prisma: PrismaService,
+  streaming: StreamingService,
+) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
 
-    streaming.emit(investigationId, 'agent.started', { agent: 'SELLER_PERFORMANCE' });
+    streaming.emit(investigationId, 'agent.started', {
+      agent: 'SELLER_PERFORMANCE',
+    });
 
     const tools = createSellerPerformanceTools(prisma);
     const scorecardTool = tools.find((t) => t.name === 'get_seller_scorecard')!;
@@ -25,9 +30,17 @@ export function createSellerPerformanceNode(prisma: PrismaService, streaming: St
       targetSellerId = topSeller[0]?.sellerId || 'seller-sample';
     }
 
-    streaming.emit(investigationId, 'tool.started', { agent: 'SELLER_PERFORMANCE', tool: 'get_seller_scorecard' });
-    const scorecardResult = await scorecardTool.invoke({ sellerId: targetSellerId });
-    streaming.emit(investigationId, 'tool.completed', { agent: 'SELLER_PERFORMANCE', tool: 'get_seller_scorecard' });
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'SELLER_PERFORMANCE',
+      tool: 'get_seller_scorecard',
+    });
+    const scorecardResult = await scorecardTool.invoke({
+      sellerId: targetSellerId,
+    });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'SELLER_PERFORMANCE',
+      tool: 'get_seller_scorecard',
+    });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -55,7 +68,10 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
 
     try {
       const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+      const content =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
@@ -88,11 +104,19 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
       createdAt: new Date().toISOString(),
     };
 
-    streaming.emit(investigationId, 'finding.created', { agent: 'SELLER_PERFORMANCE', finding: findingItem });
-    streaming.emit(investigationId, 'agent.completed', { agent: 'SELLER_PERFORMANCE' });
+    streaming.emit(investigationId, 'finding.created', {
+      agent: 'SELLER_PERFORMANCE',
+      finding: findingItem,
+    });
+    streaming.emit(investigationId, 'agent.completed', {
+      agent: 'SELLER_PERFORMANCE',
+    });
 
     return {
-      completedAgents: [...state.completedAgents, 'SELLER_PERFORMANCE' as const],
+      completedAgents: [
+        ...state.completedAgents,
+        'SELLER_PERFORMANCE' as const,
+      ],
       findings: [findingItem],
       evidence: [evidenceItem],
     };
