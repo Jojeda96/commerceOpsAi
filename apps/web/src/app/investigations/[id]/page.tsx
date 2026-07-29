@@ -11,6 +11,7 @@ export default function InvestigationDetailPage() {
   const [investigation, setInvestigation] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [showQualityInfo, setShowQualityInfo] = useState(false);
+  const [showStatusWarningInfo, setShowStatusWarningInfo] = useState(false);
 
   const loadData = () => {
     fetch(`http://localhost:3001/api/investigations/${id}`)
@@ -54,6 +55,25 @@ export default function InvestigationDetailPage() {
     return <p style={{ color: 'var(--color-text-muted)' }}>Cargando detalle de investigación...</p>;
   }
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return { label: 'COMPLETED', badgeClass: 'badge-completed' };
+      case 'COMPLETED_WITH_WARNINGS':
+        return { label: 'COMPLETED (CON OBSERVACIONES)', badgeClass: 'badge-warnings' };
+      case 'REJECTED':
+        return { label: 'RECHAZADA', badgeClass: 'badge-failed' };
+      case 'FAILED':
+        return { label: 'FALLIDA', badgeClass: 'badge-failed' };
+      case 'EXECUTING':
+        return { label: 'EJECUTANDO', badgeClass: 'badge-executing' };
+      default:
+        return { label: status, badgeClass: 'badge-pending' };
+    }
+  };
+
+  const statusInfo = getStatusBadge(investigation.status);
+
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -64,18 +84,65 @@ export default function InvestigationDetailPage() {
           <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '4px' }}>{investigation.question}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span
-            className={`badge badge-${
-              investigation.status === 'COMPLETED'
-                ? 'completed'
-                : investigation.status === 'EXECUTING'
-                ? 'executing'
-                : 'pending'
-            }`}
-            style={{ fontSize: '0.9rem', padding: '6px 14px' }}
-          >
-            {investigation.status}
-          </span>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              className={`badge ${statusInfo.badgeClass}`}
+              style={{ fontSize: '0.85rem', padding: '6px 14px' }}
+            >
+              {statusInfo.label}
+            </span>
+            {investigation.status === 'COMPLETED_WITH_WARNINGS' && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowStatusWarningInfo(!showStatusWarningInfo)}
+                  style={{
+                    background: 'rgba(251, 191, 36, 0.15)',
+                    border: '1px solid rgba(251, 191, 36, 0.5)',
+                    color: '#fbbf24',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                  }}
+                  title="¿Qué significa 'COMPLETED (CON OBSERVACIONES)'?"
+                >
+                  ℹ️
+                </button>
+                {showStatusWarningInfo && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '32px',
+                      right: 0,
+                      width: '340px',
+                      background: 'var(--color-bg-card)',
+                      border: '1px solid #fbbf24',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '14px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                      zIndex: 100,
+                      fontSize: '0.8rem',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: '#fbbf24', marginBottom: '6px', fontSize: '0.85rem' }}>
+                      ℹ️ ¿Por qué figura "Con Observaciones"?
+                    </div>
+                    <p style={{ lineHeight: '1.4', marginBottom: '6px' }}>
+                      La investigación se ha <strong>completado exitosamente (Calidad {investigation.finalQualityScore || 85}/100)</strong> y los hallazgos son totalmente válidos y confiables.
+                    </p>
+                    <p style={{ lineHeight: '1.4', color: 'var(--color-text-muted)' }}>
+                      El <strong>Evidence Critic Agent</strong> emitió observaciones preventivas menores para asegurar rigurosidad metodológica y evitar atribuciones de causalidad no justificadas sin afectar la validez del reporte.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {investigation.finalQualityScore !== undefined && investigation.finalQualityScore !== null && (
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-accent-success)' }}>

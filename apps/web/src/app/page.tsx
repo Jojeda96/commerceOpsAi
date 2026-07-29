@@ -107,12 +107,16 @@ export default function DashboardPage() {
                     className={`badge badge-${
                       inv.status === 'COMPLETED'
                         ? 'completed'
+                        : inv.status === 'COMPLETED_WITH_WARNINGS'
+                        ? 'warnings'
                         : inv.status === 'EXECUTING'
                         ? 'executing'
+                        : inv.status === 'REJECTED' || inv.status === 'FAILED'
+                        ? 'failed'
                         : 'pending'
                     }`}
                   >
-                    {inv.status}
+                    {inv.status === 'COMPLETED_WITH_WARNINGS' ? 'COMPLETED (OBSERVACIONES)' : inv.status}
                   </span>
                   {inv.finalQualityScore && (
                     <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>

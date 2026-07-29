@@ -153,12 +153,16 @@ export default function InvestigationsPage() {
                     className={`badge badge-${
                       inv.status === 'COMPLETED'
                         ? 'completed'
+                        : inv.status === 'COMPLETED_WITH_WARNINGS'
+                        ? 'warnings'
                         : inv.status === 'EXECUTING'
                         ? 'executing'
+                        : inv.status === 'REJECTED' || inv.status === 'FAILED'
+                        ? 'failed'
                         : 'pending'
                     }`}
                   >
-                    {inv.status}
+                    {inv.status === 'COMPLETED_WITH_WARNINGS' ? 'COMPLETED (OBSERVACIONES)' : inv.status}
                   </span>
                   <Link href={`/investigations/${inv.id}`} className="btn-primary" style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
                     Ver Detalle →
