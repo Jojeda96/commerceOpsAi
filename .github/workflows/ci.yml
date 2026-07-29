@@ -28,4 +28,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r apps/ml-service/requirements.txt
-      - run: cd apps/ml-service && python -m pytest --tb=short -q
+      - run: cd apps/ml-service && PYTHONPATH=. python -m pytest --tb=short -q
