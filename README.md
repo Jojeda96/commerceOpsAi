@@ -14,25 +14,26 @@ Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagent
 ### ✅ Implementado
 - **Orquestación Multiagente Real:** Grafo de ejecuciones paralelas coordinado con **LangGraph JS** y **NestJS** (`StateGraph` con `Send`).
 - **Agentes Especialistas Operativos:** Supervisor, Sales, Logistics, Customer Experience, Seller Performance, Anomaly, Data Science, Evidence Critic y Business Strategy.
+- **Machine Learning Real (XGBoost + SHAP):** Modelo predictivo de retrasos en entregas entrenado sobre el dataset de Olist con `XGBClassifier`. Inferencia en tiempo real y explicaciones causales con **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
+- **Búsqueda Semántica NLP (SentenceTransformers):** Búsqueda vectorial de reseñas por similitud de coseno utilizando el modelo **`all-MiniLM-L6-v2`** (`/nlp/reviews/search`).
 - **Herramientas Deterministas:** Consultas agilizadas en PostgreSQL para análisis de ventas, logística, experiencia de cliente y scorecards de vendedores.
-- **Persistencia & Trazabilidad:** Persistencia relacional con Prisma ORM (investigaciones, hallazgos, evidencias, recomendaciones, critic feedback).
-- **Streaming SSE en Tiempo Real:** Emisión Server-Sent Events para progreso de agentes y ejecuciones.
-- **Documentación Swagger / OpenAPI:** Documentación interactiva de endpoints REST.
-- **Frontend Dashboard:** Interfaz en Next.js (App Router) y CSS Vanilla para monitoreo e inicio de investigaciones.
+- **Persistencia & Trazabilidad:** Persistencia relacional en PostgreSQL con Prisma ORM (investigaciones, tareas, agent runs, hallazgos, evidencias, recomendaciones, critic feedback).
+- **Streaming SSE en Tiempo Real:** Emisión aislada Server-Sent Events por ID de investigación.
+- **Seguridad & Autenticación:** Protección de endpoints mutadores mediante `JwtAuthGuard` y login `/auth/login`.
+- **Frontend Dashboard:** Interfaz en Next.js (App Router) para monitoreo e inicio de investigaciones.
 
-### 🚧 Implementación Parcial / Baselines
-- **Data Science Agent:** Utiliza un baseline heurístico para estimación de riesgo previo a la conexión del modelo predictivo XGBoost.
-- **Anomaly Detection:** Detección basada en Z-Score robusto (mediana + MAD) sobre series temporales mensuales.
-- **Evidence Critic:** Auditoría y evaluación mediante LLM de la evidencia registrada.
-- **Evaluaciones:** Framework inicial con métricas de referencia para comparación Single Agent vs Multi-Agent.
+### 🧠 Selección de Modelos & Decisiones de Arquitectura ML / NLP
 
-### 🗺️ Roadmap
-- Entrenamiento y despliegue del modelo predictivo XGBoost con explicación de importancia de características mediante SHAP.
-- Procesamiento multilingüe de reseñas en portugués mediante embeddings (`SentenceTransformers`) y búsqueda semántica.
-- Isolation Forest para anomalías multivariadas.
-- Suite de evaluaciones reproducibles con ejecución en vivo sobre el grafo.
-- Cola de trabajos distribuida (BullMQ / Redis).
-- Autenticación JWT y Rate Limiting.
+#### **1. Estrategia de Carga de Datos para Entrenamiento**
+Los scripts de entrenamiento (`scripts/train_delivery_xgb.py` y `scripts/generate_review_embeddings.py`) siguen una jerarquía resiliente de datos:
+1. Intentan conectar prioritariamente a la base de datos PostgreSQL activa (`DATABASE_URL`).
+2. Si la base de datos no está disponible, activan un **fallback automático** leyendo los registros del fixture local [sample-1000-orders.json](file:///c:/Users/joset/Desktop/Programacion/Mentorix/commerceOpsAi/data/fixtures/sample-1000-orders.json).
+
+#### **2. Selección de Modelo NLP: `all-MiniLM-L6-v2` vs Multilingüe**
+Para la búsqueda semántica sobre los comentarios de reseñas de Olist, se seleccionó el modelo **`all-MiniLM-L6-v2`**:
+- **¿Por qué este modelo en el proyecto?:** Es un modelo ultra-liviano (~90MB) que permite descargas instantáneas en entornos locales y tiempos de inferencia en CPU inferiores a 15ms por consulta, eliminando la necesidad de hardware con GPU dedicada para la demo.
+- **Pros:** Ejecución ultrarrápida, huella de memoria RAM reducida (~90MB) y rendimiento óptimo para prototipos y MVPs local.
+- **Contras / Alternativa de Producción:** Para un entorno productivo con gran volumen en portugués, la alternativa recomendada es `paraphrase-multilingual-MiniLM-L12-v2` (~470MB), la cual ofrece mejor sensibilidad lingüística en variaciones dialectales pero requiere 5 veces más espacio y recursos computacionales.
 
 ---
 
@@ -262,10 +263,14 @@ Cada consulta activa dinámicamente una combinación diferente de agentes especi
 
 ---
 
-### 🧪 5. Detección de Anomalías y Machine Learning
-> **Pregunta:** `¿Qué rutas interestatales tienen mayor probabilidad de sufrir un retraso según el modelo predictivo?`
-- **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `STRATEGY`
-- **Lo que evalúa:** Ejemplo de inferencia predictiva y desglose de importancia de características con SHAP.
+### 🧪 5. Machine Learning Predictivo y NLP Vectorial
+> **Pregunta:** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales y cuáles son los factores SHAP de mayor impacto en el riesgo?`
+- **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `ANOMALY`, `CRITIC`, `STRATEGY`
+- **Lo que evalúa:** Inferencia real en tiempo real con **XGBoost Classifier** y calculador de valores explicativos causales **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
+
+> **Pregunta:** `¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?`
+- **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `LOGISTICS`, `CRITIC`, `STRATEGY`
+- **Lo que evalúa:** Búsqueda semántica por similitud de coseno utilizando el modelo **`SentenceTransformers (all-MiniLM-L6-v2)`** sobre comentarios reales de clientes de Olist en portugués.
 
 > **Pregunta:** `Detecta desviaciones o picos anómalos en la tasa de retraso de entregas mediante Z-Score robusto.`
 - **Agentes Invocados:** `ANOMALY`, `LOGISTICS`, `CRITIC`

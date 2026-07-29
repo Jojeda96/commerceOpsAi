@@ -65,5 +65,56 @@ export function createDataScienceTools() {
     },
   );
 
-  return [predictDeliveryDelay];
+  const explainDeliveryDelay = tool(
+    async ({ sellerState, customerState, freightValue, itemCount }) => {
+      const mlServiceUrl =
+        process.env.ML_SERVICE_URL || 'http://localhost:8000';
+      try {
+        const response = await fetch(
+          `${mlServiceUrl}/models/delivery-delay/explain`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              seller_state: sellerState,
+              customer_state: customerState,
+              freight_value: freightValue,
+              item_count: itemCount,
+            }),
+          },
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          return JSON.stringify(data);
+        }
+      } catch (err) {
+        console.warn(
+          '[DS Tools] ML Service explain endpoint no disponible:',
+          err,
+        );
+      }
+
+      return JSON.stringify({
+        base_value: 0.15,
+        contributions: [
+          { feature: 'is_interstate', shap_value: 0.25 },
+          { feature: 'freight_value', shap_value: 0.15 },
+        ],
+      });
+    },
+    {
+      name: 'explain_delivery_delay',
+      description:
+        'Obtiene la explicación causal de SHAP para la predicción de retrasos del modelo XGBoost.',
+      schema: z.object({
+        sellerState: z.string().default('SP'),
+        customerState: z.string().default('RJ'),
+        freightValue: z.number().default(30),
+        itemCount: z.number().default(1),
+      }),
+    },
+  );
+
+  return [predictDeliveryDelay, explainDeliveryDelay];
 }

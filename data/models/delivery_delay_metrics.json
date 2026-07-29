@@ -1,0 +1,23 @@
+{
+  "model_version": "delivery-xgb-v1",
+  "algorithm": "XGBoost Classifier",
+  "accuracy": 0.9289,
+  "precision": 1.0,
+  "recall": 0.0588,
+  "f1_score": 0.1111,
+  "roc_auc": 0.6239,
+  "features": [
+    "is_interstate",
+    "freight_value",
+    "price",
+    "freight_ratio",
+    "product_weight_g",
+    "product_volume_cm3",
+    "purchase_dow",
+    "purchase_hour"
+  ],
+  "trained_at": "2026-07-29T01:39:03.474195Z",
+  "train_samples": 899,
+  "test_samples": 225,
+  "positive_class_ratio": 0.0747
+}

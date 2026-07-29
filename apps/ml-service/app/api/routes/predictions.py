@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from app.services.ml_engine import MLEngine
 
 router = APIRouter(prefix="/models/delivery-delay", tags=["Predictions"])
 
@@ -10,8 +11,10 @@ class PredictionRequest(BaseModel):
     freight_value: float = 30.0
     item_count: int = 1
     product_weight_g: float = 500.0
+    product_volume_cm3: float = 4500.0
     price: float = 100.0
-    distance_category: int = 1
+    purchase_dow: int = 2
+    purchase_hour: int = 14
 
 class PredictionResponse(BaseModel):
     probability: float
@@ -22,67 +25,23 @@ class PredictionResponse(BaseModel):
 
 @router.post("/predict", response_model=PredictionResponse)
 async def predict_delay(request: PredictionRequest):
-    # Lógica con fallback si el artefacto no existe en disco
-    probability = 0.15
-    is_interstate = request.seller_state != request.customer_state
-    if is_interstate:
-        probability += 0.25
-    if request.freight_value > 50:
-        probability += 0.15
-    if request.item_count > 2:
-        probability += 0.10
-
-    probability = min(0.95, round(probability, 2))
-
+    engine = MLEngine.get_instance()
+    res = engine.predict_delay(request.model_dump())
     return PredictionResponse(
-        probability=probability,
-        risk_level="HIGH" if probability > 0.5 else "MEDIUM" if probability > 0.3 else "LOW",
-        model_version="delivery-delay-heuristic-v1",
-        features={
-            "seller_state": request.seller_state,
-            "customer_state": request.customer_state,
-            "is_interstate": is_interstate,
-            "freight_value": request.freight_value,
-            "item_count": request.item_count,
-        },
-        explanation={
-            "base_value": 0.15,
-            "explanation_type": "heuristic_contributions",
-            "contributions": [
-                {"feature": "is_interstate", "weight": 0.25 if is_interstate else 0.0},
-                {"feature": "freight_value_above_50", "weight": 0.15 if request.freight_value > 50 else 0.0},
-                {"feature": "item_count_above_2", "weight": 0.10 if request.item_count > 2 else 0.0},
-            ]
-        }
+        probability=res["probability"],
+        risk_level=res["risk_level"],
+        model_version=res["model_version"],
+        features=res["features"],
+        explanation=res.get("explanation"),
     )
 
 @router.post("/explain")
 async def explain_prediction(request: PredictionRequest):
-    is_interstate = request.seller_state != request.customer_state
-    return {
-        "model_version": "delivery-delay-heuristic-v1",
-        "algorithm": "deterministic_rules",
-        "explanation_type": "heuristic_contributions",
-        "base_value": 0.15,
-        "contributions": [
-            {"feature": "interstate_route", "heuristic_weight": 0.25 if is_interstate else 0.0},
-            {"feature": "freight_value", "heuristic_weight": 0.15 if request.freight_value > 50 else 0.02},
-            {"feature": "item_count", "heuristic_weight": 0.10 if request.item_count > 2 else 0.01},
-        ]
-    }
+    engine = MLEngine.get_instance()
+    res = engine.predict_delay(request.model_dump())
+    return res.get("explanation", {})
 
 @router.get("/metrics")
 async def get_metrics():
-    return {
-        "model_version": "delivery-delay-heuristic-v1",
-        "algorithm": "Deterministic Rule-Based Baseline",
-        "note": "Baseline heurístico determinista. Entrenamiento de modelo predictivo XGBoost en roadmap.",
-        "features": [
-            "seller_state",
-            "customer_state",
-            "freight_value",
-            "item_count",
-            "product_weight_g",
-            "price"
-        ]
-    }
+    engine = MLEngine.get_instance()
+    return engine.get_metrics()

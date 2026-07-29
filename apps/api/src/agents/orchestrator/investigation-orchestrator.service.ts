@@ -94,8 +94,16 @@ export class InvestigationOrchestratorService {
           });
         }
 
+        // Deduplicar findings por agente y título
+        const uniqueFindingsMap = new Map<string, any>();
+        for (const f of finalState.findings || []) {
+          const key = `${f.agent}-${f.title}`;
+          uniqueFindingsMap.set(key, f);
+        }
+        const uniqueFindings = Array.from(uniqueFindingsMap.values());
+
         // Persistir findings en DB
-        for (const finding of finalState.findings || []) {
+        for (const finding of uniqueFindings) {
           const createdFinding = await tx.finding.create({
             data: {
               id: finding.id,

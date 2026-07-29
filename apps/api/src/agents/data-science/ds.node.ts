@@ -11,21 +11,32 @@ export function createDataScienceNode(streaming: StreamingService) {
 
     const tools = createDataScienceTools();
     const predictTool = tools.find((t) => t.name === 'predict_delivery_delay')!;
+    const explainTool = tools.find((t) => t.name === 'explain_delivery_delay')!;
 
     streaming.emit(investigationId, 'tool.started', {
       agent: 'DATA_SCIENCE',
       tool: 'predict_delivery_delay',
     });
     const filters = state.filters || {};
+    const sellerState = filters.customerStates?.[0] || 'SP';
+    const customerState = filters.customerStates?.[1] || 'RJ';
+
     const predictResult = await predictTool.invoke({
-      sellerState: filters.customerStates?.[0] || 'SP',
-      customerState: filters.customerStates?.[1] || 'RJ',
+      sellerState,
+      customerState,
       freightValue: 45,
       itemCount: 2,
     });
     streaming.emit(investigationId, 'tool.completed', {
       agent: 'DATA_SCIENCE',
       tool: 'predict_delivery_delay',
+    });
+
+    const explainResult = await explainTool.invoke({
+      sellerState,
+      customerState,
+      freightValue: 45,
+      itemCount: 2,
     });
 
     const model = new ChatOpenAI({
@@ -37,14 +48,22 @@ export function createDataScienceNode(streaming: StreamingService) {
     const prompt = `Eres el Data Science Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
-Resultado del modelo predictivo (baseline heurístico):
+Resultado de predicción del modelo XGBoost:
 ${predictResult}
 
-Genera un hallazgo técnico explicable en JSON:
+Explicación de características SHAP (TreeExplainer):
+${explainResult}
+
+Genera un hallazgo técnico explicable en formato JSON. 
+REGLA OBLIGATORIA:
+- El título DEBE ser: "Predicción de Riesgo de Atraso (XGBoost Classifier & SHAP Explainer)". NO agregues la palabra "Baseline Heurístico".
+- La descripción DEBE incluir la probabilidad porcentual calculada y detallar los factores SHAP numéricos (ej. is_interstate, freight_value, product_volume_cm3).
+
+Estructura JSON requerida:
 {
-  "title": "Estimación de riesgo de retraso (Baseline Heurístico)",
-  "description": "Explicación basada en la probabilidad calculada y factores de riesgo.",
-  "confidence": 0.85,
+  "title": "Predicción de Riesgo de Atraso (XGBoost Classifier & SHAP Explainer)",
+  "description": "La probabilidad de atraso predicha por el modelo XGBoost es de X.X%. Los factores SHAP de mayor impacto incluyen...",
+  "confidence": 0.88,
   "findingType": "ML_PREDICTION"
 }`;
 

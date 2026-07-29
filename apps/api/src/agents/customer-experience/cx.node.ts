@@ -80,6 +80,7 @@ export function createCustomerExperienceNode(
 
     const tools = createCustomerExperienceTools(prisma);
     const ratingTool = tools.find((t) => t.name === 'get_rating_summary')!;
+    const searchTool = tools.find((t) => t.name === 'search_reviews_semantic')!;
 
     // Extract category from user question if present
     const detectedCategory = extractCategory(userQuestion);
@@ -96,6 +97,19 @@ export function createCustomerExperienceNode(
     streaming.emit(investigationId, 'tool.completed', {
       agent: 'CUSTOMER_EXPERIENCE',
       tool: 'get_rating_summary',
+    });
+
+    streaming.emit(investigationId, 'tool.started', {
+      agent: 'CUSTOMER_EXPERIENCE',
+      tool: 'search_reviews_semantic',
+    });
+    const searchResult = await searchTool.invoke({
+      query: userQuestion,
+      topK: 3,
+    });
+    streaming.emit(investigationId, 'tool.completed', {
+      agent: 'CUSTOMER_EXPERIENCE',
+      tool: 'search_reviews_semantic',
     });
 
     const model = new ChatOpenAI({
@@ -115,10 +129,17 @@ ${categoryContext}
 Métricas deterministas de satisfacción:
 ${ratingResult}
 
-Genera un hallazgo técnico objetivo en formato JSON:
+Búsqueda semántica NLP de reseñas (SentenceTransformers 'all-MiniLM-L6-v2'):
+${searchResult}
+
+Genera un hallazgo técnico objetivo en formato JSON.
+REGLAS OBLIGATORIAS:
+- La descripción DEBE analizar la distribución de estrellas (1-5) Y TAMBIÉN citar directamente al menos 1 o 2 comentarios reales en portugués recuperados por la búsqueda semántica, indicando sus puntajes de similitud semántica.
+
+Estructura JSON requerida:
 {
-  "title": "Título del hallazgo de satisfacción del cliente",
-  "description": "Análisis cuantitativo de la distribución de estrellas y calificación promedio. Menciona si el análisis es sobre una categoría específica o global.",
+  "title": "Análisis de satisfacción y búsqueda semántica de reseñas (NLP)",
+  "description": "Análisis cuantitativo de estrellas y citas de reseñas recuperadas por similitud semántica...",
   "confidence": 0.94,
   "findingType": "CUSTOMER_SATISFACTION"
 }`;
