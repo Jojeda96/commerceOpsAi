@@ -88,7 +88,14 @@ export function buildInvestigationGraph(
       ) {
         return 'supervisor';
       }
-      return 'strategy';
+      if (
+        state.criticDecision === 'APPROVED' ||
+        state.criticDecision === 'APPROVED_WITH_WARNINGS'
+      ) {
+        return 'strategy';
+      }
+      // If REJECTED or max iterations reached without approval, skip strategy and generate report directly
+      return 'generate_report';
     })
     .addEdge('strategy', 'generate_report')
     .addEdge('generate_report', END);

@@ -17,7 +17,7 @@ class SearchResponseItem(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: List[SearchResponseItem]
-    method: str = "semantic_embeddings"
+    method: str = "mock_semantic_baseline"
 
 @router.post("/reviews/search", response_model=SearchResponse)
 async def search_reviews(request: SearchRequest):

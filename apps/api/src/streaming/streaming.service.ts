@@ -9,7 +9,14 @@ import {
 @Injectable()
 export class StreamingService {
   private readonly logger = new Logger(StreamingService.name);
-  private readonly eventSubject = new ReplaySubject<InvestigationEvent>(50);
+  private readonly streamsMap = new Map<string, ReplaySubject<InvestigationEvent>>();
+
+  private getOrCreateSubject(investigationId: string): ReplaySubject<InvestigationEvent> {
+    if (!this.streamsMap.has(investigationId)) {
+      this.streamsMap.set(investigationId, new ReplaySubject<InvestigationEvent>(100));
+    }
+    return this.streamsMap.get(investigationId)!;
+  }
 
   emit(
     investigationId: string,
@@ -23,11 +30,13 @@ export class StreamingService {
       payload,
     };
     this.logger.log(`[SSE Emit] [${investigationId}] ${type}`);
-    this.eventSubject.next(event);
+    const subject = this.getOrCreateSubject(investigationId);
+    subject.next(event);
   }
 
   getStream(investigationId: string): Observable<{ data: InvestigationEvent }> {
-    return this.eventSubject.asObservable().pipe(
+    const subject = this.getOrCreateSubject(investigationId);
+    return subject.asObservable().pipe(
       filter((event) => event.investigationId === investigationId),
       map((event) => ({ data: event })),
     );

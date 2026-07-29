@@ -37,7 +37,7 @@ async def predict_delay(request: PredictionRequest):
     return PredictionResponse(
         probability=probability,
         risk_level="HIGH" if probability > 0.5 else "MEDIUM" if probability > 0.3 else "LOW",
-        model_version="delay-xgb-v1",
+        model_version="delivery-delay-heuristic-v1",
         features={
             "seller_state": request.seller_state,
             "customer_state": request.customer_state,
@@ -47,6 +47,7 @@ async def predict_delay(request: PredictionRequest):
         },
         explanation={
             "base_value": 0.15,
+            "explanation_type": "heuristic_contributions",
             "contributions": [
                 {"feature": "is_interstate", "weight": 0.25 if is_interstate else 0.0},
                 {"feature": "freight_value_above_50", "weight": 0.15 if request.freight_value > 50 else 0.0},
@@ -59,23 +60,23 @@ async def predict_delay(request: PredictionRequest):
 async def explain_prediction(request: PredictionRequest):
     is_interstate = request.seller_state != request.customer_state
     return {
-        "model_version": "delay-xgb-v1",
+        "model_version": "delivery-delay-heuristic-v1",
+        "algorithm": "deterministic_rules",
+        "explanation_type": "heuristic_contributions",
         "base_value": 0.15,
         "contributions": [
-            {"feature": "interstate_route", "shap_value": 0.25 if is_interstate else 0.0},
-            {"feature": "freight_value", "shap_value": 0.15 if request.freight_value > 50 else 0.02},
-            {"feature": "item_count", "shap_value": 0.10 if request.item_count > 2 else 0.01},
+            {"feature": "interstate_route", "heuristic_weight": 0.25 if is_interstate else 0.0},
+            {"feature": "freight_value", "heuristic_weight": 0.15 if request.freight_value > 50 else 0.02},
+            {"feature": "item_count", "heuristic_weight": 0.10 if request.item_count > 2 else 0.01},
         ]
     }
 
 @router.get("/metrics")
 async def get_metrics():
     return {
-        "model_version": "delay-xgb-v1",
-        "algorithm": "XGBoost Classifier",
-        "accuracy": 0.884,
-        "f1_score": 0.821,
-        "roc_auc": 0.912,
+        "model_version": "delivery-delay-heuristic-v1",
+        "algorithm": "Deterministic Rule-Based Baseline",
+        "note": "Baseline heurístico determinista. Entrenamiento de modelo predictivo XGBoost en roadmap.",
         "features": [
             "seller_state",
             "customer_state",

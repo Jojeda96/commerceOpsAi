@@ -8,12 +8,14 @@ import {
   Sse,
   ParseIntPipe,
   DefaultValuePipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import { InvestigationsService } from './investigations.service';
 import { CreateInvestigationDto } from './dto/create-investigation.dto';
 import { StreamingService } from '../streaming/streaming.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Investigations')
 @Controller('investigations')
@@ -24,6 +26,8 @@ export class InvestigationsController {
   ) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear una nueva investigación multiagente' })
   @ApiResponse({
     status: 201,
@@ -34,6 +38,8 @@ export class InvestigationsController {
   }
 
   @Post(':id/run')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Ejecutar el workflow multiagente para una investigación',
   })

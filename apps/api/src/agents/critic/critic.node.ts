@@ -9,6 +9,21 @@ export function createCriticNode(streaming: StreamingService) {
 
     streaming.emit(investigationId, 'agent.started', { agent: 'CRITIC' });
 
+    // Deterministic audit checks (P1-7)
+    const deterministicWarnings: string[] = [];
+    for (const f of findings) {
+      const linked = evidence.filter((e) => (f.evidenceIds && f.evidenceIds.includes(e.id)) || e.id.includes(f.id));
+      if (linked.length === 0 && evidence.length === 0) {
+        deterministicWarnings.push(`El hallazgo "${f.title}" no posee evidencia registrada.`);
+      }
+      const causalTerms = ['causó', 'provocó', 'demuestra que', 'debido únicamente a'];
+      const text = `${f.title} ${f.description}`;
+      const foundCausal = causalTerms.filter((term) => text.toLowerCase().includes(term));
+      if (foundCausal.length > 0) {
+        deterministicWarnings.push(`El hallazgo "${f.title}" contiene afirmaciones de causalidad estricta (${foundCausal.join(', ')}).`);
+      }
+    }
+
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_CRITIC_MODEL || 'gpt-4o',
       temperature: 0.1,
@@ -23,22 +38,28 @@ ${JSON.stringify(findings, null, 2)}
 Evidencias registrables (${evidence.length}):
 ${JSON.stringify(evidence, null, 2)}
 
+Auditoría determinista previa:
+${deterministicWarnings.length > 0 ? deterministicWarnings.join('\n') : 'Sin alertas deterministas detectadas.'}
+
 Evalúa si la evidencia respalda suficientemente las conclusiones y decide el resultado:
 - APPROVED: La evidencia es suficiente y consistente.
 - APPROVED_WITH_WARNINGS: La evidencia es aceptable pero hay observaciones menores.
 - REQUIRES_MORE_ANALYSIS: Falta información clave o se requiere una segunda iteración.
 - REJECTED: Los hallazgos carecen de soporte o son contradictorios.
 
-Responde estrictamente en formato JSON con la siguiente estructura:
+Responde strictly en formato JSON con la siguiente estructura:
 {
   "decision": "APPROVED",
   "score": 92,
   "feedback": "Los hallazgos de ventas y logística cuentan con evidencias numéricas válidas."
 }`;
 
-    let decision: CriticDecision = 'APPROVED';
-    let score = 90;
-    let feedback = 'Evidencia verificada y aprobada por el crítico.';
+    // Default fallback on error (P0-10): Do NOT auto-approve with 90 on LLM failure!
+    let decision: CriticDecision = deterministicWarnings.length > 0 ? 'REQUIRES_MORE_ANALYSIS' : 'APPROVED';
+    let score = deterministicWarnings.length > 0 ? 60 : 85;
+    let feedback = deterministicWarnings.length > 0
+      ? `Alertas deterministas detectadas: ${deterministicWarnings.join(' ')}`
+      : 'Evidencia preliminarmente verificada.';
 
     try {
       const response = await model.invoke(prompt);
@@ -55,6 +76,10 @@ Responde estrictamente en formato JSON con la siguiente estructura:
       }
     } catch (err) {
       console.warn('[CriticNode] Error executing LLM call:', err);
+      // Ensure failure falls back safely instead of auto-approving
+      decision = 'REQUIRES_MORE_ANALYSIS';
+      score = 50;
+      feedback = 'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
     }
 
     const criticFeedbackItem = {
@@ -66,7 +91,7 @@ Responde estrictamente en formato JSON con la siguiente estructura:
         return 'HIGH' as const; // REQUIRES_MORE_ANALYSIS o REJECTED
       })(),
       message: feedback,
-      status: 'RESOLVED' as const,
+      status: (decision === 'APPROVED' || decision === 'APPROVED_WITH_WARNINGS' ? 'RESOLVED' : 'OPEN') as 'RESOLVED' | 'OPEN',
       createdAt: new Date().toISOString(),
     };
 

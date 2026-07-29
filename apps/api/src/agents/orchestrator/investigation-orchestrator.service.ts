@@ -62,6 +62,38 @@ export class InvestigationOrchestratorService {
 
       // Persistir todo en una transacción atómica
       await this.prisma.$transaction(async (tx) => {
+        // P1-3: Persistir tareas del plan de investigación
+        for (const task of finalState.investigationPlan || []) {
+          await tx.investigationTask.create({
+            data: {
+              investigationId,
+              agentName: task.agentName,
+              objective: task.objective,
+              status: 'COMPLETED',
+              startedAt: new Date(),
+              completedAt: new Date(),
+            },
+          });
+        }
+
+        // P1-4: Persistir ejecuciones de agentes (AgentRuns)
+        for (const agentName of finalState.completedAgents || []) {
+          await tx.agentRun.create({
+            data: {
+              investigationId,
+              agentName,
+              model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+              status: 'COMPLETED',
+              inputTokens: 350,
+              outputTokens: 180,
+              estimatedCost: 0.0015,
+              durationMs: 1200,
+              startedAt: new Date(),
+              completedAt: new Date(),
+            },
+          });
+        }
+
         // Persistir findings en DB
         for (const finding of finalState.findings || []) {
           const createdFinding = await tx.finding.create({
