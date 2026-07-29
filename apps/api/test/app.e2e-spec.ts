@@ -20,7 +20,10 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('Hello World!');
+      .expect((res) => {
+        expect(res.body.status).toEqual('online');
+        expect(res.body.name).toEqual('CommerceOps AI API');
+      });
   });
 
   afterEach(async () => {

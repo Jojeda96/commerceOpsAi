@@ -28,7 +28,7 @@ async function runEvaluations() {
   }
 
   let md = `# Reporte de Evaluaciones Comparativas - CommerceOps AI\n\n`;
-  md += `> ⚠️ **Nota:** Las métricas mostradas reflejan valores de referencia del framework de evaluación. Para métricas en vivo, ejecutar contra el pipeline multiagente activo.\n\n`;
+  md += `> ⚠️ **Framework de evaluación en construcción.** Los valores actuales son referencias sintéticas de demostración y no constituyen resultados experimentales reales. Para métricas en vivo, se requiere la ejecución contra el pipeline multiagente activo con dataset de prueba real.\n\n`;
   md += `## Resultados por Configuración\n\n`;
   md += `| Configuración | Exactitud Numérica | Agent Routing | Groundedness | Tasa Alucinación | Latencia Prom. |\n`;
   md += `|---|---|---|---|---|---|\n`;

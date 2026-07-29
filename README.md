@@ -27,7 +27,7 @@ Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagent
 #### **1. Estrategia de Carga de Datos para Entrenamiento**
 Los scripts de entrenamiento (`scripts/train_delivery_xgb.py` y `scripts/generate_review_embeddings.py`) siguen una jerarquía resiliente de datos:
 1. Intentan conectar prioritariamente a la base de datos PostgreSQL activa (`DATABASE_URL`).
-2. Si la base de datos no está disponible, activan un **fallback automático** leyendo los registros del fixture local [sample-1000-orders.json](file:///c:/Users/joset/Desktop/Programacion/Mentorix/commerceOpsAi/data/fixtures/sample-1000-orders.json).
+2. Si la base de datos no está disponible, activan un **fallback automático** leyendo los registros del fixture local [sample-1000-orders.json](data/fixtures/sample-1000-orders.json).
 
 #### **2. Selección de Modelo NLP: `all-MiniLM-L6-v2` vs Multilingüe**
 Para la búsqueda semántica sobre los comentarios de reseñas de Olist, se seleccionó el modelo **`all-MiniLM-L6-v2`**:
@@ -162,7 +162,7 @@ docker-compose up -d postgres redis
 
 ---
 
-### 3. Migraciones e Importación de Datos
+### 3. Migraciones, Importación y Generación de Artefactos ML/NLP
 ```bash
 # Generar Cliente Prisma
 npm run db:generate
@@ -173,6 +173,10 @@ npm run db:migrate
 # Validar dataset e importar (requiere descargar CSVs a data/raw/)
 npm run data:validate
 npm run db:seed
+
+# Generar artefactos de ML y NLP (embeddings para búsqueda semántica)
+python scripts/train_delivery_xgb.py
+python scripts/generate_review_embeddings.py
 ```
 
 ---

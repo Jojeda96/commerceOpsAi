@@ -13,7 +13,7 @@ export function createCriticNode(streaming: StreamingService) {
     const deterministicWarnings: string[] = [];
     for (const f of findings) {
       const linked = evidence.filter((e) => (f.evidenceIds && f.evidenceIds.includes(e.id)) || e.id.includes(f.id));
-      if (linked.length === 0 && evidence.length === 0) {
+      if (linked.length === 0) {
         deterministicWarnings.push(`El hallazgo "${f.title}" no posee evidencia registrada.`);
       }
       const causalTerms = ['causó', 'provocó', 'demuestra que', 'debido únicamente a'];
@@ -91,7 +91,7 @@ Responde strictly en formato JSON con la siguiente estructura:
         return 'HIGH' as const; // REQUIRES_MORE_ANALYSIS o REJECTED
       })(),
       message: feedback,
-      status: (decision === 'APPROVED' || decision === 'APPROVED_WITH_WARNINGS' ? 'RESOLVED' : 'OPEN') as 'RESOLVED' | 'OPEN',
+      status: (decision === 'APPROVED' || decision === 'APPROVED_WITH_WARNINGS' ? 'RESOLVED' : 'PENDING') as 'RESOLVED' | 'PENDING',
       createdAt: new Date().toISOString(),
     };
 

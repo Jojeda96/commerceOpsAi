@@ -74,5 +74,56 @@ export function createLogisticsTools(prisma: PrismaService) {
     },
   );
 
-  return [getDeliverySummary];
+  const getDeliveryPredictionScenarios = tool(
+    async ({ sellerState, customerState }) => {
+      try {
+        const orderItems = await prisma.olistOrderItem.findMany({
+          take: 100,
+          where: {
+            ...(sellerState ? { seller: { sellerState } } : {}),
+            ...(customerState ? { order: { customer: { customerState } } } : {}),
+          },
+          include: { product: true },
+        });
+
+        if (orderItems.length > 0) {
+          const avgFreight = orderItems.reduce((acc, i) => acc + Number(i.freightValue || 0), 0) / orderItems.length;
+          const avgPrice = orderItems.reduce((acc, i) => acc + Number(i.price || 0), 0) / orderItems.length;
+          const avgWeight = orderItems.reduce((acc, i) => acc + Number(i.product?.productWeightG || 500), 0) / orderItems.length;
+
+          return JSON.stringify({
+            sellerState: sellerState || 'SP',
+            customerState: customerState || 'RJ',
+            freightValue: Math.round(avgFreight * 100) / 100,
+            price: Math.round(avgPrice * 100) / 100,
+            productWeightG: Math.round(avgWeight),
+            itemCount: 1,
+            sampleSize: orderItems.length,
+          });
+        }
+      } catch (err) {
+        console.warn('[LogisticsTools] Could not query scenarios from DB:', err);
+      }
+
+      return JSON.stringify({
+        sellerState: sellerState || 'SP',
+        customerState: customerState || 'RJ',
+        freightValue: 35.5,
+        price: 110.0,
+        productWeightG: 650,
+        itemCount: 1,
+        sampleSize: 0,
+      });
+    },
+    {
+      name: 'get_delivery_prediction_scenarios',
+      description: 'Prepara un escenario de datos reales desde PostgreSQL para predicción ML.',
+      schema: z.object({
+        sellerState: z.string().optional(),
+        customerState: z.string().optional(),
+      }),
+    },
+  );
+
+  return [getDeliverySummary, getDeliveryPredictionScenarios];
 }

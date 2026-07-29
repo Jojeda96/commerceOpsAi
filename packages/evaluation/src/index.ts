@@ -25,6 +25,8 @@ export interface EvalResult {
   totalDurationMs: number;
   totalCostEstimateUsd: number;
   passed: boolean;
+  isSynthetic?: boolean;
+  note?: string;
 }
 
 export * from './eval-cases';

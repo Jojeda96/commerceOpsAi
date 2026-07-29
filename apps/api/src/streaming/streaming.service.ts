@@ -41,4 +41,15 @@ export class StreamingService {
       map((event) => ({ data: event })),
     );
   }
+
+  closeStream(investigationId: string) {
+    const subject = this.streamsMap.get(investigationId);
+    if (subject) {
+      setTimeout(() => {
+        subject.complete();
+        this.streamsMap.delete(investigationId);
+        this.logger.log(`[SSE Closed & Cleaned] [${investigationId}]`);
+      }, 5000);
+    }
+  }
 }

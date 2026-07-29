@@ -32,8 +32,8 @@ services:
 
   ml-service:
     build:
-      context: ./apps/ml-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/ml-service/Dockerfile
     container_name: commerce_ops_ml
     ports:
       - "8000:8000"

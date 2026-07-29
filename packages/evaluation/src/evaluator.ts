@@ -56,5 +56,7 @@ export function evaluateTestCase(
     totalDurationMs: configType === 'SINGLE_AGENT' ? 4500 : 2800,
     totalCostEstimateUsd: configType === 'SINGLE_AGENT' ? 0.015 : 0.012,
     passed: numericalAccuracy >= 80 && groundednessScore >= 80,
+    isSynthetic: true,
+    note: 'Framework de evaluación en construcción. Los valores actuales representan benchmarks sintéticos de referencia.',
   };
 }

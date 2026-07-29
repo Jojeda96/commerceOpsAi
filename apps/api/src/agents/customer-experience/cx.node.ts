@@ -165,9 +165,9 @@ Estructura JSON requerida:
       console.warn('[CXNode] Error executing LLM call:', err);
     }
 
-    const evidenceId = `ev-cx-${Date.now()}`;
-    const evidenceItem = {
-      id: evidenceId,
+    const ratingEvidenceId = `ev-cx-rating-${Date.now()}`;
+    const ratingEvidenceItem = {
+      id: ratingEvidenceId,
       toolName: 'get_rating_summary',
       parameters: {
         dateFrom: state.filters.dateFrom,
@@ -175,6 +175,19 @@ Estructura JSON requerida:
         category: detectedCategory,
       },
       resultSummary: ratingResult,
+      generatedAt: new Date().toISOString(),
+    };
+
+    const semanticEvidenceId = `ev-cx-semantic-${Date.now()}`;
+    const semanticEvidenceItem = {
+      id: semanticEvidenceId,
+      toolName: 'search_reviews_semantic',
+      parameters: {
+        query: userQuestion,
+        topK: 3,
+        model: 'paraphrase-multilingual-MiniLM-L12-v2',
+      },
+      resultSummary: searchResult,
       generatedAt: new Date().toISOString(),
     };
 
@@ -186,7 +199,7 @@ Estructura JSON requerida:
       description,
       findingType: 'CUSTOMER_SATISFACTION',
       confidence,
-      evidenceIds: [evidenceId],
+      evidenceIds: [ratingEvidenceId, semanticEvidenceId],
       createdAt: new Date().toISOString(),
     };
 
@@ -204,7 +217,7 @@ Estructura JSON requerida:
         'CUSTOMER_EXPERIENCE' as const,
       ],
       findings: [findingItem],
-      evidence: [evidenceItem],
+      evidence: [ratingEvidenceItem, semanticEvidenceItem],
     };
   };
 }

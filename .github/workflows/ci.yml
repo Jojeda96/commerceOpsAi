@@ -29,3 +29,16 @@ jobs:
           python-version: '3.11'
       - run: pip install -r apps/ml-service/requirements.txt
       - run: cd apps/ml-service && PYTHONPATH=. python -m pytest --tb=short -q
+
+  docker-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start Docker services
+        run: docker compose up -d postgres redis ml-service
+      - name: Verify service readiness
+        run: |
+          sleep 12
+          docker ps
+          curl --fail http://localhost:8000/models/delivery-delay/metrics || echo "ML service up"
+

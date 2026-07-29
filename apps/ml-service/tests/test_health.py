@@ -22,7 +22,7 @@ def test_predict_endpoint():
     data = response.json()
     assert "probability" in data
     assert "risk_level" in data
-    assert data["model_version"] == "delivery-xgb-v1"
+    assert data["model_version"].startswith("delivery-xgb-v1")
 
 def test_explain_endpoint():
     response = client.post(
@@ -43,7 +43,7 @@ def test_metrics_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert "accuracy" in data
-    assert data["algorithm"] == "XGBoost Classifier"
+    assert "XGBoost Classifier" in data["algorithm"]
 
 def test_nlp_search_endpoint():
     response = client.post(

@@ -39,6 +39,17 @@ export function createDataScienceNode(streaming: StreamingService) {
       itemCount: 2,
     });
 
+    let modelVersionUsed = 'delay-heuristic-v1';
+    let isFallback = true;
+    try {
+      const parsedPred = JSON.parse(predictResult);
+      if (parsedPred.model_version) modelVersionUsed = parsedPred.model_version;
+      if (parsedPred.modelVersion) modelVersionUsed = parsedPred.modelVersion;
+      isFallback = modelVersionUsed.includes('heuristic') || !!parsedPred.note?.includes('fallback');
+    } catch (e) {
+      console.warn('[DSNode] Could not parse predictResult JSON');
+    }
+
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
       temperature: 0.2,
@@ -48,29 +59,29 @@ export function createDataScienceNode(streaming: StreamingService) {
     const prompt = `Eres el Data Science Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
-Resultado de predicción del modelo XGBoost:
+Resultado de predicción (${isFallback ? 'Baseline Heurístico (Fallback)' : 'XGBoost Classifier v1.0.0'}):
 ${predictResult}
 
-Explicación de características SHAP (TreeExplainer):
+Explicación de características (${isFallback ? 'Factores Heurísticos' : 'SHAP TreeExplainer'}):
 ${explainResult}
 
-Genera un hallazgo técnico explicable en formato JSON. 
-REGLA OBLIGATORIA:
-- El título DEBE ser: "Predicción de Riesgo de Atraso (XGBoost Classifier & SHAP Explainer)". NO agregues la palabra "Baseline Heurístico".
-- La descripción DEBE incluir la probabilidad porcentual calculada y detallar los factores SHAP numéricos (ej. is_interstate, freight_value, product_volume_cm3).
+Genera un hallazgo técnico explicable en formato JSON.
+Describe con transparencia el algoritmo realmente utilizado (${isFallback ? 'Baseline Heurístico de Fallback' : 'XGBoost Classifier & SHAP Explainer'}).
 
 Estructura JSON requerida:
 {
-  "title": "Predicción de Riesgo de Atraso (XGBoost Classifier & SHAP Explainer)",
-  "description": "La probabilidad de atraso predicha por el modelo XGBoost es de X.X%. Los factores SHAP de mayor impacto incluyen...",
-  "confidence": 0.88,
+  "title": "Predicción de Riesgo de Atraso (${isFallback ? 'Baseline Heurístico' : 'XGBoost Classifier & SHAP Explainer'})",
+  "description": "La probabilidad de atraso predicha es de X.X%. Los factores principales incluyen...",
+  "confidence": ${isFallback ? 0.75 : 0.88},
   "findingType": "ML_PREDICTION"
 }`;
 
-    let title = 'Modelo predictivo / baseline de atrasos ejecutado';
+    let title = isFallback
+      ? 'Predicción de Riesgo de Atraso (Baseline Heurístico)'
+      : 'Predicción de Riesgo de Atraso (XGBoost Classifier & SHAP Explainer)';
     let description =
-      'Se evaluó la probabilidad de retraso mediante heurística baseline.';
-    let confidence = 0.85;
+      'Se evaluó la probabilidad de retraso mediante el modelo predictivo.';
+    let confidence = isFallback ? 0.75 : 0.88;
 
     try {
       const response = await model.invoke(prompt);
@@ -93,7 +104,7 @@ Estructura JSON requerida:
     const evidenceItem = {
       id: evidenceId,
       toolName: 'predict_delivery_delay',
-      parameters: { modelVersion: 'delay-heuristic-v1' },
+      parameters: { modelVersion: modelVersionUsed, isFallback },
       resultSummary: predictResult,
       generatedAt: new Date().toISOString(),
     };

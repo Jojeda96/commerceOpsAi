@@ -76,19 +76,25 @@ def generate_embeddings():
     reviews = load_reviews()
     texts = [r["review_comment_message"] for r in reviews]
 
-    print("⚡ Generando embeddings NLP con modelo SentenceTransformers ('all-MiniLM-L6-v2')...")
+    print("⚡ Generando embeddings NLP con modelo SentenceTransformers ('paraphrase-multilingual-MiniLM-L12-v2')...")
     try:
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
         embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
-        method_used = "all-MiniLM-L6-v2"
+        method_used = "paraphrase-multilingual-MiniLM-L12-v2"
     except Exception as e:
-        print(f"⚠️ SentenceTransformers no disponible o error de descarga ({e}). Usando TF-IDF Vectorizer fallback.")
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        vectorizer = TfidfVectorizer(max_features=384)
-        sparse_matrix = vectorizer.fit_transform(texts)
-        embeddings = sparse_matrix.toarray().astype(np.float32)
-        method_used = "tfidf_fallback_384d"
+        print(f"⚠️ SentenceTransformers multilingual no disponible ({e}). Probando all-MiniLM-L6-v2 fallback.")
+        try:
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            embeddings = model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
+            method_used = "all-MiniLM-L6-v2"
+        except Exception:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            vectorizer = TfidfVectorizer(max_features=384)
+            sparse_matrix = vectorizer.fit_transform(texts)
+            embeddings = sparse_matrix.toarray().astype(np.float32)
+            method_used = "tfidf_fallback_384d"
 
     # Normalizar embeddings para cálculo directo de similitud de coseno mediante producto escalar
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
