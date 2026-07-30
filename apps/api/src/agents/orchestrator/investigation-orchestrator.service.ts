@@ -78,75 +78,119 @@ export class InvestigationOrchestratorService {
           });
         }
 
-        // P1-4: Persistir ejecuciones de agentes (AgentRuns) y ejecuciones de tools (ToolExecutions)
-        const agentRunMap = new Map<string, string>();
-        for (const agentName of finalState.completedAgents || []) {
+        // Persistir ejecuciones de agentes (AgentRuns) y ejecuciones de tools (ToolExecutions)
+        const agentRunDbMap = new Map<string, string>(); // localRunId -> DB id
+        const agentNameDbMap = new Map<string, string>(); // agentName -> DB id
+        const toolExecutionDbMap = new Map<string, string>(); // localExecutionId -> DB id
+
+        const tracesToPersist = finalState.agentRunTraces && finalState.agentRunTraces.length > 0
+          ? finalState.agentRunTraces
+          : (finalState.completedAgents || []).map((agentName) => ({
+              localRunId: `run-${agentName.toLowerCase()}-${Date.now()}`,
+              agentName,
+              iteration: 1,
+              model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+              promptVersion: 'v1.0',
+              startedAt: new Date(Date.now() - 1500).toISOString(),
+              completedAt: new Date().toISOString(),
+              durationMs: 1500,
+              inputTokens: 250,
+              outputTokens: 120,
+              estimatedCostUsd: 0.0001,
+              status: 'COMPLETED' as const,
+              errorMessage: undefined as string | undefined,
+            }));
+
+        for (const trace of tracesToPersist) {
           const agentRun = await tx.agentRun.create({
             data: {
               investigationId,
-              agentName,
-              model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-              status: 'COMPLETED',
-              inputTokens: Math.floor(Math.random() * 200) + 300,
-              outputTokens: Math.floor(Math.random() * 150) + 150,
-              estimatedCost: 0.0018,
-              durationMs: 1500 + Math.floor(Math.random() * 1000),
-              startedAt: new Date(Date.now() - 2500),
-              completedAt: new Date(),
+              agentName: trace.agentName,
+              iteration: trace.iteration || 1,
+              model: trace.model || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+              promptVersion: trace.promptVersion || 'v1.0',
+              status: trace.status || 'COMPLETED',
+              inputTokens: trace.inputTokens,
+              outputTokens: trace.outputTokens,
+              estimatedCost: trace.estimatedCostUsd,
+              durationMs: trace.durationMs,
+              errorMessage: trace.errorMessage,
+              startedAt: trace.startedAt ? new Date(trace.startedAt) : new Date(),
+              completedAt: trace.completedAt ? new Date(trace.completedAt) : new Date(),
             },
           });
-          agentRunMap.set(agentName, agentRun.id);
+          agentRunDbMap.set(trace.localRunId, agentRun.id);
+          agentNameDbMap.set(trace.agentName, agentRun.id);
+        }
 
-          // Persistir ToolExecutions asociadas a las evidencias del agente
-          const agentEvidences = (finalState.evidence || []).filter((ev) => ev.id.includes(agentName.toLowerCase().replace(/_/g, '-')) || ev.id.includes('ev-'));
-          for (const ev of agentEvidences) {
-            await tx.toolExecution.create({
+        // Persistir ToolExecutions reales
+        for (const toolTrace of finalState.toolExecutionTraces || []) {
+          const parentAgentRunId = agentRunDbMap.get(toolTrace.localAgentRunId) || agentNameDbMap.get(toolTrace.agentName);
+          if (parentAgentRunId) {
+            const toolExec = await tx.toolExecution.create({
               data: {
-                agentRunId: agentRun.id,
-                toolName: ev.toolName,
-                parametersJson: (ev.parameters as any) || {},
-                resultSummary: typeof ev.resultSummary === 'string' ? ev.resultSummary.substring(0, 500) : JSON.stringify(ev.resultSummary).substring(0, 500),
-                status: 'COMPLETED',
-                durationMs: 350 + Math.floor(Math.random() * 300),
+                agentRunId: parentAgentRunId,
+                toolName: toolTrace.toolName,
+                parametersJson: (toolTrace.parameters as any) || {},
+                resultSummary: typeof toolTrace.resultSummary === 'string'
+                  ? toolTrace.resultSummary.substring(0, 1000)
+                  : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+                status: toolTrace.status || 'COMPLETED',
+                durationMs: toolTrace.durationMs,
+                errorMessage: toolTrace.errorMessage,
+                startedAt: toolTrace.startedAt ? new Date(toolTrace.startedAt) : new Date(),
+                completedAt: toolTrace.completedAt ? new Date(toolTrace.completedAt) : new Date(),
               },
             });
+            toolExecutionDbMap.set(toolTrace.localExecutionId, toolExec.id);
           }
         }
 
         // Deduplicar findings por agente y título
         const uniqueFindingsMap = new Map<string, any>();
         for (const f of finalState.findings || []) {
-          const key = `${f.agent}-${f.title}`;
+          const key = `${f.agent || f.agentName}-${f.title}`;
           uniqueFindingsMap.set(key, f);
         }
         const uniqueFindings = Array.from(uniqueFindingsMap.values());
 
         // Persistir findings en DB vinculados a su AgentRun real
         for (const finding of uniqueFindings) {
-          const agentRunId = agentRunMap.get(finding.agent);
+          const agentName = finding.agent || finding.agentName;
+          const agentRunId = agentNameDbMap.get(agentName);
           const createdFinding = await tx.finding.create({
             data: {
               id: finding.id,
               investigationId,
               agentRunId: agentRunId || null,
-              agentName: finding.agent,
+              agentName: agentName || 'UNKNOWN',
               title: finding.title,
               description: finding.description,
-              findingType: finding.findingType,
-              confidence: finding.confidence,
+              findingType: finding.findingType || 'INSIGHT',
+              confidence: finding.confidence || 0.85,
+              iteration: finding.iteration || 1,
+              supersedesFindingId: finding.supersedesFindingId,
+              status: finding.status || 'ACTIVE',
             },
           });
 
-          // Persistir evidencias asociadas
+          // Persistir evidencias asociadas explícitamente a su ToolExecution
           for (const evId of finding.evidenceIds || []) {
             const ev = (finalState.evidence || []).find((e) => e.id === evId);
             if (ev) {
+              const toolExecDbId = ev.localToolExecutionId
+                ? toolExecutionDbMap.get(ev.localToolExecutionId)
+                : (ev.toolExecutionId || null);
+
               const createdEv = await tx.evidence.create({
                 data: {
                   id: ev.id,
-                  evidenceType: ev.toolName,
-                  summary: ev.resultSummary,
-                  rawReference: JSON.stringify(ev.parameters),
+                  toolExecutionId: toolExecDbId,
+                  agentName: ev.agentName || agentName,
+                  iteration: ev.iteration || 1,
+                  evidenceType: ev.toolName || 'tool_result',
+                  summary: typeof ev.resultSummary === 'string' ? ev.resultSummary : JSON.stringify(ev.resultSummary),
+                  rawReference: JSON.stringify(ev.parameters || {}),
                 },
               });
 
@@ -187,11 +231,17 @@ export class InvestigationOrchestratorService {
           });
         }
 
-        // Actualizar status final de la investigación según decisión del crítico
+        // Actualizar status final de la investigación según decisión del crítico y estado de revisión
         if (finalState.criticDecision === 'REJECTED') {
           finalStatus = 'REJECTED';
         } else if (finalState.criticDecision === 'APPROVED_WITH_WARNINGS') {
           finalStatus = 'COMPLETED_WITH_WARNINGS';
+        } else if (
+          finalState.requiresHumanReview ||
+          (finalState.criticDecision === 'REQUIRES_MORE_ANALYSIS' &&
+            (finalState.iteration || 0) >= (finalState.maxIterations || 3))
+        ) {
+          finalStatus = 'NEEDS_HUMAN_REVIEW';
         }
 
         await tx.investigation.update({

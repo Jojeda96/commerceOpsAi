@@ -8,8 +8,18 @@ import numpy as np
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 from datetime import datetime
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.dummy import DummyClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    precision_recall_curve,
+    average_precision_score,
+    brier_score_loss,
+)
 from xgboost import XGBClassifier
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,8 +63,7 @@ def load_data():
                 print(f"✅ Cargados {len(df)} registros directamente desde PostgreSQL.")
                 return df
         except Exception as e:
-            console_msg = f"⚠️ Falló conexión a PostgreSQL ({e}). Ejecutando fallback a fixture en disco."
-            print(console_msg)
+            print(f"⚠️ Falló conexión a PostgreSQL ({e}). Ejecutando fallback a fixture en disco.")
 
     # Fallback: Cargar desde sample-1000-orders.json
     print(f"📦 Cargando dataset de fallback desde: {FIXTURE_PATH}")
@@ -112,7 +121,7 @@ def preprocess_and_train(df):
     df["delivered_date"] = pd.to_datetime(df["order_delivered_customer_date"])
     df["estimated_date"] = pd.to_datetime(df["order_estimated_delivery_date"])
 
-    # Agrupar a nivel de PEDIDO (order_id) para evitar Fuga de Información (Data Leakage) entre ítems
+    # Agrupar a nivel de PEDIDO (order_id) para evitar Fuga de Información (Data Leakage)
     df_order = df.groupby("order_id").agg({
         "purchase_date": "first",
         "delivered_date": "first",
@@ -127,7 +136,9 @@ def preprocess_and_train(df):
         "product_width_cm": "max",
     }).reset_index()
 
-    df_order["item_count"] = df.groupby("order_id").size().values
+    # Añadir item_count explícito
+    item_counts = df.groupby("order_id").size().to_dict()
+    df_order["item_count"] = df_order["order_id"].map(item_counts)
 
     # Target: is_delayed (1 si entregado después de la fecha estimada)
     df_order["is_delayed"] = (df_order["delivered_date"] > df_order["estimated_date"]).astype(int)
@@ -148,31 +159,33 @@ def preprocess_and_train(df):
         "product_volume_cm3",
         "purchase_dow",
         "purchase_hour",
+        "item_count",
     ]
 
-    # Split Temporal (ordenado por fecha de compra)
+    # Orden temporal estricto (por fecha de compra)
     df_order = df_order.sort_values("purchase_date").reset_index(drop=True)
 
     X = df_order[feature_cols].fillna(0)
     y = df_order["is_delayed"]
 
-    # Si por desbalance o fixture pequeño hay muy pocos positivos, simular ligera varianza para garantizar entrenamiento
-    if y.sum() < 5:
-        y.iloc[::6] = 1
+    # Split Temporal Estricto: 70% Train, 15% Validation, 15% Test
+    n = len(df_order)
+    train_idx = int(n * 0.70)
+    val_idx = int(n * 0.85)
 
-    split_idx = int(len(df_order) * 0.8)
-    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
-    y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+    X_train, y_train = X.iloc[:train_idx], y.iloc[:train_idx]
+    X_val, y_val = X.iloc[train_idx:val_idx], y.iloc[train_idx:val_idx]
+    X_test, y_test = X.iloc[val_idx:], y.iloc[val_idx:]
 
     pos_count = max(1, int(y_train.sum()))
     neg_count = max(1, len(y_train) - pos_count)
     scale_pos_weight = float(neg_count / pos_count)
 
-    print("🧠 Entrenando modelo XGBoost Classifier con ponderación por desbalance...")
+    print(f"🧠 Entrenando XGBoost (Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)})...")
     model = XGBClassifier(
-        n_estimators=120,
-        max_depth=4,
-        learning_rate=0.04,
+        n_estimators=100,
+        max_depth=3,
+        learning_rate=0.03,
         subsample=0.8,
         colsample_bytree=0.8,
         scale_pos_weight=scale_pos_weight,
@@ -181,53 +194,71 @@ def preprocess_and_train(df):
     )
     model.fit(X_train, y_train)
 
-    # Modelo Baseline (Regresión Logística) para comparación
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import precision_recall_curve, average_precision_score
+    # 1. Baselines en Test Set
+    dummy = DummyClassifier(strategy="most_frequent")
+    dummy.fit(X_train, y_train)
+    dummy_pred = dummy.predict(X_test)
 
     lr_baseline = LogisticRegression(max_iter=1000, random_state=42)
     lr_baseline.fit(X_train, y_train)
-    lr_proba = lr_baseline.predict_proba(X_test)[:, 1]
+    lr_proba = lr_baseline.predict_proba(X_test)[:, 1] if len(np.unique(y_train)) > 1 else np.zeros(len(X_test))
     lr_pred = (lr_proba >= 0.5).astype(int)
 
-    # Predicción y ajuste de Threshold en XGBoost
-    y_proba = model.predict_proba(X_test)[:, 1]
+    # 2. SELECCIÓN DE THRESHOLD EN VALIDATION SET (Sin contaminar Test Set)
+    val_proba = model.predict_proba(X_val)[:, 1]
+    precisions_val, recalls_val, thresholds_val = precision_recall_curve(y_val, val_proba)
+    f1_scores_val = 2 * (precisions_val * recalls_val) / (precisions_val + recalls_val + 1e-8)
     
-    precisions, recalls, thresholds = precision_recall_curve(y_test, y_proba)
-    f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-8)
-    best_idx = np.argmax(f1_scores) if len(thresholds) > 0 else 0
-    opt_threshold = float(thresholds[best_idx]) if len(thresholds) > best_idx else 0.5
+    if len(thresholds_val) > 0:
+        best_val_idx = np.argmax(f1_scores_val)
+        opt_threshold = float(thresholds_val[best_val_idx])
+    else:
+        opt_threshold = 0.5
 
-    y_pred = (y_proba >= opt_threshold).astype(int)
+    # 3. EVALUACIÓN FINAL UNA SOLA VEZ EN TEST SET CON THRESHOLD SELECCIONADO EN VALIDATION
+    y_test_proba = model.predict_proba(X_test)[:, 1]
+    y_test_pred = (y_test_proba >= opt_threshold).astype(int)
 
-    acc = float(accuracy_score(y_test, y_pred))
-    prec = float(precision_score(y_test, y_pred, zero_division=0))
-    rec = float(recall_score(y_test, y_pred, zero_division=0))
-    f1 = float(f1_score(y_test, y_pred, zero_division=0))
-    pr_auc = float(average_precision_score(y_test, y_proba)) if len(np.unique(y_test)) > 1 else 0.80
+    acc = float(accuracy_score(y_test, y_test_pred))
+    prec = float(precision_score(y_test, y_test_pred, zero_division=0))
+    rec = float(recall_score(y_test, y_test_pred, zero_division=0))
+    f1 = float(f1_score(y_test, y_test_pred, zero_division=0))
+    brier = float(brier_score_loss(y_test, y_test_proba))
 
-    try:
-        auc = float(roc_auc_score(y_test, y_proba))
-    except Exception:
-        auc = 0.85
+    if len(np.unique(y_test)) > 1:
+        auc = float(roc_auc_score(y_test, y_test_proba))
+        pr_auc = float(average_precision_score(y_test, y_test_proba))
+    else:
+        auc = 0.50
+        pr_auc = float(y_test.mean())
 
     metrics = {
-        "model_version": "delivery-xgb-v1.0.0",
-        "algorithm": "XGBoost Classifier (Order-Aggregated & Temporal Split)",
+        "model_version": "delivery-xgb-v1.1.0",
+        "algorithm": "XGBoost Classifier (Temporal Split: Train 70% / Val 15% / Test 15%)",
         "optimal_threshold": round(opt_threshold, 4),
+        "threshold_selection_dataset": "validation_set",
         "accuracy": round(acc, 4),
         "precision": round(prec, 4),
         "recall": round(rec, 4),
         "f1_score": round(f1, 4),
         "roc_auc": round(auc, 4),
         "pr_auc": round(pr_auc, 4),
-        "baseline_comparison": {
-            "logistic_regression_f1": round(float(f1_score(y_test, lr_pred, zero_division=0)), 4),
-            "logistic_regression_roc_auc": round(float(roc_auc_score(y_test, lr_proba)) if len(np.unique(y_test)) > 1 else 0.70, 4)
+        "brier_score": round(brier, 4),
+        "baselines": {
+            "dummy_classifier": {
+                "accuracy": round(float(accuracy_score(y_test, dummy_pred)), 4),
+                "f1_score": round(float(f1_score(y_test, dummy_pred, zero_division=0)), 4),
+            },
+            "logistic_regression": {
+                "accuracy": round(float(accuracy_score(y_test, lr_pred)), 4),
+                "f1_score": round(float(f1_score(y_test, lr_pred, zero_division=0)), 4),
+                "roc_auc": round(float(roc_auc_score(y_test, lr_proba)) if len(np.unique(y_test)) > 1 else 0.50, 4),
+            }
         },
         "features": feature_cols,
         "trained_at": datetime.utcnow().isoformat() + "Z",
         "train_samples": len(X_train),
+        "val_samples": len(X_val),
         "test_samples": len(X_test),
         "positive_class_ratio": round(float(y.mean()), 4),
     }
@@ -237,11 +268,23 @@ def preprocess_and_train(df):
     joblib.dump(model, model_path)
     print(f"💾 Modelo guardado en: {model_path}")
 
-    # Guardar metadatos y métricas
+    # Guardar métricas
     metrics_path = os.path.join(MODELS_DIR, "delivery_delay_metrics.json")
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
     print(f"📊 Métricas guardadas en: {metrics_path}")
+
+    # Guardar esquema de features
+    schema_path = os.path.join(MODELS_DIR, "delivery_delay_feature_schema.json")
+    schema_data = {
+        "features": [
+            {"name": col, "type": "float", "description": col} for col in feature_cols
+        ],
+        "optimal_threshold": opt_threshold,
+    }
+    with open(schema_path, "w", encoding="utf-8") as f:
+        json.dump(schema_data, f, indent=2)
+    print(f"📐 Esquema de características guardado en: {schema_path}")
 
     print("\n🎉 Entrenamiento del modelo XGBoost completado exitosamente!")
     print(json.dumps(metrics, indent=2))

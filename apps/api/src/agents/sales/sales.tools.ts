@@ -100,5 +100,98 @@ export function createSalesTools(prisma: PrismaService) {
     },
   );
 
-  return [getRevenueSummary, getSalesByCategory];
+  const getSalesByPaymentMethod = tool(
+    async ({ dateFrom, dateTo }) => {
+      const where: any = {};
+      if (dateFrom || dateTo) {
+        where.order = { orderPurchaseTimestamp: {} };
+        if (dateFrom) where.order.orderPurchaseTimestamp.gte = new Date(dateFrom);
+        if (dateTo) where.order.orderPurchaseTimestamp.lte = new Date(dateTo);
+      }
+
+      const payments = await prisma.olistOrderPayment.findMany({
+        where,
+        select: {
+          paymentType: true,
+          paymentValue: true,
+          paymentInstallments: true,
+        },
+      });
+
+      const agg: Record<string, { totalValue: number; count: number; totalInstallments: number }> = {};
+      for (const p of payments) {
+        const type = p.paymentType || 'other';
+        if (!agg[type]) agg[type] = { totalValue: 0, count: 0, totalInstallments: 0 };
+        agg[type].totalValue += Number(p.paymentValue);
+        agg[type].count += 1;
+        agg[type].totalInstallments += p.paymentInstallments;
+      }
+
+      const results = Object.entries(agg).map(([paymentType, data]) => ({
+        paymentType,
+        totalValue: Math.round(data.totalValue * 100) / 100,
+        transactionCount: data.count,
+        avgPaymentValue: Math.round((data.totalValue / data.count) * 100) / 100,
+        avgInstallments: Math.round((data.totalInstallments / data.count) * 10) / 10,
+      }));
+
+      return JSON.stringify(results);
+    },
+    {
+      name: 'get_sales_by_payment_method',
+      description: 'Calcula el desglose de ventas por método de pago (credit_card, boleto, voucher, debit_card) y cuotas promedio.',
+      schema: z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+      }),
+    },
+  );
+
+  const getAverageOrderValueTrend = tool(
+    async ({ dateFrom, dateTo }) => {
+      const where: any = {};
+      if (dateFrom || dateTo) {
+        where.orderPurchaseTimestamp = {};
+        if (dateFrom) where.orderPurchaseTimestamp.gte = new Date(dateFrom);
+        if (dateTo) where.orderPurchaseTimestamp.lte = new Date(dateTo);
+      }
+
+      const orders = await prisma.olistOrder.findMany({
+        where,
+        select: {
+          orderPurchaseTimestamp: true,
+          payments: { select: { paymentValue: true } },
+        },
+        orderBy: { orderPurchaseTimestamp: 'asc' },
+      });
+
+      const monthlyMap: Record<string, { totalValue: number; count: number }> = {};
+      for (const o of orders) {
+        const monthKey = o.orderPurchaseTimestamp.toISOString().substring(0, 7); // YYYY-MM
+        const orderVal = o.payments.reduce((sum, p) => sum + Number(p.paymentValue), 0);
+        if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { totalValue: 0, count: 0 };
+        monthlyMap[monthKey].totalValue += orderVal;
+        monthlyMap[monthKey].count += 1;
+      }
+
+      const trend = Object.entries(monthlyMap).map(([month, data]) => ({
+        month,
+        ordersCount: data.count,
+        totalRevenue: Math.round(data.totalValue * 100) / 100,
+        avgOrderValue: Math.round((data.totalValue / (data.count || 1)) * 100) / 100,
+      }));
+
+      return JSON.stringify(trend);
+    },
+    {
+      name: 'get_average_order_value_trend',
+      description: 'Calcula la tendencia mensual del ticket promedio (AOV) y volumen de ventas.',
+      schema: z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+      }),
+    },
+  );
+
+  return [getRevenueSummary, getSalesByCategory, getSalesByPaymentMethod, getAverageOrderValueTrend];
 }

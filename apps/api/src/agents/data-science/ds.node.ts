@@ -59,19 +59,21 @@ export function createDataScienceNode(streaming: StreamingService) {
     const prompt = `Eres el Data Science Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
-Resultado de predicción (${isFallback ? 'Baseline Heurístico (Fallback)' : 'XGBoost Classifier v1.0.0'}):
+Resultado de predicción (${isFallback ? 'Baseline Heurístico (Fallback)' : 'XGBoost Classifier v1.1.0'}):
 ${predictResult}
 
-Explicación de características (${isFallback ? 'Factores Heurísticos' : 'SHAP TreeExplainer'}):
+Explicación de atribución de características (${isFallback ? 'Factores Heurísticos' : 'SHAP TreeExplainer'}):
 ${explainResult}
 
-Genera un hallazgo técnico explicable en formato JSON.
-Describe con transparencia el algoritmo realmente utilizado (${isFallback ? 'Baseline Heurístico de Fallback' : 'XGBoost Classifier & SHAP Explainer'}).
+REGLAS DE RIGOR METODOLÓGICO Y CERO ALUCINACIÓN:
+1. Describir la atribución de características SHAP ÚNICAMENTE para las variables presentes en la salida (is_interstate, freight_value, price, freight_ratio, product_weight_g, product_volume_cm3, purchase_dow, purchase_hour, item_count).
+2. PROHIBIDO inventar o mencionar variables externas no registradas (como clima, condiciones climáticas, tráfico, huelga, camiones o carga de trabajo de transportistas).
+3. Utilizar "atribución de características mediante SHAP" o "contribución del modelo", evitando afirmar "explicación causal".
 
-Estructura JSON requerida:
+Genera un hallazgo técnico explicable en formato JSON:
 {
   "title": "Predicción de Riesgo de Atraso (${isFallback ? 'Baseline Heurístico' : 'XGBoost Classifier & SHAP Explainer'})",
-  "description": "La probabilidad de atraso predicha es de X.X%. Los factores principales incluyen...",
+  "description": "La probabilidad de atraso predicha es de X.X%. Los factores SHAP principales son...",
   "confidence": ${isFallback ? 0.75 : 0.88},
   "findingType": "ML_PREDICTION"
 }`;

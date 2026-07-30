@@ -76,14 +76,21 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
   );
 
   const searchReviewsSemantic = tool(
-    async ({ query, topK = 5 }) => {
+    async ({ query, topK = 5, reviewScores, categories, dateFrom, dateTo }) => {
       const mlServiceUrl =
         process.env.ML_SERVICE_URL || 'http://localhost:8000';
       try {
         const response = await fetch(`${mlServiceUrl}/nlp/reviews/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, top_k: topK }),
+          body: JSON.stringify({
+            query,
+            top_k: topK,
+            review_scores: reviewScores,
+            categories,
+            date_from: dateFrom,
+            date_to: dateTo,
+          }),
         });
 
         if (response.ok) {
@@ -101,6 +108,7 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
       const reviews = await prisma.olistOrderReview.findMany({
         where: {
           reviewCommentMessage: { contains: query, mode: 'insensitive' },
+          ...(reviewScores && reviewScores.length > 0 ? { reviewScore: { in: reviewScores } } : {}),
         },
         take: topK,
         select: {
@@ -119,7 +127,7 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
     {
       name: 'search_reviews_semantic',
       description:
-        'Busca reseñas de clientes semánticamente relevantes utilizando el servicio de NLP o fallback por palabras clave.',
+        'Busca reseñas de clientes semánticamente relevantes utilizando el servicio de NLP con filtros por calificación, categorías y fechas.',
       schema: z.object({
         query: z
           .string()
@@ -130,6 +138,10 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
           .number()
           .default(5)
           .describe('Cantidad máxima de reseñas a devolver'),
+        reviewScores: z.array(z.number()).optional(),
+        categories: z.array(z.string()).optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
       }),
     },
   );

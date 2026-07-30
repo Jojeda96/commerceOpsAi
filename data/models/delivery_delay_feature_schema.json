@@ -1,0 +1,50 @@
+{
+  "features": [
+    {
+      "name": "is_interstate",
+      "type": "float",
+      "description": "is_interstate"
+    },
+    {
+      "name": "freight_value",
+      "type": "float",
+      "description": "freight_value"
+    },
+    {
+      "name": "price",
+      "type": "float",
+      "description": "price"
+    },
+    {
+      "name": "freight_ratio",
+      "type": "float",
+      "description": "freight_ratio"
+    },
+    {
+      "name": "product_weight_g",
+      "type": "float",
+      "description": "product_weight_g"
+    },
+    {
+      "name": "product_volume_cm3",
+      "type": "float",
+      "description": "product_volume_cm3"
+    },
+    {
+      "name": "purchase_dow",
+      "type": "float",
+      "description": "purchase_dow"
+    },
+    {
+      "name": "purchase_hour",
+      "type": "float",
+      "description": "purchase_hour"
+    },
+    {
+      "name": "item_count",
+      "type": "float",
+      "description": "item_count"
+    }
+  ],
+  "optimal_threshold": 0.5294485092163086
+}

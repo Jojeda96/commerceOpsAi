@@ -106,7 +106,7 @@ export function createDataScienceTools() {
     {
       name: 'explain_delivery_delay',
       description:
-        'Obtiene la explicación causal de SHAP para la predicción de retrasos del modelo XGBoost.',
+        'Obtiene la atribución de características mediante SHAP TreeExplainer para la predicción de retrasos del modelo XGBoost.',
       schema: z.object({
         sellerState: z.string().default('SP'),
         customerState: z.string().default('RJ'),

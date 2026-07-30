@@ -37,18 +37,15 @@ class NLPEngine:
                 with open(self.metadata_path, "r", encoding="utf-8") as f:
                     self.metadata = json.load(f)
                 self.reviews = self.metadata.get("reviews", [])
-                print(f"[NLPEngine] ✅ Índice vectorial NLP cargado ({len(self.reviews)} reseñas, dim={self.embeddings.shape[1]}).")
+                embedding_method = self.metadata.get("embedding_method", "paraphrase-multilingual-MiniLM-L12-v2")
+                print(f"[NLPEngine] ✅ Índice vectorial NLP cargado ({len(self.reviews)} reseñas, dim={self.embeddings.shape[1]}, método={embedding_method}).")
                 
-                # Cargar modelo de embeddings para codificar queries
+                # Cargar modelo de embeddings indicado en metadatos para codificar queries
                 try:
                     from sentence_transformers import SentenceTransformer
-                    self.model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-                except Exception:
-                    try:
-                        from sentence_transformers import SentenceTransformer
-                        self.model = SentenceTransformer("all-MiniLM-L6-v2")
-                    except Exception:
-                        print("[NLPEngine] SentenceTransformer no disponible, se usará búsqueda basada en término para consultas.")
+                    self.model = SentenceTransformer(embedding_method)
+                except Exception as e:
+                    print(f"[NLPEngine] SentenceTransformer ({embedding_method}) no pudo cargarse ({e}), fallback a léxico.")
             except Exception as e:
                 print(f"[NLPEngine] ⚠️ Error al cargar índice NLP ({e}).")
 
@@ -61,18 +58,45 @@ class NLPEngine:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
     ) -> Dict[str, Any]:
+        method_used = self.metadata.get("embedding_method", "mock_semantic_baseline") if self.embeddings is not None else "mock_semantic_baseline"
+
         if self.embeddings is not None and len(self.reviews) > 0:
             try:
-                # Filtrar índices por score o fecha si están especificados
+                # Filtrar índices por score, categorías o fecha si están especificados
                 candidate_indices = list(range(len(self.reviews)))
+
                 if review_scores and len(review_scores) > 0:
                     candidate_indices = [
                         i for i in candidate_indices
                         if int(self.reviews[i].get("review_score", 1)) in review_scores
                     ]
 
+                if categories and len(categories) > 0:
+                    candidate_indices = [
+                        i for i in candidate_indices
+                        if any(cat.lower() in str(self.reviews[i].get("product_category_name", "")).lower() for cat in categories)
+                    ]
+
+                if date_from:
+                    candidate_indices = [
+                        i for i in candidate_indices
+                        if str(self.reviews[i].get("review_creation_date", "")) >= date_from
+                    ]
+
+                if date_to:
+                    candidate_indices = [
+                        i for i in candidate_indices
+                        if str(self.reviews[i].get("review_creation_date", "")) <= date_to
+                    ]
+
+                # Si el filtro excluye todos los elementos, devolver resultado vacío transparente
                 if not candidate_indices:
-                    candidate_indices = list(range(len(self.reviews)))
+                    return {
+                        "query": query,
+                        "candidate_count": 0,
+                        "results": [],
+                        "method": method_used,
+                    }
 
                 sub_embeddings = self.embeddings[candidate_indices]
 
@@ -86,7 +110,7 @@ class NLPEngine:
                     query_words = set(query.lower().split())
                     scores = []
                     for i in candidate_indices:
-                        text = self.reviews[i]["review_comment_message"].lower()
+                        text = str(self.reviews[i].get("review_comment_message", "")).lower()
                         overlap = sum(1 for w in query_words if w in text)
                         scores.append(overlap / (len(query_words) + 1e-5))
                     scores = np.array(scores)
@@ -106,8 +130,9 @@ class NLPEngine:
 
                 return {
                     "query": query,
+                    "candidate_count": len(candidate_indices),
                     "results": results,
-                    "method": "paraphrase-multilingual-MiniLM-L12-v2_cosine_similarity" if self.model else "tfidf_lexical_similarity",
+                    "method": method_used,
                 }
             except Exception as e:
                 print(f"[NLPEngine] Error en búsqueda de reseñas: {e}")

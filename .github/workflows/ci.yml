@@ -30,6 +30,29 @@ jobs:
       - run: pip install -r apps/ml-service/requirements.txt
       - run: cd apps/ml-service && PYTHONPATH=. python -m pytest --tb=short -q
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build --filter=web
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
   docker-smoke-test:
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +63,8 @@ jobs:
         run: docker compose up -d postgres redis ml-service
       - name: Verify service readiness
         run: |
-          sleep 12
+          sleep 10
           docker ps
-          curl --fail http://localhost:8000/models/delivery-delay/metrics || echo "ML service up"
+          curl --fail --retry 10 --retry-delay 3 http://localhost:8000/health
+          curl --fail --retry 10 --retry-delay 3 http://localhost:8000/models/delivery-delay/metrics
 

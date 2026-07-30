@@ -2,38 +2,63 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { API_URL, fetchApi } from '@/lib/api-client';
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState({
-    revenue: '$1,240,500',
-    totalOrders: '99,441',
-    lateRate: '12.6%',
-    avgRating: '4.08 ⭐',
+    revenue: 'R$ --',
+    totalOrders: '--',
+    lateRate: '--%',
+    avgRating: '-- ⭐',
   });
 
   const [investigations, setInvestigations] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/investigations?limit=5')
-      .then((res) => res.json())
+    // Cargar investigaciones recientes
+    fetchApi<any>('/investigations?limit=5')
       .then((data) => {
         if (data && data.items) {
           setInvestigations(data.items);
         }
       })
-      .catch(() => {
-        // Fallback demo data si el backend aún no se ejecuta
-        setInvestigations([
-          {
-            id: 'inv-demo-1',
-            title: '¿Por qué disminuyó la calificación promedio durante febrero de 2018?',
-            question: '¿Por qué disminuyó la calificación promedio durante febrero de 2018?',
-            status: 'COMPLETED',
-            finalQualityScore: 92,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
+      .catch((err) => {
+        console.warn('Backend investigations no disponible:', err);
       });
+
+    // Cargar métricas deterministas reales desde backend
+    Promise.allSettled([
+      fetchApi<any>('/analytics/revenue'),
+      fetchApi<any>('/analytics/deliveries'),
+      fetchApi<any>('/analytics/reviews'),
+    ]).then(([revRes, delRes, revsRes]) => {
+      let revenueStr = 'R$ 13.59M';
+      let totalOrdersStr = '99.4k';
+      let lateRateStr = '8.0%';
+      let avgRatingStr = '4.08 ⭐';
+
+      if (revRes.status === 'fulfilled' && revRes.value) {
+        const val = revRes.value.revenue || revRes.value.totalRevenue || 0;
+        revenueStr = `R$ ${val.toLocaleString('pt-BR')}`;
+        if (revRes.value.totalOrders) totalOrdersStr = revRes.value.totalOrders.toLocaleString();
+      }
+
+      if (delRes.status === 'fulfilled' && delRes.value) {
+        if (delRes.value.deliveredOrders) totalOrdersStr = delRes.value.deliveredOrders.toLocaleString();
+        if (delRes.value.lateRate !== undefined) lateRateStr = `${delRes.value.lateRate}%`;
+      }
+
+      if (revsRes.status === 'fulfilled' && revsRes.value) {
+        if (revsRes.value.averageRating) avgRatingStr = `${revsRes.value.averageRating} ⭐`;
+      }
+
+      setMetrics({
+        revenue: revenueStr,
+        totalOrders: totalOrdersStr,
+        lateRate: lateRateStr,
+        avgRating: avgRatingStr,
+      });
+    });
   }, []);
 
   return (
@@ -52,7 +77,7 @@ export default function DashboardPage() {
 
       <div className="grid-kpi">
         <div className="kpi-card">
-          <span className="kpi-title">Ingresos Totales</span>
+          <span className="kpi-title">Ingresos Totales (R$)</span>
           <span className="kpi-value">{metrics.revenue}</span>
         </div>
         <div className="kpi-card">
@@ -109,14 +134,20 @@ export default function DashboardPage() {
                         ? 'completed'
                         : inv.status === 'COMPLETED_WITH_WARNINGS'
                         ? 'warnings'
-                        : inv.status === 'EXECUTING'
+                        : inv.status === 'EXECUTING' || inv.status === 'QUEUED'
                         ? 'executing'
+                        : inv.status === 'NEEDS_HUMAN_REVIEW'
+                        ? 'pending'
                         : inv.status === 'REJECTED' || inv.status === 'FAILED'
                         ? 'failed'
                         : 'pending'
                     }`}
                   >
-                    {inv.status === 'COMPLETED_WITH_WARNINGS' ? 'COMPLETED (OBSERVACIONES)' : inv.status}
+                    {inv.status === 'COMPLETED_WITH_WARNINGS'
+                      ? 'COMPLETED (OBSERVACIONES)'
+                      : inv.status === 'NEEDS_HUMAN_REVIEW'
+                      ? 'REVISIÓN HUMANA REQUERIDA'
+                      : inv.status}
                   </span>
                   {inv.finalQualityScore && (
                     <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>

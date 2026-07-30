@@ -24,6 +24,7 @@ ${JSON.stringify(findings, null, 2)}
 
 Instrucciones para "expectedImpact":
 - IMPORTANTE: NO inventes cifras ni proyectes reducciones porcentuales arbitrarias. Solo cita datos numéricos que aparezcan explícitamente en los hallazgos.
+- PROHIBIDO inventar o mencionar variables no registradas en los hallazgos (como clima, condiciones climáticas, tráfico, huelgas o camiones).
 - Formato sugerido: "Área de impacto: [métrica o volumen citado en hallazgos]. Acción: [descripción de la mejora]." Si se requieren estimaciones cuantitativas proyectadas, indica "Se requiere simulación cuantitativa."
 
 Genera 2 recomendaciones ejecutivas en formato JSON estricto:

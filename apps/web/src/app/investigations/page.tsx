@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { API_URL, fetchApi } from '@/lib/api-client';
 
 export default function InvestigationsPage() {
   const [question, setQuestion] = useState('');
@@ -9,8 +10,7 @@ export default function InvestigationsPage() {
   const [loading, setLoading] = useState(false);
 
   const fetchInvestigations = () => {
-    fetch('http://localhost:3001/api/investigations')
-      .then((res) => res.json())
+    fetchApi<any>('/investigations')
       .then((data) => {
         if (data && data.items) {
           setInvestigations(data.items);
@@ -23,11 +23,11 @@ export default function InvestigationsPage() {
     fetchInvestigations();
   }, []);
 
-  const getAuthToken = async () => {
-    let token = localStorage.getItem('accessToken');
+  const getAuthToken = async (forceRefresh = false) => {
+    let token = forceRefresh ? null : localStorage.getItem('accessToken');
     if (!token) {
       try {
-        const res = await fetch('http://localhost:3001/api/auth/login', {
+        const res = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -53,15 +53,27 @@ export default function InvestigationsPage() {
 
     setLoading(true);
     try {
-      const token = await getAuthToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      let token = await getAuthToken();
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch('http://localhost:3001/api/investigations', {
+      let res = await fetch(`${API_URL}/investigations`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ question }),
       });
+
+      // Si el token expiró (401), solicitar uno nuevo y reintentar
+      if (res.status === 401) {
+        localStorage.removeItem('accessToken');
+        token = await getAuthToken(true);
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        res = await fetch(`${API_URL}/investigations`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ question }),
+        });
+      }
 
       if (!res.ok) {
         throw new Error(`Error al crear investigación: ${res.status}`);
@@ -70,7 +82,7 @@ export default function InvestigationsPage() {
       const newInv = await res.json();
 
       // Iniciar ejecución del workflow automáticamente
-      fetch(`http://localhost:3001/api/investigations/${newInv.id}/run`, {
+      fetch(`${API_URL}/investigations/${newInv.id}/run`, {
         method: 'POST',
         headers,
       }).catch((err) => console.error('Error al iniciar ejecucion de investigacion:', err));

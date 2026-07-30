@@ -1,16 +1,25 @@
 {
-  "model_version": "delivery-xgb-v1.0.0",
-  "algorithm": "XGBoost Classifier (Order-Aggregated & Temporal Split)",
-  "optimal_threshold": 0.1125,
-  "accuracy": 0.2513,
-  "precision": 0.0397,
-  "recall": 0.8571,
-  "f1_score": 0.0759,
-  "roc_auc": 0.3602,
-  "pr_auc": 0.0304,
-  "baseline_comparison": {
-    "logistic_regression_f1": 0.0,
-    "logistic_regression_roc_auc": 0.3921
+  "model_version": "delivery-xgb-v1.1.0",
+  "algorithm": "XGBoost Classifier (Temporal Split: Train 70% / Val 15% / Test 15%)",
+  "optimal_threshold": 0.5294,
+  "threshold_selection_dataset": "validation_set",
+  "accuracy": 0.7755,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1_score": 0.0,
+  "roc_auc": 0.2857,
+  "pr_auc": 0.0359,
+  "brier_score": 0.1864,
+  "baselines": {
+    "dummy_classifier": {
+      "accuracy": 0.9524,
+      "f1_score": 0.0
+    },
+    "logistic_regression": {
+      "accuracy": 0.9524,
+      "f1_score": 0.0,
+      "roc_auc": 0.4173
+    }
   },
   "features": [
     "is_interstate",
@@ -20,10 +29,12 @@
     "product_weight_g",
     "product_volume_cm3",
     "purchase_dow",
-    "purchase_hour"
+    "purchase_hour",
+    "item_count"
   ],
-  "trained_at": "2026-07-29T19:54:55.184211Z",
-  "train_samples": 780,
-  "test_samples": 195,
+  "trained_at": "2026-07-29T23:29:18.024996Z",
+  "train_samples": 682,
+  "val_samples": 146,
+  "test_samples": 147,
   "positive_class_ratio": 0.0769
 }

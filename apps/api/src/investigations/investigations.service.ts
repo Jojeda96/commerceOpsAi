@@ -46,13 +46,19 @@ export class InvestigationsService {
   }
 
   async run(id: string) {
-    const investigation = await this.findOne(id);
-    if (
-      investigation.status !== 'PENDING' &&
-      investigation.status !== 'FAILED'
-    ) {
+    const claimed = await this.prisma.investigation.updateMany({
+      where: {
+        id,
+        status: { in: ['PENDING', 'FAILED'] },
+      },
+      data: {
+        status: 'QUEUED',
+      },
+    });
+
+    if (claimed.count === 0) {
       throw new BadRequestException(
-        `La investigación ${id} ya fue ejecutada (status: ${investigation.status})`,
+        `La investigación ${id} no se puede ejecutar (no está en estado PENDING/FAILED o ya fue reclamada).`,
       );
     }
 
@@ -69,7 +75,7 @@ export class InvestigationsService {
     return {
       message: 'Workflow multiagente iniciado exitosamente.',
       investigationId: id,
-      status: 'EXECUTING',
+      status: 'QUEUED',
     };
   }
 
@@ -160,9 +166,12 @@ export class InvestigationsService {
 
   async getReport(id: string) {
     const investigation = await this.findOne(id);
-    if (investigation.status !== 'COMPLETED') {
+    if (
+      investigation.status !== 'COMPLETED' &&
+      investigation.status !== 'COMPLETED_WITH_WARNINGS'
+    ) {
       throw new BadRequestException(
-        `La investigación ${id} aún no ha sido completada (status: ${investigation.status})`,
+        `La investigación ${id} no está lista para generar reporte (status actual: ${investigation.status})`,
       );
     }
 

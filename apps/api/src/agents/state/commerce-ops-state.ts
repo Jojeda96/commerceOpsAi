@@ -9,6 +9,8 @@ import {
   CriticFeedback,
   Recommendation,
   FinalReport,
+  AgentRunTrace,
+  ToolExecutionTrace,
 } from '@commerce-ops/shared-types';
 
 export const CommerceOpsAnnotation = Annotation.Root({
@@ -28,6 +30,14 @@ export const CommerceOpsAnnotation = Annotation.Root({
   }),
   completedAgents: Annotation<AgentName[]>({
     value: (prev, next) => [...new Set([...prev, ...next])],
+    default: () => [],
+  }),
+  agentRunTraces: Annotation<AgentRunTrace[]>({
+    value: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+  toolExecutionTraces: Annotation<ToolExecutionTrace[]>({
+    value: (prev, next) => [...prev, ...next],
     default: () => [],
   }),
   findings: Annotation<Finding[]>({

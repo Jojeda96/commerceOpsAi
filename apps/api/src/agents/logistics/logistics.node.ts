@@ -15,36 +15,60 @@ export function createLogisticsNode(
 
     const tools = createLogisticsTools(prisma);
     const delTool = tools.find((t) => t.name === 'get_delivery_summary')!;
+    const routeTool = tools.find((t) => t.name === 'get_delivery_performance_by_route')!;
+    const stageTool = tools.find((t) => t.name === 'get_delivery_stage_breakdown')!;
+
+    const isRouteQuestion = /ruta|interestatal|regi[oó]n|estado/i.test(userQuestion);
 
     streaming.emit(investigationId, 'tool.started', {
       agent: 'LOGISTICS',
-      tool: 'get_delivery_summary',
+      tool: isRouteQuestion ? 'get_delivery_performance_by_route' : 'get_delivery_summary',
     });
+
     const delResult = await delTool.invoke({
       dateFrom: state.filters.dateFrom,
       dateTo: state.filters.dateTo,
     });
+
+    let routeResult = '';
+    let stageResult = '';
+    if (isRouteQuestion) {
+      routeResult = await routeTool.invoke({ topN: 10 });
+      stageResult = await stageTool.invoke({
+        dateFrom: state.filters.dateFrom,
+        dateTo: state.filters.dateTo,
+      });
+    }
+
     streaming.emit(investigationId, 'tool.completed', {
       agent: 'LOGISTICS',
-      tool: 'get_delivery_summary',
+      tool: isRouteQuestion ? 'get_delivery_performance_by_route' : 'get_delivery_summary',
     });
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      temperature: 0.2,
+      temperature: 0.1,
       apiKey: process.env.OPENAI_API_KEY,
     });
 
     const prompt = `Eres el Logistics Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
-Métricas deterministas de logística calculadas:
+Métricas deterministas de logística global:
 ${delResult}
+
+${isRouteQuestion ? `Rendimiento de entregas por ruta (sellerState -> customerState):\n${routeResult}\nDesglose de etapas (preparación vs tránsito):\n${stageResult}` : ''}
+
+REGLAS DE RIGOR METODOLÓGICO Y CERO ALUCINACIÓN:
+1. Basar las conclusiones ÚNICAMENTE en las cifras cuantitativas anteriores.
+2. PROHIBIDO mencionar o inventar factores no registrados en el dataset de Olist (por ejemplo: clima, condiciones climáticas, tráfico, huelgas, camiones o carga de trabajo de transportistas).
+3. PROHIBIDO mencionar "factores SHAP" o "SHAP values"; las atribuciones SHAP corresponden exclusivamente al Data Science Agent.
+4. Si la consulta se refiere a envíos interestatales, utiliza los datos de la herramienta de rutas (sellerState != customerState), no las métricas globales como si fueran interestatales.
 
 Genera un hallazgo técnico objetivo en formato JSON:
 {
   "title": "Título del hallazgo de logística",
-  "description": "Descripción cuantitativa detallada sobre la tasa de atrasos y tiempos de transporte.",
+  "description": "Descripción cuantitativa detallada basándose exclusivamente en los datos de las herramientas.",
   "confidence": 0.92,
   "findingType": "LOGISTICS_DELAY"
 }`;
@@ -74,12 +98,13 @@ Genera un hallazgo técnico objetivo en formato JSON:
     const evidenceId = `ev-logistics-${Date.now()}`;
     const evidenceItem = {
       id: evidenceId,
-      toolName: 'get_delivery_summary',
+      toolName: isRouteQuestion ? 'get_delivery_performance_by_route' : 'get_delivery_summary',
       parameters: {
         dateFrom: state.filters.dateFrom,
         dateTo: state.filters.dateTo,
+        isRouteQuestion,
       },
-      resultSummary: delResult,
+      resultSummary: isRouteQuestion ? `Resumen: ${delResult} | Rutas: ${routeResult} | Etapas: ${stageResult}` : delResult,
       generatedAt: new Date().toISOString(),
     };
 

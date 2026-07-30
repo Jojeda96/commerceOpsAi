@@ -11,10 +11,12 @@ export type AgentName =
 
 export type InvestigationStatus =
   | 'PENDING'
-  | 'PLANNING'
+  | 'QUEUED'
   | 'EXECUTING'
-  | 'REVIEWING'
   | 'COMPLETED'
+  | 'COMPLETED_WITH_WARNINGS'
+  | 'NEEDS_HUMAN_REVIEW'
+  | 'REJECTED'
   | 'FAILED';
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -44,22 +46,61 @@ export interface InvestigationTask {
   completedAt?: string;
 }
 
+export interface AgentRunTrace {
+  localRunId: string;
+  agentName: AgentName;
+  iteration: number;
+  model?: string;
+  promptVersion?: string;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  estimatedCostUsd?: number;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  errorMessage?: string;
+}
+
+export interface ToolExecutionTrace {
+  localExecutionId: string;
+  localAgentRunId: string;
+  agentName: AgentName;
+  iteration: number;
+  toolName: string;
+  parameters: unknown;
+  resultSummary?: unknown;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  errorMessage?: string;
+}
+
 export interface Finding {
   id: string;
   investigationId: string;
   agentRunId?: string;
+  agentName?: AgentName;
   agent: AgentName;
   title: string;
   description: string;
   findingType: string;
   confidence: number;
   evidenceIds: string[];
+  iteration?: number;
+  supersedesFindingId?: string;
+  status?: 'ACTIVE' | 'SUPERSEDED';
   createdAt: string;
 }
 
 export interface Evidence {
   id: string;
   toolExecutionId?: string;
+  localAgentRunId?: string;
+  localToolExecutionId?: string;
+  agentName?: AgentName;
+  iteration?: number;
   toolName: string;
   queryHash?: string;
   parameters: Record<string, unknown>;

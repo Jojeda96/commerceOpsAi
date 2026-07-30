@@ -14,7 +14,7 @@ Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagent
 ### ✅ Implementado
 - **Orquestación Multiagente Real:** Grafo de ejecuciones paralelas coordinado con **LangGraph JS** y **NestJS** (`StateGraph` con `Send`).
 - **Agentes Especialistas Operativos:** Supervisor, Sales, Logistics, Customer Experience, Seller Performance, Anomaly, Data Science, Evidence Critic y Business Strategy.
-- **Machine Learning Real (XGBoost + SHAP):** Modelo predictivo de retrasos en entregas entrenado sobre el dataset de Olist con `XGBClassifier`. Inferencia en tiempo real y explicaciones causales con **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
+- **Machine Learning Real (XGBoost + SHAP):** Modelo predictivo de retrasos en entregas entrenado sobre el dataset de Olist con `XGBClassifier`. Inferencia en tiempo real y atribución de características con **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
 - **Búsqueda Semántica NLP (SentenceTransformers):** Búsqueda vectorial de reseñas por similitud de coseno utilizando el modelo **`all-MiniLM-L6-v2`** (`/nlp/reviews/search`).
 - **Herramientas Deterministas:** Consultas agilizadas en PostgreSQL para análisis de ventas, logística, experiencia de cliente y scorecards de vendedores.
 - **Persistencia & Trazabilidad:** Persistencia relacional en PostgreSQL con Prisma ORM (investigaciones, tareas, agent runs, hallazgos, evidencias, recomendaciones, critic feedback).
@@ -84,14 +84,14 @@ flowchart TD
 | Agente | Nombre | Rol y Responsabilidades | Herramientas Principales |
 |---|---|---|---|
 | 👑 **Operations Supervisor** | `SUPERVISOR` | Orquestador principal. Analiza la consulta inicial y construye el plan fan-out. | Selección dinámica de agentes |
-| 📊 **Sales Intelligence** | `SALES` | Analiza ingresos, volumen de pedidos, ticket promedio y facturación por categoría. | `get_revenue_summary`, `get_sales_by_category` |
-| 🚚 **Logistics Agent** | `LOGISTICS` | Investiga tasas de retraso en entregas, tiempos de transporte y SLAs por región. | `get_delivery_summary` |
-| ⭐ **Customer Experience** | `CUSTOMER_EXPERIENCE` | Analiza calificaciones (1-5 estrellas), distribución de reseñas y análisis de sentimiento. | `get_rating_summary`, `search_reviews_semantic` |
+| 📊 **Sales Intelligence** | `SALES` | Analiza ingresos, volumen de pedidos, ticket promedio, facturación por categoría, métodos de pago y tendencia AOV. | `get_revenue_summary`, `get_sales_by_category`, `get_sales_by_payment_method`, `get_average_order_value_trend` |
+| 🚚 **Logistics Agent** | `LOGISTICS` | Investiga tasas de retraso en entregas, tiempos de transporte, rendimiento por rutas y desglose preparación vs tránsito. | `get_delivery_summary`, `get_delivery_prediction_scenarios`, `get_delivery_performance_by_route`, `get_delivery_stage_breakdown` |
+| ⭐ **Customer Experience** | `CUSTOMER_EXPERIENCE` | Analiza calificaciones (1-5 estrellas), distribución de reseñas y búsqueda semántica con filtros. | `get_rating_summary`, `search_reviews_semantic` |
 | 🏪 **Seller Performance** | `SELLER_PERFORMANCE` | Genera scorecards operacionales por vendedor y evalúa riesgo acumulado por pedido único. | `get_seller_scorecard` |
 | 🚨 **Anomaly Detection** | `ANOMALY` | Aplica Z-Score robusto (mediana + MAD) en series temporales para detectar desviaciones atípicas. | `detect_metric_anomalies` |
-| 🧪 **Data Science Agent** | `DATA_SCIENCE` | Modela y predice riesgos operacionales (interfaz ML / baseline heurístico explicable). | `predict_delivery_delay` |
-| ⚖️ **Evidence Critic** | `CRITIC` | Audita la calidad y consistencia entre las evidencias SQL/ML y las conclusiones de los agentes. | Evaluación crítica de evidencia |
-| 💡 **Business Strategy** | `STRATEGY` | Traduce los hallazgos validados en plan de acción operativo con prioridades e impacto. | Generación de recomendaciones |
+| 🧪 **Data Science Agent** | `DATA_SCIENCE` | Modela y predice riesgos operacionales con XGBoost v1.1.0 y atribución de características con SHAP. | `predict_delivery_delay`, `explain_delivery_delay` |
+| ⚖️ **Evidence Critic** | `CRITIC` | Audita la calidad y consistencia entre las evidencias SQL/ML y las conclusiones mediante gates deterministas incorruptibles. | `performDeterministicAudit`, `enforceDeterministicDecision` |
+| 💡 **Business Strategy** | `STRATEGY` | Traduce los hallazgos validados en plan de acción operativo con prioridades e impacto estimado. | Generación de recomendaciones estratégicas |
 
 ---
 
@@ -270,7 +270,7 @@ Cada consulta activa dinámicamente una combinación diferente de agentes especi
 ### 🧪 5. Machine Learning Predictivo y NLP Vectorial
 > **Pregunta:** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales y cuáles son los factores SHAP de mayor impacto en el riesgo?`
 - **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `ANOMALY`, `CRITIC`, `STRATEGY`
-- **Lo que evalúa:** Inferencia real en tiempo real con **XGBoost Classifier** y calculador de valores explicativos causales **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
+- **Lo que evalúa:** Inferencia real en tiempo real con **XGBoost Classifier** y calculador de atribución de características **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
 
 > **Pregunta:** `¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?`
 - **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `LOGISTICS`, `CRITIC`, `STRATEGY`

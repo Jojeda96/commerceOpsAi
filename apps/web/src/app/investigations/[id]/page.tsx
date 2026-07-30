@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { API_URL, fetchApi } from '@/lib/api-client';
 
 export default function InvestigationDetailPage() {
   const params = useParams();
@@ -14,8 +15,7 @@ export default function InvestigationDetailPage() {
   const [showStatusWarningInfo, setShowStatusWarningInfo] = useState(false);
 
   const loadData = () => {
-    fetch(`http://localhost:3001/api/investigations/${id}`)
-      .then((res) => res.json())
+    fetchApi<any>(`/investigations/${id}`)
       .then((data) => setInvestigation(data))
       .catch((err) => console.error(err));
   };
@@ -24,7 +24,7 @@ export default function InvestigationDetailPage() {
     loadData();
 
     // Conectar a Server-Sent Events (SSE)
-    const eventSource = new EventSource(`http://localhost:3001/api/investigations/${id}/stream`);
+    const eventSource = new EventSource(`${API_URL}/investigations/${id}/stream`);
 
     eventSource.onmessage = (event) => {
       try {
@@ -133,10 +133,10 @@ export default function InvestigationDetailPage() {
                       ℹ️ ¿Por qué figura "Con Observaciones"?
                     </div>
                     <p style={{ lineHeight: '1.4', marginBottom: '6px' }}>
-                      La investigación se ha <strong>completado exitosamente (Calidad {investigation.finalQualityScore || 85}/100)</strong> y los hallazgos son totalmente válidos y confiables.
+                      La investigación se ha <strong>completado con observaciones (Calidad {investigation.finalQualityScore || 85}/100)</strong>.
                     </p>
                     <p style={{ lineHeight: '1.4', color: 'var(--color-text-muted)' }}>
-                      El <strong>Evidence Critic Agent</strong> emitió observaciones preventivas menores para asegurar rigurosidad metodológica y evitar atribuciones de causalidad no justificadas sin afectar la validez del reporte.
+                      El <strong>Evidence Critic Agent</strong> emitió observaciones preventivas para asegurar rigurosidad metodológica y evitar afirmaciones no justificadas.
                     </p>
                   </div>
                 )}
@@ -189,12 +189,11 @@ export default function InvestigationDetailPage() {
                     ℹ️ ¿De dónde sale la Calidad Global ({investigation.finalQualityScore}/100)?
                   </div>
                   <p style={{ lineHeight: '1.4', marginBottom: '8px' }}>
-                    Es la puntuación de auditabilidad otorgada por el <strong>Evidence Critic Agent</strong> tras auditar los hallazgos:
+                    Es la puntuación emitida por el <strong>Evidence Critic Agent</strong> tras auditar la validez de los hallazgos:
                   </p>
                   <ul style={{ paddingLeft: '16px', lineHeight: '1.4', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <li><strong>1. Cero Alucinaciones (50%)</strong> Ninguna cifra es inventada por el LLM; todo número coincide con ejecuciones SQL/ML.</li>
-                    <li><strong>2. Cobertura de Datos (30%)</strong> Evaluación sobre muestras suficientes del dataset Olist.</li>
-                    <li><strong>3. Consistencia Causal (20%)</strong> Ausencia de afirmaciones no justificadas por evidencia.</li>
+                    <li><strong>1. Verificación de Evidencia:</strong> Comprobación de que cada hallazgo cuente con herramientas y datos de respaldo.</li>
+                    <li><strong>2. Consistencia Metodológica:</strong> Evaluación de rigor en las conclusiones emitidas por los agentes especialistas.</li>
                   </ul>
                 </div>
               )}
@@ -253,8 +252,7 @@ export default function InvestigationDetailPage() {
                         ℹ️ ¿De dónde sale esta confianza del {Math.round((finding.confidence || 0.9) * 100)}%?
                       </span>
                       <p style={{ marginTop: '4px', lineHeight: '1.4' }}>
-                        Calculado deterministamente por el <strong>Evidence Critic</strong> evaluando 2 criterios:
-                        (1) Representatividad muestral sobre el dataset Olist, y (2) Correspondencia 1:1 entre la afirmación del LLM y las evidencias de ejecuciones SQL en PostgreSQL sin alucinaciones.
+                        Nivel de confianza reportado por el agente especialista y auditado por el <strong>Evidence Critic</strong> mediante reglas deterministas de representatividad muestral y consistencia entre hallazgos y evidencias.
                       </p>
                     </div>
                   </div>

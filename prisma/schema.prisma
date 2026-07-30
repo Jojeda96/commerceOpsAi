@@ -195,6 +195,7 @@ model AgentRun {
   id              String          @id @default(uuid())
   investigationId String          @map("investigation_id")
   agentName       String          @map("agent_name")
+  iteration       Int             @default(1)
   model           String?
   promptVersion   String?         @map("prompt_version")
   status          String          @default("RUNNING")
@@ -202,6 +203,7 @@ model AgentRun {
   outputTokens    Int?            @map("output_tokens")
   estimatedCost   Float?          @map("estimated_cost")
   durationMs      Int?            @map("duration_ms")
+  errorMessage    String?         @map("error_message")
   startedAt       DateTime        @default(now()) @map("started_at")
   completedAt     DateTime?       @map("completed_at")
   investigation   Investigation   @relation(fields: [investigationId], references: [id], onDelete: Cascade)
@@ -220,6 +222,9 @@ model ToolExecution {
   rawResultPath  String?    @map("raw_result_path")
   status         String     @default("RUNNING")
   durationMs     Int?       @map("duration_ms")
+  errorMessage   String?    @map("error_message")
+  startedAt      DateTime   @default(now()) @map("started_at")
+  completedAt    DateTime?  @map("completed_at")
   createdAt      DateTime   @default(now()) @map("created_at")
   agentRun       AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
   evidence       Evidence[]
@@ -228,19 +233,22 @@ model ToolExecution {
 }
 
 model Finding {
-  id              String            @id @default(uuid())
-  investigationId String            @map("investigation_id")
-  agentRunId      String?           @map("agent_run_id")
-  agentName       String            @default("UNKNOWN") @map("agent_name")
-  title           String
-  description     String
-  findingType     String            @map("finding_type")
-  confidence      Float
-  createdAt       DateTime          @default(now()) @map("created_at")
-  investigation   Investigation     @relation(fields: [investigationId], references: [id], onDelete: Cascade)
-  agentRun        AgentRun?         @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
-  evidence        FindingEvidence[]
-  criticFeedback  CriticFeedback[]
+  id                  String            @id @default(uuid())
+  investigationId     String            @map("investigation_id")
+  agentRunId          String?           @map("agent_run_id")
+  agentName           String            @default("UNKNOWN") @map("agent_name")
+  title               String
+  description         String
+  findingType         String            @map("finding_type")
+  confidence          Float
+  iteration           Int               @default(1)
+  supersedesFindingId String?           @map("supersedes_finding_id")
+  status              String            @default("ACTIVE")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  investigation       Investigation     @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  agentRun            AgentRun?         @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  evidence            FindingEvidence[]
+  criticFeedback      CriticFeedback[]
 
   @@map("findings")
 }
@@ -248,6 +256,8 @@ model Finding {
 model Evidence {
   id              String            @id @default(uuid())
   toolExecutionId String?           @map("tool_execution_id")
+  agentName       String?           @map("agent_name")
+  iteration       Int?
   evidenceType    String            @map("evidence_type")
   summary         String
   rowCount        Int?              @map("row_count")

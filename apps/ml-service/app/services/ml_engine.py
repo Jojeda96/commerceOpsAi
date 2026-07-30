@@ -68,14 +68,23 @@ class MLEngine:
             "product_volume_cm3": volume_cm3,
             "purchase_dow": purchase_dow,
             "purchase_hour": purchase_hour,
+            "item_count": item_count,
         }])
+
+        opt_threshold = float(self.metrics.get("optimal_threshold", 0.5))
 
         if self.model is not None:
             try:
                 prob = float(self.model.predict_proba(input_data)[0][1])
                 prob = round(min(0.99, max(0.01, prob)), 4)
-                risk_level = "HIGH" if prob > 0.5 else "MEDIUM" if prob > 0.3 else "LOW"
                 
+                if prob >= opt_threshold:
+                    risk_level = "HIGH"
+                elif prob >= 0.5 * opt_threshold:
+                    risk_level = "MEDIUM"
+                else:
+                    risk_level = "LOW"
+
                 # Obtener SHAP si explainer disponible
                 contributions = []
                 if self.explainer is not None:
@@ -86,8 +95,10 @@ class MLEngine:
 
                 return {
                     "probability": prob,
+                    "classification_threshold": round(opt_threshold, 4),
+                    "predicted_delayed": prob >= opt_threshold,
                     "risk_level": risk_level,
-                    "model_version": self.metrics.get("model_version", "delivery-xgb-v1"),
+                    "model_version": self.metrics.get("model_version", "delivery-xgb-v1.1.0"),
                     "algorithm": "XGBoost Classifier (Trained)",
                     "features": features_dict,
                     "explanation": {
@@ -107,7 +118,9 @@ class MLEngine:
 
         return {
             "probability": prob,
-            "risk_level": "HIGH" if prob > 0.5 else "MEDIUM" if prob > 0.3 else "LOW",
+            "classification_threshold": round(opt_threshold, 4),
+            "predicted_delayed": prob >= opt_threshold,
+            "risk_level": "HIGH" if prob >= opt_threshold else "MEDIUM" if prob >= 0.5 * opt_threshold else "LOW",
             "model_version": "delivery-delay-heuristic-v1",
             "algorithm": "Deterministic Rule-Based Baseline",
             "features": features_dict,
