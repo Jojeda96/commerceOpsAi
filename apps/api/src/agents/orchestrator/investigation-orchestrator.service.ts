@@ -83,24 +83,14 @@ export class InvestigationOrchestratorService {
         const agentNameDbMap = new Map<string, string>(); // agentName -> DB id
         const toolExecutionDbMap = new Map<string, string>(); // localExecutionId -> DB id
 
-        const tracesToPersist =
-          finalState.agentRunTraces && finalState.agentRunTraces.length > 0
-            ? finalState.agentRunTraces
-            : (finalState.completedAgents || []).map((agentName) => ({
-                localRunId: `run-${agentName.toLowerCase()}-${Date.now()}`,
-                agentName,
-                iteration: 1,
-                model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-                promptVersion: 'v1.0',
-                startedAt: new Date(Date.now() - 1500).toISOString(),
-                completedAt: new Date().toISOString(),
-                durationMs: 1500,
-                inputTokens: 250,
-                outputTokens: 120,
-                estimatedCostUsd: 0.0001,
-                status: 'COMPLETED' as const,
-                errorMessage: undefined as string | undefined,
-              }));
+        const tracesToPersist = finalState.agentRunTraces ?? [];
+
+        if (tracesToPersist.length === 0) {
+          this.logger.warn(
+            `Investigation ${investigationId} completed without runtime traces.`,
+          );
+        }
+
 
         for (const trace of tracesToPersist) {
           const agentRun = await tx.agentRun.create({

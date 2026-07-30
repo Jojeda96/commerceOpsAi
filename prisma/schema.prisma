@@ -324,15 +324,20 @@ model BusinessAlert {
 }
 
 model ModelPrediction {
-  id              String   @id @default(uuid())
-  modelVersion    String   @map("model_version")
-  entityType      String   @map("entity_type")
-  entityId        String   @map("entity_id")
-  prediction      String
-  probability     Float?
-  featuresJson    Json     @map("features_json")
-  explanationJson Json?    @map("explanation_json")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  investigationId  String   @map("investigation_id")
+  findingId        String?  @map("finding_id")
+  scenarioId       String   @map("scenario_id")
+  modelVersion     String   @map("model_version")
+  deploymentStatus String   @map("deployment_status")
+  probability      Float
+  threshold        Float
+  predictedDelayed Boolean  @map("predicted_delayed")
+  riskLevel        String   @map("risk_level")
+  featuresJson     Json     @map("features_json")
+  explanationJson  Json?    @map("explanation_json")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@map("model_predictions")
 }
+

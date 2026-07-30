@@ -4,6 +4,12 @@ import joblib
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional
+from app.services.model_governance import evaluate_delivery_model, ModelGateResult
+
+
+class ModelNotApprovedError(RuntimeError):
+    pass
+
 
 class MLEngine:
     _instance: Optional["MLEngine"] = None
@@ -17,13 +23,18 @@ class MLEngine:
             curr = parent
         self.root_dir = curr if os.path.exists(os.path.join(curr, "data")) else os.getcwd()
         self.models_dir = os.path.join(self.root_dir, "data", "models")
-        self.model_path = os.path.join(self.models_dir, "delivery_delay_xgb.joblib")
+        self.bundle_path = os.path.join(self.models_dir, "delivery_delay_xgb.joblib")
         self.metrics_path = os.path.join(self.models_dir, "delivery_delay_metrics.json")
         
+        self.bundle: Dict[str, Any] = {}
         self.model = None
+        self.preprocessor = None
+        self.calibrator = None
         self.metrics: Dict[str, Any] = {}
+        self.threshold: float = 0.5
         self.explainer = None
-        self.load_model()
+
+        self.load_bundle()
 
     @classmethod
     def get_instance(cls) -> "MLEngine":
@@ -31,117 +42,201 @@ class MLEngine:
             cls._instance = MLEngine()
         return cls._instance
 
-    def load_model(self):
-        if os.path.exists(self.model_path):
-            try:
-                self.model = joblib.load(self.model_path)
-                print(f"[MLEngine] ✅ Modelo XGBoost cargado desde: {self.model_path}")
-                import shap
-                self.explainer = shap.TreeExplainer(self.model)
-            except Exception as e:
-                print(f"[MLEngine] ⚠️ Error al cargar el modelo XGBoost ({e}). Usando baseline de fallback.")
+    def load_bundle(self):
+        import sys
+        if self.root_dir not in sys.path:
+            sys.path.insert(0, self.root_dir)
 
-        if os.path.exists(self.metrics_path):
+        if os.path.exists(self.bundle_path):
+            try:
+                loaded = joblib.load(self.bundle_path)
+
+                if isinstance(loaded, dict):
+                    required_keys = {"model", "preprocessor", "threshold", "metrics", "deployment_status", "model_version"}
+                    missing = required_keys - loaded.keys()
+                    if missing:
+                        print(f"[MLEngine] ⚠️ Bundle incompleto. Faltan claves: {sorted(missing)}")
+                    else:
+                        self.bundle = loaded
+                        self.model = loaded["model"]
+                        self.preprocessor = loaded["preprocessor"]
+                        self.calibrator = loaded.get("calibrator")
+                        self.threshold = float(loaded.get("threshold", 0.5))
+                        self.metrics = loaded.get("metrics", {})
+                        print(f"[MLEngine] ✅ Bundle unificado v2 cargado desde: {self.bundle_path}")
+
+                        try:
+                            import shap
+                            self.explainer = shap.TreeExplainer(self.model)
+                        except Exception as e:
+                            print(f"[MLEngine] SHAP Explainer no inicializado: {e}")
+                else:
+                    self.model = loaded
+            except Exception as e:
+                print(f"[MLEngine] ⚠️ Error al cargar el bundle de modelo ({e}).")
+
+        if not self.metrics and os.path.exists(self.metrics_path):
             try:
                 with open(self.metrics_path, "r", encoding="utf-8") as f:
                     self.metrics = json.load(f)
             except Exception:
                 pass
 
-    def predict_delay(self, features_dict: Dict[str, Any]) -> Dict[str, Any]:
-        is_interstate = 1 if features_dict.get("seller_state") != features_dict.get("customer_state") else 0
-        freight_value = float(features_dict.get("freight_value", 30.0))
-        price = float(features_dict.get("price", 100.0))
-        freight_ratio = freight_value / (price + freight_value + 1e-5)
-        item_count = int(features_dict.get("item_count", 1))
-        weight_g = float(features_dict.get("product_weight_g", 500.0))
-        volume_cm3 = float(features_dict.get("product_volume_cm3", 4500.0))
-        purchase_dow = int(features_dict.get("purchase_dow", 2))
-        purchase_hour = int(features_dict.get("purchase_hour", 14))
+    def _assert_model_is_approved(self, allow_experimental: bool = False) -> ModelGateResult:
+        gate = evaluate_delivery_model(self.metrics)
+        if not gate.approved and not allow_experimental:
+            raise ModelNotApprovedError(
+                "El modelo no está aprobado para inferencia operativa: " + ", ".join(gate.reasons)
+            )
+        return gate
 
-        input_data = pd.DataFrame([{
-            "is_interstate": is_interstate,
-            "freight_value": freight_value,
-            "price": price,
+    def predict_delay(self, request_dict: Dict[str, Any], allow_experimental: bool = False) -> Dict[str, Any]:
+        gate = self._assert_model_is_approved(allow_experimental=allow_experimental)
+
+        scenario_id = str(request_dict.get("scenario_id", "scenario-default"))
+        seller_st = str(request_dict.get("seller_state", "SP"))
+        cust_st = str(request_dict.get("customer_state", "RJ"))
+        route_pair = f"{seller_st}->{cust_st}"
+
+        freight_value = float(request_dict.get("total_freight", request_dict.get("freight_value", 30.0)))
+        price = float(request_dict.get("total_price", request_dict.get("price", 100.0)))
+        freight_ratio = freight_value / (price + freight_value + 1e-6)
+        item_count = int(request_dict.get("item_count", 1))
+        weight_g = float(request_dict.get("total_weight_g", request_dict.get("product_weight_g", 500.0)))
+        volume_cm3 = float(request_dict.get("total_volume_cm3", request_dict.get("product_volume_cm3", 4500.0)))
+        est_days = float(request_dict.get("estimated_delivery_days", 10.0))
+        ship_days = float(request_dict.get("shipping_window_days", est_days))
+
+        route_dist = request_dict.get("route_distance_km")
+        route_dist_val = float(route_dist) if route_dist is not None else np.nan
+
+        row_dict = {
+            "total_price": price,
+            "total_freight": freight_value,
             "freight_ratio": freight_ratio,
-            "product_weight_g": weight_g,
-            "product_volume_cm3": volume_cm3,
-            "purchase_dow": purchase_dow,
-            "purchase_hour": purchase_hour,
+            "estimated_delivery_days": est_days,
+            "shipping_window_days": ship_days,
+            "avg_item_price": price / max(item_count, 1),
+            "avg_item_weight_g": weight_g / max(item_count, 1),
+            "avg_item_volume_cm3": volume_cm3 / max(item_count, 1),
+            "route_distance_km": route_dist_val,
+            "purchase_dow": int(request_dict.get("purchase_dow", 2)),
+            "purchase_hour": int(request_dict.get("purchase_hour", 14)),
+            "purchase_month": int(request_dict.get("purchase_month", 6)),
+            "purchase_week": int(request_dict.get("purchase_week", 24)),
             "item_count": item_count,
-        }])
+            "seller_count": int(request_dict.get("seller_count", 1)),
+            "seller_prior_orders": int(request_dict.get("seller_prior_orders", 0)),
+            "seller_prior_late_rate_smoothed": float(request_dict.get("seller_prior_late_rate", 0.08) or 0.08),
+            "route_prior_orders": 0,
+            "route_prior_late_rate_smoothed": 0.08,
+            "category_prior_orders": 0,
+            "category_prior_late_rate_smoothed": 0.08,
+            "primary_seller_state": seller_st,
+            "customer_state": cust_st,
+            "route_pair": route_pair,
+            "primary_category": request_dict.get("primary_category", "beleza_saude"),
+            "is_interstate": 1 if seller_st != cust_st else 0,
+        }
 
-        opt_threshold = float(self.metrics.get("optimal_threshold", 0.5))
+        input_df = pd.DataFrame([row_dict])
+        warning_msg = None if gate.approved else f"⚠ Modelo experimental no aprobado ({', '.join(gate.reasons)}) — no utilizar para decisiones operativas."
 
-        if self.model is not None:
+        if self.model is not None and self.preprocessor is not None:
             try:
-                prob = float(self.model.predict_proba(input_data)[0][1])
-                prob = round(min(0.99, max(0.01, prob)), 4)
-                
-                if prob >= opt_threshold:
+                X_trans = self.preprocessor.transform(input_df)
+                raw_prob = float(self.model.predict_proba(X_trans)[0][1])
+
+                if self.calibrator is not None:
+                    prob = float(self.calibrator.predict(np.array([raw_prob]))[0])
+                else:
+                    prob = raw_prob
+
+                # Sin clipping artificial (respetar precisión de probabilidad)
+                prob = round(prob, 6)
+
+                opt_thresh = self.threshold
+                is_delayed = prob >= opt_thresh
+
+                if prob >= opt_thresh:
                     risk_level = "HIGH"
-                elif prob >= 0.5 * opt_threshold:
+                elif prob >= 0.5 * opt_thresh:
                     risk_level = "MEDIUM"
                 else:
                     risk_level = "LOW"
 
-                # Obtener SHAP si explainer disponible
                 contributions = []
                 if self.explainer is not None:
-                    shap_vals = self.explainer.shap_values(input_data)[0]
-                    feature_names = input_data.columns.tolist()
+                    shap_vals = self.explainer.shap_values(X_trans)[0]
+                    feature_names = self.bundle.get("feature_names", [f"f_{i}" for i in range(len(shap_vals))])
                     for feat, val in zip(feature_names, shap_vals):
-                        contributions.append({"feature": feat, "shap_value": round(float(val), 4)})
+                        contributions.append({
+                            "feature": feat,
+                            "raw_margin_contribution": round(float(val), 6),
+                            "direction": "INCREASES_MODEL_SCORE" if val > 0 else "DECREASES_MODEL_SCORE",
+                        })
+
+                    # Ordenar por magnitud absoluta de impacto
+                    contributions = sorted(contributions, key=lambda x: abs(x["raw_margin_contribution"]), reverse=True)[:10]
 
                 return {
+                    "scenario_id": scenario_id,
                     "probability": prob,
-                    "classification_threshold": round(opt_threshold, 4),
-                    "predicted_delayed": prob >= opt_threshold,
+                    "threshold": round(opt_thresh, 4),
+                    "predicted_delayed": is_delayed,
                     "risk_level": risk_level,
-                    "model_version": self.metrics.get("model_version", "delivery-xgb-v1.1.0"),
-                    "algorithm": "XGBoost Classifier (Trained)",
-                    "features": features_dict,
+                    "model_version": self.bundle.get("model_version", "delivery-risk-v2.0.0"),
+                    "deployment_status": gate.status,
+                    "model_reliability": "EXPERIMENTAL_NOT_APPROVED" if not gate.approved else "APPROVED_FOR_DEMO",
+                    "warning": warning_msg,
+                    "features": request_dict,
                     "explanation": {
+                        "explanation_scale": "XGBOOST_RAW_MARGIN",
+                        "causal_interpretation": False,
                         "base_value": round(float(getattr(self.explainer, "expected_value", 0.15)), 4) if self.explainer else 0.15,
                         "contributions": contributions,
                     }
                 }
             except Exception as e:
-                print(f"[MLEngine] Error en inferencia XGBoost: {e}")
+                print(f"[MLEngine] Error en inferencia con bundle v2: {e}")
 
-        # Fallback si el modelo no está entrenado aún en disco
+        # Fallback si bundle no está disponible
         prob = 0.15
-        if is_interstate: prob += 0.25
+        if row_dict["is_interstate"]: prob += 0.25
         if freight_value > 50: prob += 0.15
-        if item_count > 2: prob += 0.10
-        prob = round(min(0.95, prob), 4)
+        prob = round(prob, 4)
 
         return {
+            "scenario_id": scenario_id,
             "probability": prob,
-            "classification_threshold": round(opt_threshold, 4),
-            "predicted_delayed": prob >= opt_threshold,
-            "risk_level": "HIGH" if prob >= opt_threshold else "MEDIUM" if prob >= 0.5 * opt_threshold else "LOW",
+            "threshold": round(self.threshold, 4),
+            "predicted_delayed": prob >= self.threshold,
+            "risk_level": "HIGH" if prob >= self.threshold else "MEDIUM",
             "model_version": "delivery-delay-heuristic-v1",
-            "algorithm": "Deterministic Rule-Based Baseline",
-            "features": features_dict,
+            "deployment_status": "EXPERIMENTAL_NOT_APPROVED",
+            "model_reliability": "LOW",
+            "warning": warning_msg,
+            "features": request_dict,
             "explanation": {
+                "explanation_scale": "HEURISTIC_RULE_MARGIN",
+                "causal_interpretation": False,
                 "base_value": 0.15,
-                "contributions": [
-                    {"feature": "is_interstate", "shap_value": 0.25 if is_interstate else 0.0},
-                    {"feature": "freight_value_above_50", "shap_value": 0.15 if freight_value > 50 else 0.0},
-                ]
+                "contributions": []
             }
         }
 
     def get_metrics(self) -> Dict[str, Any]:
         if self.metrics:
-            return self.metrics
+            gate = evaluate_delivery_model(self.metrics)
+            out = dict(self.metrics)
+            out["deployment_status"] = gate.status
+            out["deployment_reasons"] = gate.reasons
+            return out
+
         return {
-            "model_version": "delivery-delay-heuristic-v1",
-            "algorithm": "Deterministic Rule-Based Baseline",
-            "accuracy": 0.85,
-            "f1_score": 0.78,
-            "roc_auc": 0.88,
-            "features": ["is_interstate", "freight_value", "price", "product_weight_g"],
-            "status": "not_trained_run_script_to_train"
+            "status": "MODEL_NOT_TRAINED",
+            "deployment_status": "UNAVAILABLE",
+            "model_version": None,
+            "metrics": None,
+            "message": "No existe un artefacto de métricas válido. Ejecute scripts/train_delivery_xgb.py.",
         }

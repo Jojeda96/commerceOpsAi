@@ -1,40 +1,129 @@
 {
-  "model_version": "delivery-xgb-v1.1.0",
-  "algorithm": "XGBoost Classifier (Temporal Split: Train 70% / Val 15% / Test 15%)",
-  "optimal_threshold": 0.5294,
-  "threshold_selection_dataset": "validation_set",
-  "accuracy": 0.7755,
-  "precision": 0.0,
-  "recall": 0.0,
-  "f1_score": 0.0,
-  "roc_auc": 0.2857,
-  "pr_auc": 0.0359,
-  "brier_score": 0.1864,
+  "sample_count": 14471,
+  "positive_count": 957,
+  "positive_ratio": 0.06613226452905811,
+  "threshold": 0.09543696184063045,
+  "roc_auc": 0.4652,
+  "pr_auc": 0.0704,
+  "pr_auc_lift_over_prevalence": 1.0653,
+  "precision": 0.0643,
+  "recall": 0.2351,
+  "f1": 0.101,
+  "balanced_accuracy": 0.4965,
+  "brier_score": 0.0647,
+  "log_loss": 0.2708,
+  "confusion_matrix": {
+    "tn": 10241,
+    "fp": 3273,
+    "fn": 732,
+    "tp": 225
+  },
+  "roc_auc_ci_95": [
+    0.4462,
+    0.4864
+  ],
+  "pr_auc_ci_95": [
+    0.0633,
+    0.0801
+  ],
+  "ranking_top_5_percent": {
+    "fraction": 0.05,
+    "selected_count": 723,
+    "precision_at_k": 0.1065,
+    "recall_at_k": 0.0805,
+    "lift_at_k": 1.6104
+  },
+  "ranking_top_10_percent": {
+    "fraction": 0.1,
+    "selected_count": 1447,
+    "precision_at_k": 0.0843,
+    "recall_at_k": 0.1275,
+    "lift_at_k": 1.2749
+  },
+  "test_positive_count": 957,
+  "test_samples": 14471,
+  "test_positive_ratio": 0.0661,
   "baselines": {
     "dummy_classifier": {
-      "accuracy": 0.9524,
-      "f1_score": 0.0
+      "sample_count": 14471,
+      "positive_count": 957,
+      "positive_ratio": 0.06613226452905811,
+      "threshold": 0.5,
+      "roc_auc": 0.5,
+      "pr_auc": 0.0661,
+      "pr_auc_lift_over_prevalence": 1.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "balanced_accuracy": 0.5,
+      "brier_score": 0.0623,
+      "log_loss": 0.2474,
+      "confusion_matrix": {
+        "tn": 13514,
+        "fp": 0,
+        "fn": 957,
+        "tp": 0
+      }
     },
     "logistic_regression": {
-      "accuracy": 0.9524,
-      "f1_score": 0.0,
-      "roc_auc": 0.4173
+      "sample_count": 14471,
+      "positive_count": 957,
+      "positive_ratio": 0.06613226452905811,
+      "threshold": 0.5,
+      "roc_auc": 0.5732,
+      "pr_auc": 0.0965,
+      "pr_auc_lift_over_prevalence": 1.4599,
+      "precision": 0.0779,
+      "recall": 0.8433,
+      "f1": 0.1426,
+      "balanced_accuracy": 0.5683,
+      "brier_score": 0.4159,
+      "log_loss": 1.1574,
+      "confusion_matrix": {
+        "tn": 3963,
+        "fp": 9551,
+        "fn": 150,
+        "tp": 807
+      }
     }
   },
+  "deployment_status": "EXPERIMENTAL_NOT_APPROVED",
+  "deployment_reasons": [
+    "ROC_AUC_BELOW_0_60",
+    "PR_AUC_INSUFFICIENT_LIFT_OVER_PREVALENCE",
+    "DOES_NOT_BEAT_LOGISTIC_ROC_AUC",
+    "DOES_NOT_BEAT_LOGISTIC_PR_AUC",
+    "RECALL_BELOW_0_50",
+    "PRECISION_BELOW_0_15"
+  ],
+  "model_version": "delivery-risk-v2.0.0",
+  "trained_at": "2026-07-30T16:55:22.257917+00:00",
   "features": [
-    "is_interstate",
-    "freight_value",
-    "price",
+    "total_price",
+    "total_freight",
     "freight_ratio",
-    "product_weight_g",
-    "product_volume_cm3",
+    "estimated_delivery_days",
+    "shipping_window_days",
+    "avg_item_price",
+    "avg_item_weight_g",
+    "avg_item_volume_cm3",
+    "route_distance_km",
     "purchase_dow",
     "purchase_hour",
-    "item_count"
-  ],
-  "trained_at": "2026-07-29T23:29:18.024996Z",
-  "train_samples": 682,
-  "val_samples": 146,
-  "test_samples": 147,
-  "positive_class_ratio": 0.0769
+    "purchase_month",
+    "purchase_week",
+    "item_count",
+    "seller_count",
+    "seller_prior_orders",
+    "seller_prior_late_rate_smoothed",
+    "route_prior_orders",
+    "route_prior_late_rate_smoothed",
+    "category_prior_orders",
+    "category_prior_late_rate_smoothed",
+    "primary_seller_state",
+    "customer_state",
+    "route_pair",
+    "primary_category",
+    "is_interstate"
+  ]
 }

@@ -1,45 +1,59 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from app.services.ml_engine import MLEngine
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional, Dict, Any
+from app.services.ml_engine import MLEngine, ModelNotApprovedError
+from app.models.delivery_contracts import PredictionRequest, PredictionResponse
 
 router = APIRouter(prefix="/models/delivery-delay", tags=["Predictions"])
 
-class PredictionRequest(BaseModel):
-    seller_state: str = "SP"
-    customer_state: str = "RJ"
-    freight_value: float = 30.0
-    item_count: int = 1
-    product_weight_g: float = 500.0
-    product_volume_cm3: float = 4500.0
-    price: float = 100.0
-    purchase_dow: int = 2
-    purchase_hour: int = 14
-
-class PredictionResponse(BaseModel):
-    probability: float
-    risk_level: str
-    model_version: str
-    features: Dict[str, Any]
-    explanation: Optional[Dict[str, Any]] = None
-
 @router.post("/predict", response_model=PredictionResponse)
-async def predict_delay(request: PredictionRequest):
+async def predict_delay(
+    request: PredictionRequest,
+    allow_experimental: bool = Query(default=False),
+):
     engine = MLEngine.get_instance()
-    res = engine.predict_delay(request.model_dump())
-    return PredictionResponse(
-        probability=res["probability"],
-        risk_level=res["risk_level"],
-        model_version=res["model_version"],
-        features=res["features"],
-        explanation=res.get("explanation"),
-    )
+    try:
+        res = engine.predict_delay(request.model_dump(), allow_experimental=allow_experimental)
+        return PredictionResponse(
+            scenario_id=res["scenario_id"],
+            probability=res["probability"],
+            predicted_delayed=res["predicted_delayed"],
+            threshold=res["threshold"],
+            risk_level=res["risk_level"],
+            model_version=res["model_version"],
+            deployment_status=res.get("deployment_status", "UNAVAILABLE"),
+            model_reliability=res.get("model_reliability", "LOW"),
+            warning=res.get("warning"),
+            features=res["features"],
+            explanation=res.get("explanation"),
+        )
+    except ModelNotApprovedError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "MODEL_NOT_APPROVED",
+                "message": str(exc),
+                "metrics_url": "/models/delivery-delay/metrics",
+            },
+        ) from exc
 
 @router.post("/explain")
-async def explain_prediction(request: PredictionRequest):
+async def explain_prediction(
+    request: PredictionRequest,
+    allow_experimental: bool = Query(default=False),
+):
     engine = MLEngine.get_instance()
-    res = engine.predict_delay(request.model_dump())
-    return res.get("explanation", {})
+    try:
+        res = engine.predict_delay(request.model_dump(), allow_experimental=allow_experimental)
+        return res.get("explanation", {})
+    except ModelNotApprovedError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "MODEL_NOT_APPROVED",
+                "message": str(exc),
+                "metrics_url": "/models/delivery-delay/metrics",
+            },
+        ) from exc
 
 @router.get("/metrics")
 async def get_metrics():

@@ -39,12 +39,16 @@ export function createSupervisorNode(
   streaming: StreamingService,
 ) {
   return async (state: CommerceOpsStateType) => {
-    const { userQuestion, investigationId, filters } = state;
+    const { userQuestion, investigationId, filters, criticFeedback, iteration } = state;
 
     streaming.emit(investigationId, 'agent.started', {
       agent: 'SUPERVISOR',
       question: userQuestion,
+      iteration: iteration || 1,
     });
+
+    const isReiteration = (iteration || 0) > 0 && criticFeedback && criticFeedback.length > 0;
+    const latestFeedback = isReiteration ? criticFeedback[criticFeedback.length - 1] : null;
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -52,22 +56,27 @@ export function createSupervisorNode(
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    const prompt = `Eres el Operations Supervisor de CommerceOps AI. Tu tarea es analizar la pregunta del usuario, seleccionar los agentes especialistas necesarios para resolver el problema operacional y extraer cualquier filtro de fecha (ej. "febrero de 2018" -> dateFrom: "2018-02-01", dateTo: "2018-02-28"), categorías o estados mencionados explícita o implícitamente en la consulta.
+    const prompt = `Eres el Operations Supervisor de CommerceOps AI (Iteración ${iteration || 1}).
+Tu tarea es analizar la pregunta del usuario, seleccionar los agentes especialistas necesarios y definir el plan operacional.
 
 Pregunta del usuario: "${userQuestion}"
+
+${isReiteration ? `⚠️ ATENCIÓN - FEEDBACK DE ITERACIÓN PREVIA DEL EVIDENCE CRITIC:
+${latestFeedback?.message}
+Acción requerida: ${latestFeedback?.requiredAction || 'Revisar y profundizar el análisis'}` : ''}
 
 Filtros previos existentes:
 ${JSON.stringify(filters || {}, null, 2)}
 
 Agentes especialistas disponibles:
-1. SALES: Ventas, facturación, volumen de pedidos, ticket promedio, distribución por categoría y métodos de pago.
-2. LOGISTICS: Entregas a tiempo, tasa de atrasos, tiempos de transporte, fletes y SLAs por región.
-3. CUSTOMER_EXPERIENCE: Calificaciones (1-5 estrellas), análisis de reseñas de clientes, sentimiento y temas frecuentes de reclamos.
-4. SELLER_PERFORMANCE: Ficha de vendedor, scorecards, riesgo operacional, comparaciones entre pares y cancelaciones.
-5. ANOMALY: Detección de comportamientos inusuales, outliers de flete, picos repentinos en métricas o reclamos.
-6. DATA_SCIENCE: Modelos predictivos de probabilidad de atraso, probabilidad de baja calificación y explicaciones heurísticas.
+1. SALES: Ventas, facturación, volumen de pedidos, ticket promedio, métodos de pago y AOV.
+2. LOGISTICS: Entregas a tiempo, tasa de atrasos (lateRate DESC), tiempos de transporte, fletes y SLAs.
+3. CUSTOMER_EXPERIENCE: Calificaciones (1-5 estrellas), análisis NLP de reseñas de clientes, filtrado por fecha/categoría.
+4. SELLER_PERFORMANCE: Ficha de vendedor, ranking por GMV, scorecards y comparaciones entre pares.
+5. ANOMALY: Detección de comportamientos inusuales, outliers de flete y picos repentinos.
+6. DATA_SCIENCE: Modelos predictivos de riesgo de atraso en escenarios representativos reales.
 
-Responde estrictamente en formato JSON con la siguiente estructura:
+Responde estrictamente en formato JSON:
 {
   "selectedAgents": ["LOGISTICS", "CUSTOMER_EXPERIENCE"],
   "resolvedFilters": {
@@ -114,7 +123,7 @@ Responde estrictamente en formato JSON con la siguiente estructura:
       }
     } catch (err) {
       console.warn(
-        '[SupervisorNode] Error parsing LLM response, using default fallback plan:',
+        '[SupervisorNode] Error parsing LLM response, using default plan:',
         err,
       );
     }

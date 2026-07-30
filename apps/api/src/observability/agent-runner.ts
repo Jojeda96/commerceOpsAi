@@ -25,12 +25,16 @@ export class ToolExecutionError extends Error {
   }
 }
 
+export interface RunAgentContext {
+  localRunId: string;
+}
+
 export interface RunAgentOptions<T> {
   agentName: AgentName;
   iteration: number;
   modelName?: string;
   promptVersion?: string;
-  execute: () => Promise<{
+  execute: (context: RunAgentContext) => Promise<{
     result: T;
     inputTokens?: number;
     outputTokens?: number;
@@ -50,7 +54,7 @@ export async function runAgentWithTrace<T>(
     options.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   try {
-    const { result, inputTokens, outputTokens } = await options.execute();
+    const { result, inputTokens, outputTokens } = await options.execute({ localRunId });
     const endTime = Date.now();
     const durationMs = endTime - startTime;
     const estimatedCostUsd = calculateEstimatedCostUsd(

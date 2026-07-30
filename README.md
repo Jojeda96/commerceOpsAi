@@ -11,16 +11,16 @@ CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logí
 
 Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagente para inteligencia operacional de e-commerce.
 
-### ✅ Implementado
+### ✅ Implementado y Auditado (V2 Critical Hardening)
 - **Orquestación Multiagente Real:** Grafo de ejecuciones paralelas coordinado con **LangGraph JS** y **NestJS** (`StateGraph` con `Send`).
-- **Agentes Especialistas Operativos:** Supervisor, Sales, Logistics, Customer Experience, Seller Performance, Anomaly, Data Science, Evidence Critic y Business Strategy.
-- **Machine Learning Real (XGBoost + SHAP):** Modelo predictivo de retrasos en entregas entrenado sobre el dataset de Olist con `XGBClassifier`. Inferencia en tiempo real y atribución de características con **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
-- **Búsqueda Semántica NLP (SentenceTransformers):** Búsqueda vectorial de reseñas por similitud de coseno utilizando el modelo **`all-MiniLM-L6-v2`** (`/nlp/reviews/search`).
-- **Herramientas Deterministas:** Consultas agilizadas en PostgreSQL para análisis de ventas, logística, experiencia de cliente y scorecards de vendedores.
-- **Persistencia & Trazabilidad:** Persistencia relacional en PostgreSQL con Prisma ORM (investigaciones, tareas, agent runs, hallazgos, evidencias, recomendaciones, critic feedback).
-- **Streaming SSE en Tiempo Real:** Emisión aislada Server-Sent Events por ID de investigación.
-- **Seguridad & Autenticación:** Protección de endpoints mutadores mediante `JwtAuthGuard` y login `/auth/login`.
-- **Frontend Dashboard:** Interfaz en Next.js (App Router) para monitoreo e inicio de investigaciones.
+- **Gobernanza y Quality Gates de ML:** Evaluación honesta y cronológica del modelo predictivo de atrasos sobre el dataset completo de Olist (~96k+ pedidos) con splits temporales estrictos (Train 70% / Validation 15% / Test 15%). Bloqueo automático por defecto (`HTTP 503 MODEL_NOT_APPROVED`) si el modelo no supera los Quality Gates frente a baselines (Logistic Regression vs XGBoost).
+- **Inferencia en Tiempo Real y Atribución SHAP:** Inferencia servida vía bundle unificado `.joblib` con esquemas Pydantic estrictos, calibración Platt y atribución explicable en escala de margen `XGBOOST_RAW_MARGIN`.
+- **Escenarios de Inferencia Reales en Data Science:** Invocación de escenarios de entrega reales sin datos hardcodeados y persistencia en la tabla `ModelPrediction`.
+- **Trazabilidad Real End-to-End:** Registro inalterable de ejecuciones de `AgentRun`, `ToolExecution` y `ModelPrediction` eliminando fallbacks sintéticos de tokens o duraciones.
+- **Evidence Critic Incorruptible:** Validación determinista Zod y bloqueos forzados si existen errores numéricos o inconsistencias de evidencia.
+- **Búsqueda Semántica NLP (SentenceTransformers / TF-IDF):** Búsqueda vectorial sobre reseñas reales de Olist con soporte de filtrado por puntuación (1-5 estrellas), rango de fechas y categorías.
+- **Frontend Honesto y Dashboard Visual:** Interfaz web Next.js transparente que muestra el estado real del Quality Gate (`APPROVED_FOR_DEMO` / `EXPERIMENTAL_NOT_APPROVED`) y observabilidad de la trazabilidad.
+
 
 ### 🧠 Selección de Modelos & Decisiones de Arquitectura ML / NLP
 
@@ -267,18 +267,19 @@ Cada consulta activa dinámicamente una combinación diferente de agentes especi
 
 ---
 
-### 🧪 5. Machine Learning Predictivo y NLP Vectorial
-> **Pregunta:** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales y cuáles son los factores SHAP de mayor impacto en el riesgo?`
+### 🧪 5. Machine Learning Predictivo y Gobernanza ML
+> **Pregunta:** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales, el estado de gobernanza del modelo y los factores SHAP de mayor impacto?`
 - **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `ANOMALY`, `CRITIC`, `STRATEGY`
-- **Lo que evalúa:** Inferencia real en tiempo real con **XGBoost Classifier** y calculador de atribución de características **SHAP TreeExplainer** (`/models/delivery-delay/explain`).
+- **Lo que evalúa:** Inferencia sobre escenarios representativos reales en FastAPI (`/models/delivery-delay/predict`), atribución SHAP en escala `XGBOOST_RAW_MARGIN` y reflejo transparente del estado del Quality Gate (`EXPERIMENTAL_NOT_APPROVED`).
 
 > **Pregunta:** `¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?`
 - **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `LOGISTICS`, `CRITIC`, `STRATEGY`
-- **Lo que evalúa:** Búsqueda semántica por similitud de coseno utilizando el modelo **`SentenceTransformers (all-MiniLM-L6-v2)`** sobre comentarios reales de clientes de Olist en portugués.
+- **Lo que evalúa:** Búsqueda semántica sobre comentarios reales de Olist en portugués enviando filtros por puntuación de estrellas (1-5), fechas y categorías al microservicio NLP.
 
 > **Pregunta:** `Detecta desviaciones o picos anómalos en la tasa de retraso de entregas mediante Z-Score robusto.`
 - **Agentes Invocados:** `ANOMALY`, `LOGISTICS`, `CRITIC`
-- **Lo que evalúa:** Aplicación de Z-Score robusto (Mediana + MAD) sobre la serie temporal mensual.
+- **Lo que evalúa:** Aplicación de Z-Score robusto (Mediana + MAD) sobre la serie temporal filtrada.
+
 
 ---
 

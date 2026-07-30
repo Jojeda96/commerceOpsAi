@@ -151,7 +151,7 @@ export function createLogisticsTools(prisma: PrismaService) {
   );
 
   const getDeliveryPerformanceByRoute = tool(
-    async ({ sellerState, customerState, topN = 10 }) => {
+    async ({ sellerState, customerState, sortBy = 'lateRate', minOrders = 50, topN = 10 }) => {
       const where: any = { orderStatus: 'delivered' };
       if (sellerState) {
         where.items = { some: { seller: { sellerState } } };
@@ -161,8 +161,8 @@ export function createLogisticsTools(prisma: PrismaService) {
       }
 
       const orders = await prisma.olistOrder.findMany({
-        take: 300,
         where,
+        take: 2000,
         select: {
           orderPurchaseTimestamp: true,
           orderDeliveredCustomerDate: true,
@@ -205,12 +205,14 @@ export function createLogisticsTools(prisma: PrismaService) {
       const routes = Object.entries(routeMap)
         .map(([route, data]) => ({
           route,
+          sampleSize: data.total,
           ordersCount: data.total,
           lateOrders: data.late,
           lateRate: Math.round((data.late / data.total) * 1000) / 10,
           avgDeliveryDays: Math.round((data.totalDays / data.total) * 10) / 10,
         }))
-        .sort((a, b) => b.ordersCount - a.ordersCount)
+        .filter((r) => r.sampleSize >= minOrders)
+        .sort((a, b) => (sortBy === 'lateRate' ? b.lateRate - a.lateRate : b.ordersCount - a.ordersCount))
         .slice(0, topN);
 
       return JSON.stringify(routes);
@@ -218,14 +220,17 @@ export function createLogisticsTools(prisma: PrismaService) {
     {
       name: 'get_delivery_performance_by_route',
       description:
-        'Calcula el rendimiento de entregas y tasa de retraso por ruta interestatal/intraestatal (sellerState -> customerState).',
+        'Calcula el rendimiento de entregas y tasa de retraso por ruta (sellerState -> customerState) filtrando por tamaño de muestra mínimo y ordenamiento por atraso o volumen.',
       schema: z.object({
         sellerState: z.string().optional(),
         customerState: z.string().optional(),
+        sortBy: z.enum(['lateRate', 'volume']).default('lateRate'),
+        minOrders: z.number().default(10),
         topN: z.number().default(10),
       }),
     },
   );
+
 
   const getDeliveryStageBreakdown = tool(
     async ({ dateFrom, dateTo }) => {

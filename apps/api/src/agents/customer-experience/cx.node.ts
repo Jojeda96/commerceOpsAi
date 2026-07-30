@@ -103,14 +103,32 @@ export function createCustomerExperienceNode(
       agent: 'CUSTOMER_EXPERIENCE',
       tool: 'search_reviews_semantic',
     });
+
+    const reviewScores = /1\s*estrella|una\s*estrella|baja\s*calificaci[oó]n|atraso|retraso/i.test(userQuestion)
+      ? [1, 2]
+      : undefined;
+
     const searchResult = await searchTool.invoke({
       query: userQuestion,
-      topK: 3,
+      topK: 5,
+      reviewScores,
+      categories: detectedCategory ? [detectedCategory] : state.filters.categories,
+      dateFrom: state.filters.dateFrom,
+      dateTo: state.filters.dateTo,
     });
+
     streaming.emit(investigationId, 'tool.completed', {
       agent: 'CUSTOMER_EXPERIENCE',
       tool: 'search_reviews_semantic',
     });
+
+    let nlpMethodUsed = 'búsqueda semántica NLP';
+    try {
+      const parsedSearch = JSON.parse(searchResult);
+      if (parsedSearch.method) nlpMethodUsed = parsedSearch.method;
+    } catch (e) {
+      console.warn('[CXNode] Error parseando searchResult:', e);
+    }
 
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
@@ -129,8 +147,9 @@ ${categoryContext}
 Métricas deterministas de satisfacción:
 ${ratingResult}
 
-Búsqueda semántica NLP de reseñas (SentenceTransformers 'all-MiniLM-L6-v2'):
+Búsqueda semántica de reseñas (Método: '${nlpMethodUsed}'):
 ${searchResult}
+
 
 Genera un hallazgo técnico objetivo en formato JSON.
 REGLAS OBLIGATORIAS:

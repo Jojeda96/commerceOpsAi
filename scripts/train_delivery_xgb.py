@@ -1,294 +1,300 @@
 import os
 import sys
+
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ml_service_dir = os.path.join(root_dir, "apps", "ml-service")
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+if ml_service_dir not in sys.path:
+    sys.path.insert(0, ml_service_dir)
+
 import json
 import joblib
-import pandas as pd
 import numpy as np
-
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-from datetime import datetime
-from sklearn.dummy import DummyClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
-    precision_recall_curve,
-    average_precision_score,
-    brier_score_loss,
-)
+import pandas as pd
+from datetime import datetime, timezone
 from xgboost import XGBClassifier
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELS_DIR = os.path.join(ROOT_DIR, "data", "models")
-FIXTURE_PATH = os.path.join(ROOT_DIR, "data", "fixtures", "sample-1000-orders.json")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
-def load_data():
-    """
-    Intenta cargar datos desde PostgreSQL primero; si no está disponible, cae en el fallback del fixture local.
-    """
-    db_url = os.getenv("DATABASE_URL")
-    if db_url and "postgresql" in db_url:
-        try:
-            print("🔗 Intentando conectar a PostgreSQL para cargar dataset...")
-            from sqlalchemy import create_engine
-            engine = create_engine(db_url)
-            query = """
-            SELECT 
-                o.id as order_id,
-                o.order_status,
-                o.order_purchase_timestamp,
-                o.order_delivered_customer_date,
-                o.order_estimated_delivery_date,
-                c.customer_state,
-                s.seller_state,
-                i.price,
-                i.freight_value,
-                p.product_weight_g,
-                p.product_length_cm,
-                p.product_height_cm,
-                p.product_width_cm
-            FROM olist_orders o
-            JOIN olist_customers c ON o.customer_id = c.id
-            JOIN olist_order_items i ON o.id = i.order_id
-            JOIN olist_sellers s ON i.seller_id = s.id
-            JOIN olist_products p ON i.product_id = p.id
-            WHERE o.order_status = 'delivered'
-            """
-            df = pd.read_sql(query, engine)
-            if not df.empty:
-                print(f"✅ Cargados {len(df)} registros directamente desde PostgreSQL.")
-                return df
-        except Exception as e:
-            print(f"⚠️ Falló conexión a PostgreSQL ({e}). Ejecutando fallback a fixture en disco.")
+from scripts.ml.features import add_direct_features
+from scripts.ml.temporal_history import add_all_temporal_features
+from scripts.ml.split import temporal_train_validation_test_split
+from scripts.ml.baselines import (
+    build_preprocessor,
+    build_logistic_baseline,
+    build_dummy_baseline,
+)
+from scripts.ml.evaluate import (
+    evaluate_binary_classifier,
+    ranking_metrics,
+    bootstrap_metric_ci,
+)
+from scripts.ml.calibrate_and_threshold import PlattCalibrator, select_threshold_for_min_precision
+from app.services.model_governance import evaluate_delivery_model
 
-    # Fallback: Cargar desde sample-1000-orders.json
-    print(f"📦 Cargando dataset de fallback desde: {FIXTURE_PATH}")
-    if not os.path.exists(FIXTURE_PATH):
-        raise FileNotFoundError(f"No se encontró el archivo de datos: {FIXTURE_PATH}")
 
-    with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
+NUMERIC_FEATURES = [
+    "total_price",
+    "total_freight",
+    "freight_ratio",
+    "estimated_delivery_days",
+    "shipping_window_days",
+    "avg_item_price",
+    "avg_item_weight_g",
+    "avg_item_volume_cm3",
+    "route_distance_km",
+    "purchase_dow",
+    "purchase_hour",
+    "purchase_month",
+    "purchase_week",
+    "item_count",
+    "seller_count",
+    "seller_prior_orders",
+    "seller_prior_late_rate_smoothed",
+    "route_prior_orders",
+    "route_prior_late_rate_smoothed",
+    "category_prior_orders",
+    "category_prior_late_rate_smoothed",
+]
 
-    orders = {o["order_id"]: o for o in data.get("orders", [])}
-    customers = {c["customer_id"]: c for c in data.get("customers", [])}
-    sellers = {s["seller_id"]: s for s in data.get("sellers", [])}
-    products = {p["product_id"]: p for p in data.get("products", [])}
-    items = data.get("orderItems", [])
+CATEGORICAL_FEATURES = [
+    "primary_seller_state",
+    "customer_state",
+    "route_pair",
+    "primary_category",
+    "is_interstate",
+]
 
-    rows = []
-    for item in items:
-        order_id = item.get("order_id")
-        order = orders.get(order_id)
-        if not order or order.get("order_status") != "delivered":
-            continue
 
-        customer_id = order.get("customer_id")
-        customer = customers.get(customer_id, {})
-        seller_id = item.get("seller_id")
-        seller = sellers.get(seller_id, {})
-        product_id = item.get("product_id")
-        product = products.get(product_id, {})
+def train_pipeline():
+    dataset_path = os.path.join(root_dir, "data", "processed", "delivery_model_dataset.parquet")
+    manifest_path = os.path.join(root_dir, "data", "processed", "delivery_model_manifest.json")
+    models_dir = os.path.join(root_dir, "data", "models")
+    os.makedirs(models_dir, exist_ok=True)
 
-        rows.append({
-            "order_id": order_id,
-            "order_status": order.get("order_status"),
-            "order_purchase_timestamp": order.get("order_purchase_timestamp"),
-            "order_delivered_customer_date": order.get("order_delivered_customer_date"),
-            "order_estimated_delivery_date": order.get("order_estimated_delivery_date"),
-            "customer_state": customer.get("customer_state", "SP"),
-            "seller_state": seller.get("seller_state", "SP"),
-            "price": float(item.get("price", 100.0) or 100.0),
-            "freight_value": float(item.get("freight_value", 20.0) or 20.0),
-            "product_weight_g": float(product.get("product_weight_g", 500.0) or 500.0),
-            "product_length_cm": float(product.get("product_length_cm", 20.0) or 20.0),
-            "product_height_cm": float(product.get("product_height_cm", 15.0) or 15.0),
-            "product_width_cm": float(product.get("product_width_cm", 15.0) or 15.0),
-        })
+    if not os.path.exists(dataset_path):
+        print(f"[Train] Error: No existe {dataset_path}. Ejecute build_delivery_dataset.py primero.")
+        return
 
-    df = pd.DataFrame(rows)
-    print(f"✅ Cargados {len(df)} registros desde fixture de fallback.")
-    return df
+    print("[Train] Cargando dataset de pedidos Olist...")
+    df = pd.read_parquet(dataset_path)
 
-def preprocess_and_train(df):
-    os.makedirs(MODELS_DIR, exist_ok=True)
+    manifest = {}
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
 
-    # Convertir fechas
-    df["purchase_date"] = pd.to_datetime(df["order_purchase_timestamp"])
-    df["delivered_date"] = pd.to_datetime(df["order_delivered_customer_date"])
-    df["estimated_date"] = pd.to_datetime(df["order_estimated_delivery_date"])
+    print("[Train] Generando ingeniería de características...")
+    df = add_direct_features(df)
+    df = add_all_temporal_features(df)
 
-    # Agrupar a nivel de PEDIDO (order_id) para evitar Fuga de Información (Data Leakage)
-    df_order = df.groupby("order_id").agg({
-        "purchase_date": "first",
-        "delivered_date": "first",
-        "estimated_date": "first",
-        "customer_state": "first",
-        "seller_state": "first",
-        "price": "sum",
-        "freight_value": "sum",
-        "product_weight_g": "sum",
-        "product_length_cm": "max",
-        "product_height_cm": "max",
-        "product_width_cm": "max",
-    }).reset_index()
+    # Filtrar columnas disponibles
+    num_cols = [c for c in NUMERIC_FEATURES if c in df.columns]
+    cat_cols = [c for c in CATEGORICAL_FEATURES if c in df.columns]
+    all_feature_cols = num_cols + cat_cols
 
-    # Añadir item_count explícito
-    item_counts = df.groupby("order_id").size().to_dict()
-    df_order["item_count"] = df_order["order_id"].map(item_counts)
+    print(f"[Train] Total de variables activas: {len(all_feature_cols)} (Num: {len(num_cols)}, Cat: {len(cat_cols)})")
 
-    # Target: is_delayed (1 si entregado después de la fecha estimada)
-    df_order["is_delayed"] = (df_order["delivered_date"] > df_order["estimated_date"]).astype(int)
+    # Split temporal estricto: Train (70%), Validation (15%), Test (15%)
+    train, val, test = temporal_train_validation_test_split(df, 0.70, 0.15)
+    print(f"[Train] Split cronológico: Train={len(train)}, Validation={len(val)}, Test={len(test)}")
 
-    # Feature engineering
-    df_order["is_interstate"] = (df_order["seller_state"] != df_order["customer_state"]).astype(int)
-    df_order["freight_ratio"] = df_order["freight_value"] / (df_order["price"] + df_order["freight_value"] + 1e-5)
-    df_order["product_volume_cm3"] = df_order["product_length_cm"] * df_order["product_height_cm"] * df_order["product_width_cm"]
-    df_order["purchase_dow"] = df_order["purchase_date"].dt.dayofweek
-    df_order["purchase_hour"] = df_order["purchase_date"].dt.hour
+    y_train = train["is_delayed"].to_numpy()
+    y_val = val["is_delayed"].to_numpy()
+    y_test = test["is_delayed"].to_numpy()
 
-    feature_cols = [
-        "is_interstate",
-        "freight_value",
-        "price",
-        "freight_ratio",
-        "product_weight_g",
-        "product_volume_cm3",
-        "purchase_dow",
-        "purchase_hour",
-        "item_count",
-    ]
+    # 1. Ajustar Preprocesador
+    preprocessor = build_preprocessor(num_cols, cat_cols)
+    X_train_t = preprocessor.fit_transform(train[all_feature_cols])
+    X_val_t = preprocessor.transform(val[all_feature_cols])
+    X_test_t = preprocessor.transform(test[all_feature_cols])
 
-    # Orden temporal estricto (por fecha de compra)
-    df_order = df_order.sort_values("purchase_date").reset_index(drop=True)
+    # Extraer nombres de características transformadas
+    try:
+        feature_names = preprocessor.get_feature_names_out().tolist()
+    except Exception:
+        feature_names = [f"f_{i}" for i in range(X_train_t.shape[1])]
 
-    X = df_order[feature_cols].fillna(0)
-    y = df_order["is_delayed"]
+    # 2. Entrenar Baselines en Validation
+    print("[Train] Entrenando Baselines (Dummy & Logistic Regression)...")
+    dummy = build_dummy_baseline()
+    dummy.fit(X_train_t, y_train)
+    dummy_val_probs = dummy.predict_proba(X_val_t)[:, 1]
+    dummy_val_eval = evaluate_binary_classifier(y_val, dummy_val_probs, 0.5)
 
-    # Split Temporal Estricto: 70% Train, 15% Validation, 15% Test
-    n = len(df_order)
-    train_idx = int(n * 0.70)
-    val_idx = int(n * 0.85)
+    logistic_pipe = build_logistic_baseline(num_cols, cat_cols)
+    logistic_pipe.fit(train[all_feature_cols], y_train)
+    logistic_val_probs = logistic_pipe.predict_proba(val[all_feature_cols])[:, 1]
+    logistic_val_eval = evaluate_binary_classifier(y_val, logistic_val_probs, 0.5)
 
-    X_train, y_train = X.iloc[:train_idx], y.iloc[:train_idx]
-    X_val, y_val = X.iloc[train_idx:val_idx], y.iloc[train_idx:val_idx]
-    X_test, y_test = X.iloc[val_idx:], y.iloc[val_idx:]
+    print(f"  [Baseline Dummy] Val ROC-AUC: {dummy_val_eval['roc_auc']:.4f} | PR-AUC: {dummy_val_eval['pr_auc']:.4f}")
+    print(f"  [Baseline Logistic] Val ROC-AUC: {logistic_val_eval['roc_auc']:.4f} | PR-AUC: {logistic_val_eval['pr_auc']:.4f}")
 
-    pos_count = max(1, int(y_train.sum()))
-    neg_count = max(1, len(y_train) - pos_count)
-    scale_pos_weight = float(neg_count / pos_count)
+    # 3. Entrenar XGBoost Classifier
+    print("[Train] Entrenando XGBoost Classifier...")
+    pos_count = int(y_train.sum())
+    neg_count = len(y_train) - pos_count
+    scale_pos_weight = float(neg_count / max(pos_count, 1))
 
-    print(f"🧠 Entrenando XGBoost (Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)})...")
-    model = XGBClassifier(
-        n_estimators=100,
-        max_depth=3,
+    xgb_model = XGBClassifier(
+        objective="binary:logistic",
+        eval_metric="aucpr",
+        tree_method="hist",
+        n_estimators=1_000,
         learning_rate=0.03,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        max_depth=5,
+        min_child_weight=5,
+        subsample=0.85,
+        colsample_bytree=0.85,
         scale_pos_weight=scale_pos_weight,
-        eval_metric="logloss",
         random_state=42,
+        n_jobs=-1,
     )
-    model.fit(X_train, y_train)
 
-    # 1. Baselines en Test Set
-    dummy = DummyClassifier(strategy="most_frequent")
-    dummy.fit(X_train, y_train)
-    dummy_pred = dummy.predict(X_test)
+    xgb_model.fit(
+        X_train_t,
+        y_train,
+        eval_set=[(X_val_t, y_val)],
+        verbose=False,
+    )
 
-    lr_baseline = LogisticRegression(max_iter=1000, random_state=42)
-    lr_baseline.fit(X_train, y_train)
-    lr_proba = lr_baseline.predict_proba(X_test)[:, 1] if len(np.unique(y_train)) > 1 else np.zeros(len(X_test))
-    lr_pred = (lr_proba >= 0.5).astype(int)
+    xgb_val_probs = xgb_model.predict_proba(X_val_t)[:, 1]
+    xgb_val_eval = evaluate_binary_classifier(y_val, xgb_val_probs, 0.5)
 
-    # 2. SELECCIÓN DE THRESHOLD EN VALIDATION SET (Sin contaminar Test Set)
-    val_proba = model.predict_proba(X_val)[:, 1]
-    precisions_val, recalls_val, thresholds_val = precision_recall_curve(y_val, val_proba)
-    f1_scores_val = 2 * (precisions_val * recalls_val) / (precisions_val + recalls_val + 1e-8)
-    
-    if len(thresholds_val) > 0:
-        best_val_idx = np.argmax(f1_scores_val)
-        opt_threshold = float(thresholds_val[best_val_idx])
-    else:
-        opt_threshold = 0.5
+    print(f"  [XGBoost] Val ROC-AUC: {xgb_val_eval['roc_auc']:.4f} | PR-AUC: {xgb_val_eval['pr_auc']:.4f} (Lift: {xgb_val_eval['pr_auc_lift_over_prevalence']:.2f}x)")
 
-    # 3. EVALUACIÓN FINAL UNA SOLA VEZ EN TEST SET CON THRESHOLD SELECCIONADO EN VALIDATION
-    y_test_proba = model.predict_proba(X_test)[:, 1]
-    y_test_pred = (y_test_proba >= opt_threshold).astype(int)
+    # 4. Calibración en Validation (Platt Scaling)
+    print("[Train] Calibrando probabilidades en Validation con Platt Scaling...")
+    calibrator = PlattCalibrator()
+    calibrator.fit(xgb_val_probs, y_val)
+    calibrated_val_probs = calibrator.predict(xgb_val_probs)
 
-    acc = float(accuracy_score(y_test, y_test_pred))
-    prec = float(precision_score(y_test, y_test_pred, zero_division=0))
-    rec = float(recall_score(y_test, y_test_pred, zero_division=0))
-    f1 = float(f1_score(y_test, y_test_pred, zero_division=0))
-    brier = float(brier_score_loss(y_test, y_test_proba))
+    # 5. Selección del Threshold óptimo en Validation
+    selected_threshold = select_threshold_for_min_precision(y_val, calibrated_val_probs, min_precision=0.15)
+    print(f"[Train] Threshold operativo seleccionado en Validation: {selected_threshold:.4f}")
 
-    if len(np.unique(y_test)) > 1:
-        auc = float(roc_auc_score(y_test, y_test_proba))
-        pr_auc = float(average_precision_score(y_test, y_test_proba))
-    else:
-        auc = 0.50
-        pr_auc = float(y_test.mean())
+    # 6. EVALUACIÓN FINAL EN TEST SET (UNA SOLA VEZ)
+    print("[Train] Evaluando modelo en TEST SET inalterado...")
+    raw_test_probs = xgb_model.predict_proba(X_test_t)[:, 1]
+    test_probs = calibrator.predict(raw_test_probs)
 
-    metrics = {
-        "model_version": "delivery-xgb-v1.1.0",
-        "algorithm": "XGBoost Classifier (Temporal Split: Train 70% / Val 15% / Test 15%)",
-        "optimal_threshold": round(opt_threshold, 4),
-        "threshold_selection_dataset": "validation_set",
-        "accuracy": round(acc, 4),
-        "precision": round(prec, 4),
-        "recall": round(rec, 4),
-        "f1_score": round(f1, 4),
-        "roc_auc": round(auc, 4),
-        "pr_auc": round(pr_auc, 4),
-        "brier_score": round(brier, 4),
-        "baselines": {
-            "dummy_classifier": {
-                "accuracy": round(float(accuracy_score(y_test, dummy_pred)), 4),
-                "f1_score": round(float(f1_score(y_test, dummy_pred, zero_division=0)), 4),
-            },
-            "logistic_regression": {
-                "accuracy": round(float(accuracy_score(y_test, lr_pred)), 4),
-                "f1_score": round(float(f1_score(y_test, lr_pred, zero_division=0)), 4),
-                "roc_auc": round(float(roc_auc_score(y_test, lr_proba)) if len(np.unique(y_test)) > 1 else 0.50, 4),
-            }
-        },
-        "features": feature_cols,
-        "trained_at": datetime.utcnow().isoformat() + "Z",
-        "train_samples": len(X_train),
-        "val_samples": len(X_val),
-        "test_samples": len(X_test),
-        "positive_class_ratio": round(float(y.mean()), 4),
+    test_metrics = evaluate_binary_classifier(y_test, test_probs, threshold=selected_threshold)
+    test_ranking_5 = ranking_metrics(y_test, test_probs, fraction=0.05)
+    test_ranking_10 = ranking_metrics(y_test, test_probs, fraction=0.10)
+
+    # Calcular intervalos de confianza 95% Bootstrap para ROC-AUC y PR-AUC
+    from sklearn.metrics import roc_auc_score, average_precision_score
+    roc_ci_low, roc_ci_high = bootstrap_metric_ci(y_test, test_probs, lambda y, p: float(roc_auc_score(y, p)))
+    pr_ci_low, pr_ci_high = bootstrap_metric_ci(y_test, test_probs, lambda y, p: float(average_precision_score(y, p)))
+
+    test_metrics["roc_auc_ci_95"] = [roc_ci_low, roc_ci_high]
+    test_metrics["pr_auc_ci_95"] = [pr_ci_low, pr_ci_high]
+    test_metrics["ranking_top_5_percent"] = test_ranking_5
+    test_metrics["ranking_top_10_percent"] = test_ranking_10
+    test_metrics["test_positive_count"] = int(y_test.sum())
+    test_metrics["test_samples"] = len(y_test)
+    test_metrics["test_positive_ratio"] = round(float(y_test.mean()), 4)
+
+    test_metrics["baselines"] = {
+        "dummy_classifier": evaluate_binary_classifier(y_test, dummy.predict_proba(X_test_t)[:, 1], 0.5),
+        "logistic_regression": evaluate_binary_classifier(y_test, logistic_pipe.predict_proba(test[all_feature_cols])[:, 1], 0.5),
     }
 
-    # Guardar modelo
-    model_path = os.path.join(MODELS_DIR, "delivery_delay_xgb.joblib")
-    joblib.dump(model, model_path)
-    print(f"💾 Modelo guardado en: {model_path}")
+    # 7. Evaluación de Quality Gates
+    print("[Train] Evaluando Quality Gates del Modelo...")
+    gate = evaluate_delivery_model(test_metrics)
+    print(f"[Train] Estado del Quality Gate: {gate.status} (Aprobado: {gate.approved})")
+    if gate.reasons:
+        print(f"  Razones del gate: {gate.reasons}")
 
-    # Guardar métricas
-    metrics_path = os.path.join(MODELS_DIR, "delivery_delay_metrics.json")
+    test_metrics["deployment_status"] = gate.status
+    test_metrics["deployment_reasons"] = gate.reasons
+    test_metrics["model_version"] = "delivery-risk-v2.0.0"
+    test_metrics["trained_at"] = datetime.now(timezone.utc).isoformat()
+    test_metrics["features"] = all_feature_cols
+
+    # 8. Guardar Artefactos (Bundle unificado y Metrics JSON)
+    bundle = {
+        "model": xgb_model,
+        "preprocessor": preprocessor,
+        "calibrator": calibrator,
+        "feature_names": feature_names,
+        "raw_features": all_feature_cols,
+        "categorical_features": cat_cols,
+        "numeric_features": num_cols,
+        "threshold": selected_threshold,
+        "metrics": test_metrics,
+        "manifest": manifest,
+        "deployment_status": gate.status,
+        "model_version": "delivery-risk-v2.0.0",
+    }
+
+    model_path = os.path.join(models_dir, "delivery_delay_xgb.joblib")
+    metrics_path = os.path.join(models_dir, "delivery_delay_metrics.json")
+
+    joblib.dump(bundle, model_path)
+    print(f"[Train] [OK] Bundle del modelo guardado en: {model_path}")
+
     with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2)
-    print(f"📊 Métricas guardadas en: {metrics_path}")
+        json.dump(test_metrics, f, indent=2)
+    print(f"[Train] [OK] Métricas guardadas en: {metrics_path}")
 
-    # Guardar esquema de features
-    schema_path = os.path.join(MODELS_DIR, "delivery_delay_feature_schema.json")
-    schema_data = {
-        "features": [
-            {"name": col, "type": "float", "description": col} for col in feature_cols
-        ],
-        "optimal_threshold": opt_threshold,
-    }
-    with open(schema_path, "w", encoding="utf-8") as f:
-        json.dump(schema_data, f, indent=2)
-    print(f"📐 Esquema de características guardado en: {schema_path}")
+    # 9. Actualizar Model Card
+    card_path = os.path.join(root_dir, "docs", "ml", "delivery-delay-model-card.md")
+    status_icon = "🟢" if gate.approved else "🔴"
+    card_content = f"""# Model Card — Delivery Delay Predictor (`delivery-risk-v2.0.0`)
 
-    print("\n🎉 Entrenamiento del modelo XGBoost completado exitosamente!")
-    print(json.dumps(metrics, indent=2))
+## 📌 Resumen General
+- **Modelo:** `XGBClassifier` (Hist Gradient Boosted Trees).
+- **Tarea:** Clasificación binaria (`is_delayed = 1` si fecha real > fecha estimada de entrega).
+- **Despliegue:** FastAPI Service (`apps/ml-service`).
+- **Versión de Modelo:** `v2.0.0`.
+- **Estado de Despliegue:** {status_icon} `{gate.status}`
+- **Razones del Quality Gate:** {json.dumps(gate.reasons)}
+
+---
+
+## 📐 Dataset & Procesamiento (Olist Completo)
+- **Muestras Totales:** {manifest.get('row_count', len(df))} pedidos.
+- **División Temporal Estricta:** Train (70%: {len(train)}), Validation (15%: {len(val)}), Test (15%: {len(test)}).
+- **Prevalencia en Test:** {test_metrics['positive_ratio']:.4%} ({test_metrics['test_positive_count']} atrasos reales).
+- **Momento de Predicción:** `ORDER_PURCHASE` (sin leakage temporal de entrega o reseñas).
+
+---
+
+## 📊 Métricas Definitivas Evaluadas en Test Set
+
+| Métrica | XGBoost Tuned (`v2.0.0`) | Baseline Logistic Regression | Baseline Dummy (Prior) |
+|---|---|---|---|
+| **Optimal Threshold** | `{selected_threshold:.4f}` | 0.50 | - |
+| **ROC-AUC** | `{test_metrics['roc_auc']:.4f}` (CI 95%: {test_metrics['roc_auc_ci_95']}) | `{test_metrics['baselines']['logistic_regression']['roc_auc']:.4f}` | 0.5000 |
+| **PR-AUC** | `{test_metrics['pr_auc']:.4f}` (CI 95%: {test_metrics['pr_auc_ci_95']}) | `{test_metrics['baselines']['logistic_regression']['pr_auc']:.4f}` | `{test_metrics['positive_ratio']:.4f}` |
+| **PR-AUC Lift** | `{test_metrics['pr_auc_lift_over_prevalence']}x` | - | 1.0x |
+| **Precision** | `{test_metrics['precision']:.4f}` | `{test_metrics['baselines']['logistic_regression']['precision']:.4f}` | 0.0000 |
+| **Recall** | `{test_metrics['recall']:.4f}` | `{test_metrics['baselines']['logistic_regression']['recall']:.4f}` | 0.0000 |
+| **F1 Score** | `{test_metrics['f1']:.4f}` | `{test_metrics['baselines']['logistic_regression']['f1']:.4f}` | 0.0000 |
+| **Brier Score** | `{test_metrics['brier_score']:.4f}` | N/A | N/A |
+| **Precision@5% Top** | `{test_ranking_5['precision_at_k']:.4f}` | N/A | - |
+| **Recall@5% Top** | `{test_ranking_5['recall_at_k']:.4f}` | N/A | - |
+| **Lift@5% Top** | `{test_ranking_5['lift_at_k']}x` | N/A | - |
+
+---
+
+## ⚠️ Gobernanza y Bloqueo Operativo
+
+1. **Gate Automático:** Estado actual `{gate.status}`.
+2. **Inferencia Operativa:** Servido a través del bundle versionado `.joblib`.
+"""
+    with open(card_path, "w", encoding="utf-8") as f:
+        f.write(card_content)
+    print(f"[Train] [OK] Model Card actualizado en: {card_path}")
+
+    return test_metrics
+
 
 if __name__ == "__main__":
-    df = load_data()
-    preprocess_and_train(df)
+    train_pipeline()

@@ -1,0 +1,29 @@
+[
+  {
+    "is_test_fixture": true,
+    "review_id": "rev-test-001",
+    "order_id": "ord-test-001",
+    "review_score": 1,
+    "review_comment_message": "O produto demorou muito para ser entregue e atrasou mais de duas semanas.",
+    "review_creation_date": "2018-02-15T00:00:00Z",
+    "product_category_name": "perfumaria"
+  },
+  {
+    "is_test_fixture": true,
+    "review_id": "rev-test-002",
+    "order_id": "ord-test-002",
+    "review_score": 1,
+    "review_comment_message": "Veio con defeito na embalagem e veio riscado.",
+    "review_creation_date": "2018-02-16T00:00:00Z",
+    "product_category_name": "informatica_acessorios"
+  },
+  {
+    "is_test_fixture": true,
+    "review_id": "rev-test-003",
+    "order_id": "ord-test-003",
+    "review_score": 5,
+    "review_comment_message": "Excelente atendimento e chegou antes do prazo previsto!",
+    "review_creation_date": "2018-02-18T00:00:00Z",
+    "product_category_name": "moveis_decoracao"
+  }
+]

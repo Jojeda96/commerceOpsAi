@@ -4,10 +4,27 @@ import { PrismaService } from '../../database/prisma.service';
 
 export function createAnomalyTools(prisma: PrismaService) {
   const detectMetricAnomalies = tool(
-    async ({ metric, threshold = 3.0 }) => {
-      // Obtener pedidos entregados para serie temporal
+    async ({ metric = 'late_delivery_rate', threshold = 2.5, dateFrom, dateTo, category }) => {
+      const where: any = { orderStatus: 'delivered' };
+
+      if (dateFrom || dateTo) {
+        where.orderPurchaseTimestamp = {};
+        if (dateFrom) where.orderPurchaseTimestamp.gte = new Date(dateFrom);
+        if (dateTo) where.orderPurchaseTimestamp.lte = new Date(dateTo);
+      }
+
+      if (category) {
+        where.items = {
+          some: {
+            product: {
+              productCategoryName: { contains: category, mode: 'insensitive' },
+            },
+          },
+        };
+      }
+
       const orders = await prisma.olistOrder.findMany({
-        where: { orderStatus: 'delivered' },
+        where,
         select: {
           orderPurchaseTimestamp: true,
           orderDeliveredCustomerDate: true,
@@ -15,7 +32,6 @@ export function createAnomalyTools(prisma: PrismaService) {
         },
       });
 
-      // Agrupar por mes para serie temporal
       const monthlyData: Record<string, { total: number; late: number }> = {};
 
       for (const o of orders) {
@@ -32,9 +48,8 @@ export function createAnomalyTools(prisma: PrismaService) {
         }
       }
 
-      // Calcular tasa de retraso mensual
       const monthlyRates = Object.entries(monthlyData)
-        .filter(([_, d]) => d.total >= 5) // Mínimo de muestra
+        .filter(([_, d]) => d.total >= 3)
         .map(([month, d]) => ({
           month,
           rate: (d.late / d.total) * 100,
@@ -45,14 +60,15 @@ export function createAnomalyTools(prisma: PrismaService) {
       if (monthlyRates.length < 3) {
         return JSON.stringify({
           metric,
-          error: 'Datos insuficientes para análisis de series temporales',
+          appliedFilters: { category: category || 'ALL', dateFrom: dateFrom || null, dateTo: dateTo || null },
+          error: 'Datos insuficientes para análisis de series temporales con los filtros aplicados',
           monthsAvailable: monthlyRates.length,
+          timeSeries: monthlyRates,
         });
       }
 
       const rates = monthlyRates.map((m) => m.rate);
 
-      // Mediana
       const sorted = [...rates].sort((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
       const median =
@@ -60,7 +76,6 @@ export function createAnomalyTools(prisma: PrismaService) {
           ? sorted[mid]
           : (sorted[mid - 1] + sorted[mid]) / 2;
 
-      // MAD (Median Absolute Deviation)
       const absoluteDeviations = rates.map((r) => Math.abs(r - median));
       const sortedDeviations = [...absoluteDeviations].sort((a, b) => a - b);
       const madMid = Math.floor(sortedDeviations.length / 2);
@@ -69,7 +84,6 @@ export function createAnomalyTools(prisma: PrismaService) {
           ? sortedDeviations[madMid]
           : (sortedDeviations[madMid - 1] + sortedDeviations[madMid]) / 2;
 
-      // Z-Score robusto (scaledMAD = 1.4826 * MAD)
       const scaledMad = 1.4826 * mad;
       const timeSeriesWithZScore = monthlyRates.map((m) => {
         const robustZScore = scaledMad > 0 ? (m.rate - median) / scaledMad : 0;
@@ -85,6 +99,7 @@ export function createAnomalyTools(prisma: PrismaService) {
 
       return JSON.stringify({
         metric,
+        appliedFilters: { category: category || 'ALL', dateFrom: dateFrom || null, dateTo: dateTo || null },
         method: 'ROBUST_Z_SCORE',
         window: 'monthly',
         totalMonths: monthlyRates.length,
@@ -99,10 +114,13 @@ export function createAnomalyTools(prisma: PrismaService) {
     {
       name: 'detect_metric_anomalies',
       description:
-        'Detecta desviaciones anómalas en series temporales mensuales utilizando Z-Score robusto (mediana + MAD).',
+        'Detecta desviaciones anómalas en series temporales con soporte para filtros de categoría, rango de fechas y métrica configurable.',
       schema: z.object({
         metric: z.string().default('late_delivery_rate'),
-        threshold: z.number().default(3.0),
+        threshold: z.number().default(2.5),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        category: z.string().optional(),
       }),
     },
   );

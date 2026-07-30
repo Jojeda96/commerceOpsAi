@@ -1,53 +1,42 @@
-# Model Card — Delivery Delay Predictor (`delivery-xgb-v1.1.0`)
+# Model Card — Delivery Delay Predictor (`delivery-risk-v2.0.0`)
 
 ## 📌 Resumen General
-- **Modelo:** `XGBClassifier` (Gradient Boosted Decision Trees).
-- **Tarea:** Clasificación binaria (`is_delayed = 1` si la entrega efectiva supera la fecha estimada de entrega).
+- **Modelo:** `XGBClassifier` (Hist Gradient Boosted Trees).
+- **Tarea:** Clasificación binaria (`is_delayed = 1` si fecha real > fecha estimada de entrega).
 - **Despliegue:** FastAPI Service (`apps/ml-service`).
-- **Versión de Modelo:** `v1.1.0`.
+- **Versión de Modelo:** `v2.0.0`.
+- **Estado de Despliegue:** 🔴 `EXPERIMENTAL_NOT_APPROVED`
+- **Razones del Quality Gate:** ["ROC_AUC_BELOW_0_60", "PR_AUC_INSUFFICIENT_LIFT_OVER_PREVALENCE", "DOES_NOT_BEAT_LOGISTIC_ROC_AUC", "DOES_NOT_BEAT_LOGISTIC_PR_AUC", "RECALL_BELOW_0_50", "PRECISION_BELOW_0_15"]
 
 ---
 
-## 📐 Dataset & Procesamiento
-- **Fuente de Datos:** Dataset público de E-Commerce Brasileño (Olist, 2016-2018).
-- **Unidad de Análisis:** Pedido único (`order_id`). La agregación por pedido previene la fuga de información entre ítems.
-- **División Temporal Estricta:**
-  - **Entrenamiento (70%):** Muestra cronológica inicial para ajuste de parámetros y `scale_pos_weight`.
-  - **Validación (15%):** Muestra intermedia para ajuste del umbral de decisión operativo (`optimal_threshold`).
-  - **Prueba / Test (15%):** Muestra final independiente evaluada únicamente una vez para la métrica definitiva.
+## 📐 Dataset & Procesamiento (Olist Completo)
+- **Muestras Totales:** 96470 pedidos.
+- **División Temporal Estricta:** Train (70%: 67529), Validation (15%: 14470), Test (15%: 14471).
+- **Prevalencia en Test:** 6.6132% (957 atrasos reales).
+- **Momento de Predicción:** `ORDER_PURCHASE` (sin leakage temporal de entrega o reseñas).
 
 ---
 
-## 🛠️ Variables de Entrada (Features)
-1. `is_interstate`: Indicador binario si el estado del vendedor difiere del cliente.
-2. `freight_value`: Costo total de flete del pedido (R$).
-3. `price`: Precio total de productos del pedido (R$).
-4. `freight_ratio`: Proporción del flete respecto al valor total.
-5. `product_weight_g`: Peso total acumulado de los productos (gramos).
-6. `product_volume_cm3`: Volumen total acumulado (cm³).
-7. `purchase_dow`: Día de la semana de la compra (0=Lunes, 6=Domingo).
-8. `purchase_hour`: Hora del día de la compra (0-23).
-9. `item_count`: Cantidad total de artículos contenidos en el pedido.
+## 📊 Métricas Definitivas Evaluadas en Test Set
 
----
-
-## 📊 Métricas de Evaluación & Comparación
-
-| Métrica | Modelo XGBoost (`v1.1.0`) | Baseline Logistic Regression | Baseline Dummy (Most Frequent) |
+| Métrica | XGBoost Tuned (`v2.0.0`) | Baseline Logistic Regression | Baseline Dummy (Prior) |
 |---|---|---|---|
-| **Optimal Threshold** | Guardado en `metrics.json` | 0.50 | - |
-| **ROC-AUC** | Eval en Test Set | Eval en Test Set | 0.50 |
-| **PR-AUC** | Eval en Test Set | N/A | Prevalencia Base |
-| **F1 Score** | Optimizado en Validation | Baseline | 0.00 |
-| **Brier Score** | Calibración Probabilística | Baseline | N/A |
+| **Optimal Threshold** | `0.0954` | 0.50 | - |
+| **ROC-AUC** | `0.4652` (CI 95%: [0.4462, 0.4864]) | `0.5732` | 0.5000 |
+| **PR-AUC** | `0.0704` (CI 95%: [0.0633, 0.0801]) | `0.0965` | `0.0661` |
+| **PR-AUC Lift** | `1.0653x` | - | 1.0x |
+| **Precision** | `0.0643` | `0.0779` | 0.0000 |
+| **Recall** | `0.2351` | `0.8433` | 0.0000 |
+| **F1 Score** | `0.1010` | `0.1426` | 0.0000 |
+| **Brier Score** | `0.0647` | N/A | N/A |
+| **Precision@5% Top** | `0.1065` | N/A | - |
+| **Recall@5% Top** | `0.0805` | N/A | - |
+| **Lift@5% Top** | `1.6104x` | N/A | - |
 
 ---
 
-## ⚠️ Limitaciones Conocidas & Advertencias
+## ⚠️ Gobernanza y Bloqueo Operativo
 
-1. **Atribución con SHAP (No Causal):** El endpoint `/models/delivery-delay/explain` utiliza `SHAP TreeExplainer` para atribución de características a la predicción, no para inferencia de causalidad física o logística.
-2. **Contexto Geográfico:** Entrenado sobre rutas y logística de Brasil en 2016-2018. Las predicciones en entornos u operadores logísticos diferentes requieren reentrenamiento.
-3. **Threshold Dinámico:** La inferencia en producción lee `optimal_threshold` directamente desde `delivery_delay_metrics.json` y mapea los niveles de riesgo de forma transparente:
-   - `LOW`: Probabilidad < 0.5 × Threshold
-   - `MEDIUM`: 0.5 × Threshold ≤ Probabilidad < Threshold
-   - `HIGH`: Probabilidad ≥ Threshold
+1. **Gate Automático:** Estado actual `EXPERIMENTAL_NOT_APPROVED`.
+2. **Inferencia Operativa:** Servido a través del bundle versionado `.joblib`.

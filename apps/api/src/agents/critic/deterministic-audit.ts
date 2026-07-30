@@ -57,7 +57,7 @@ export function performDeterministicAudit(
       );
     }
 
-    // Check 4: Detect hallucinated external variables not present in Olist dataset (weather, traffic, strikes, carrier workload)
+    // Check 4: Detect hallucinated external variables not present in Olist dataset
     const hallucinatedTerms = [
       'clima',
       'climática',
@@ -75,16 +75,14 @@ export function performDeterministicAudit(
       );
     }
 
-    // Check 5: Detect non-Data Science agents claiming SHAP values
+    // Check 5: ML Governance Audit - If Data Science finding uses unapproved model, add warning
     const agentName = f.agent || (f as any).agentName;
-    if (
-      agentName &&
-      agentName !== 'DATA_SCIENCE' &&
-      text.toLowerCase().includes('shap')
-    ) {
-      fWarnings.push(
-        `El agente ${agentName} menciona valores SHAP en "${f.title}", los cuales pertenecen exclusivamente a Data Science.`,
-      );
+    if (agentName === 'DATA_SCIENCE') {
+      if (text.includes('EXPERIMENTAL_NOT_APPROVED') || text.includes('No Aprobado') || text.includes('experimental')) {
+        fWarnings.push(
+          `El hallazgo de Data Science "${f.title}" se basa en un modelo en estado experimental no aprobado para inferencia operativa.`,
+        );
+      }
     }
 
     if (fCritical.length > 0) criticalErrors.push(...fCritical);
@@ -100,8 +98,9 @@ export function enforceDeterministicDecision(
   llmDecision: CriticDecision,
   audit: AuditResult,
 ): { decision: CriticDecision; enforcedReason?: string } {
+  // Regla estricta: Si existen errores críticos, NUNCA se permite APPROVED ni APPROVED_WITH_WARNINGS
   if (audit.criticalErrors.length > 0) {
-    if (llmDecision === 'APPROVED') {
+    if (llmDecision === 'APPROVED' || llmDecision === 'APPROVED_WITH_WARNINGS') {
       return {
         decision: 'REQUIRES_MORE_ANALYSIS',
         enforcedReason: `Decisión forzada a REQUIRES_MORE_ANALYSIS por errores críticos deterministas: ${audit.criticalErrors.join(' | ')}`,
@@ -109,6 +108,7 @@ export function enforceDeterministicDecision(
     }
   }
 
+  // Si hay advertencias y el LLM responde APPROVED, forzar APPROVED_WITH_WARNINGS
   if (audit.warnings.length > 0 && llmDecision === 'APPROVED') {
     return {
       decision: 'APPROVED_WITH_WARNINGS',
