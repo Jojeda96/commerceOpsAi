@@ -2,13 +2,15 @@ import { PrismaClient, Prisma } from '@prisma/client';
 
 export interface FeatureSnapshotFilters {
   customerStates?: string[];
+  sellerStates?: string[];
   categories?: string[];
   dateFrom?: Date;
   dateTo?: Date;
+  interstateOnly?: boolean;
   minOrders?: number;
   limit?: number;
   selectionMethod?:
-    'REPRESENTATIVE_MEDIAN' | 'HIGH_RISK_HISTORICAL' | (string & {});
+    | 'REPRESENTATIVE_MEDIAN' | 'HIGH_RISK_HISTORICAL' | (string & {});
 }
 
 export interface ScenarioSnapshotRow {
@@ -54,6 +56,11 @@ export class DeliveryFeatureSnapshotsRepository {
         ? Prisma.sql`AND customer_state IN (${Prisma.join(options.customerStates)})`
         : Prisma.empty;
 
+    const sellerStatesFilter =
+      options.sellerStates && options.sellerStates.length > 0
+        ? Prisma.sql`AND primary_seller_state IN (${Prisma.join(options.sellerStates)})`
+        : Prisma.empty;
+
     const categoriesFilter =
       options.categories && options.categories.length > 0
         ? Prisma.sql`AND primary_category IN (${Prisma.join(options.categories)})`
@@ -67,10 +74,14 @@ export class DeliveryFeatureSnapshotsRepository {
       ? Prisma.sql`AND purchase_date <= ${options.dateTo}`
       : Prisma.empty;
 
+    const interstateFilter = options.interstateOnly
+      ? Prisma.sql`AND primary_seller_state <> customer_state`
+      : Prisma.empty;
+
     const orderByClause =
       selectionMethod === 'HIGH_RISK_HISTORICAL'
-        ? Prisma.sql`ORDER BY historical_late_rate DESC, sample_size DESC`
-        : Prisma.sql`ORDER BY sample_size DESC, historical_late_rate DESC`;
+        ? Prisma.sql`ORDER BY AVG(CASE WHEN is_delayed THEN 1.0 ELSE 0.0 END) DESC, COUNT(*) DESC`
+        : Prisma.sql`ORDER BY COUNT(*) DESC, AVG(CASE WHEN is_delayed THEN 1.0 ELSE 0.0 END) DESC`;
 
     const query = Prisma.sql`
       SELECT
@@ -101,9 +112,11 @@ export class DeliveryFeatureSnapshotsRepository {
       FROM delivery_feature_snapshots
       WHERE 1=1
         ${customerStatesFilter}
+        ${sellerStatesFilter}
         ${categoriesFilter}
         ${dateFromFilter}
         ${dateToFilter}
+        ${interstateFilter}
       GROUP BY primary_seller_state, customer_state, primary_category
       HAVING COUNT(*) >= ${minOrders}
       ${orderByClause}

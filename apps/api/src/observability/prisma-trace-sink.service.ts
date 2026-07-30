@@ -16,23 +16,31 @@ export class PrismaTraceSinkService implements ITraceSink {
 
   async onAgentStarted(payload: AgentStartedPayload): Promise<void> {
     try {
-      await this.prisma.agentRun.upsert({
+      const existing = await this.prisma.agentRun.findFirst({
         where: { localRunId: payload.localRunId },
-        create: {
-          localRunId: payload.localRunId,
-          investigationId: payload.investigationId,
-          agentName: payload.agentName,
-          iteration: payload.iteration,
-          model: payload.modelName,
-          executionKind: payload.executionKind || 'LLM',
-          status: 'RUNNING',
-          startedAt: payload.startedAt,
-        },
-        update: {
-          status: 'RUNNING',
-          startedAt: payload.startedAt,
-        },
       });
+      if (existing) {
+        await this.prisma.agentRun.update({
+          where: { id: existing.id },
+          data: {
+            status: 'RUNNING',
+            startedAt: payload.startedAt,
+          },
+        });
+      } else {
+        await this.prisma.agentRun.create({
+          data: {
+            localRunId: payload.localRunId,
+            investigationId: payload.investigationId,
+            agentName: payload.agentName,
+            iteration: payload.iteration,
+            model: payload.modelName,
+            executionKind: payload.executionKind || 'LLM',
+            status: 'RUNNING',
+            startedAt: payload.startedAt,
+          },
+        });
+      }
     } catch (err) {
       console.warn('[PrismaTraceSink] Error persisting onAgentStarted:', err);
     }
@@ -40,17 +48,22 @@ export class PrismaTraceSinkService implements ITraceSink {
 
   async onAgentCompleted(payload: AgentCompletedPayload): Promise<void> {
     try {
-      await this.prisma.agentRun.update({
+      const existing = await this.prisma.agentRun.findFirst({
         where: { localRunId: payload.localRunId },
-        data: {
-          status: 'COMPLETED',
-          completedAt: payload.completedAt,
-          durationMs: payload.durationMs,
-          inputTokens: payload.inputTokens,
-          outputTokens: payload.outputTokens,
-          estimatedCost: payload.estimatedCost,
-        },
       });
+      if (existing) {
+        await this.prisma.agentRun.update({
+          where: { id: existing.id },
+          data: {
+            status: 'COMPLETED',
+            completedAt: payload.completedAt,
+            durationMs: payload.durationMs,
+            inputTokens: payload.inputTokens,
+            outputTokens: payload.outputTokens,
+            estimatedCost: payload.estimatedCost,
+          },
+        });
+      }
     } catch (err) {
       console.warn('[PrismaTraceSink] Error persisting onAgentCompleted:', err);
     }
@@ -58,15 +71,20 @@ export class PrismaTraceSinkService implements ITraceSink {
 
   async onAgentFailed(payload: AgentFailedPayload): Promise<void> {
     try {
-      await this.prisma.agentRun.update({
+      const existing = await this.prisma.agentRun.findFirst({
         where: { localRunId: payload.localRunId },
-        data: {
-          status: 'FAILED',
-          completedAt: payload.completedAt,
-          durationMs: payload.durationMs,
-          errorMessage: payload.errorMessage,
-        },
       });
+      if (existing) {
+        await this.prisma.agentRun.update({
+          where: { id: existing.id },
+          data: {
+            status: 'FAILED',
+            completedAt: payload.completedAt,
+            durationMs: payload.durationMs,
+            errorMessage: payload.errorMessage,
+          },
+        });
+      }
     } catch (err) {
       console.warn('[PrismaTraceSink] Error persisting onAgentFailed:', err);
     }
@@ -74,48 +92,60 @@ export class PrismaTraceSinkService implements ITraceSink {
 
   async onToolStarted(payload: ToolStartedPayload): Promise<void> {
     try {
-      const agentRun = await this.prisma.agentRun.findUnique({
+      const agentRun = await this.prisma.agentRun.findFirst({
         where: { localRunId: payload.localAgentRunId },
       });
 
       if (!agentRun) {
-        console.warn(
-          `[PrismaTraceSink] AgentRun ${payload.localAgentRunId} not found for ToolExecution ${payload.localExecutionId}`,
-        );
         return;
       }
 
-      await this.prisma.toolExecution.upsert({
+      const existing = await this.prisma.toolExecution.findFirst({
         where: { localExecutionId: payload.localExecutionId },
-        create: {
-          localExecutionId: payload.localExecutionId,
-          agentRunId: agentRun.id,
-          toolName: payload.toolName,
-          parametersJson: payload.parameters as any,
-          status: 'RUNNING',
-          startedAt: payload.startedAt,
-        },
-        update: {
-          status: 'RUNNING',
-          startedAt: payload.startedAt,
-        },
       });
+
+      if (existing) {
+        await this.prisma.toolExecution.update({
+          where: { id: existing.id },
+          data: {
+            status: 'RUNNING',
+            startedAt: payload.startedAt,
+          },
+        });
+      } else {
+        await this.prisma.toolExecution.create({
+          data: {
+            localExecutionId: payload.localExecutionId,
+            agentRunId: agentRun.id,
+            toolName: payload.toolName,
+            parametersJson: payload.parameters as any,
+            status: 'RUNNING',
+            startedAt: payload.startedAt,
+          },
+        });
+      }
     } catch (err) {
       console.warn('[PrismaTraceSink] Error persisting onToolStarted:', err);
     }
   }
 
+
   async onToolCompleted(payload: ToolCompletedPayload): Promise<void> {
     try {
-      await this.prisma.toolExecution.update({
+      const existing = await this.prisma.toolExecution.findFirst({
         where: { localExecutionId: payload.localExecutionId },
-        data: {
-          status: 'COMPLETED',
-          completedAt: payload.completedAt,
-          durationMs: payload.durationMs,
-          resultSummary: payload.resultSummary,
-        },
       });
+      if (existing) {
+        await this.prisma.toolExecution.update({
+          where: { id: existing.id },
+          data: {
+            status: 'COMPLETED',
+            completedAt: payload.completedAt,
+            durationMs: payload.durationMs,
+            resultSummary: payload.resultSummary,
+          },
+        });
+      }
     } catch (err) {
       console.warn('[PrismaTraceSink] Error persisting onToolCompleted:', err);
     }
@@ -123,15 +153,20 @@ export class PrismaTraceSinkService implements ITraceSink {
 
   async onToolFailed(payload: ToolFailedPayload): Promise<void> {
     try {
-      await this.prisma.toolExecution.update({
+      const existing = await this.prisma.toolExecution.findFirst({
         where: { localExecutionId: payload.localExecutionId },
-        data: {
-          status: 'FAILED',
-          completedAt: payload.completedAt,
-          durationMs: payload.durationMs,
-          errorMessage: payload.errorMessage,
-        },
       });
+      if (existing) {
+        await this.prisma.toolExecution.update({
+          where: { id: existing.id },
+          data: {
+            status: 'FAILED',
+            completedAt: payload.completedAt,
+            durationMs: payload.durationMs,
+            errorMessage: payload.errorMessage,
+          },
+        });
+      }
     } catch (err) {
       console.warn('[PrismaTraceSink] Error persisting onToolFailed:', err);
     }

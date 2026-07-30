@@ -13,14 +13,31 @@ CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logí
 | Capacidad | Estado verificado | Evidencia |
 |---|---|---|
 | Orquestación multiagente | ✅ Implementada para demo | LangGraph + pruebas E2E |
+| AnalysisScope Inmutable | ✅ Determinista | Resolution, hash y audit en Critic |
 | Analytics SQL | ✅ Implementada | PostgreSQL + endpoints deterministas |
 | Predictor de atrasos | 🧪 Experimental y bloqueado | Quality gate y Model Card |
+| Respuestas parciales ML | ✅ Trazable | Gobernanza independiente de inferencia |
 | Selección de champion | ✅ Implementada | Walk-forward CV; Logistic/XGBoost |
 | Escenarios Data Science | ✅ Point-in-time snapshots | Contrato V3 y tests de parity |
 | Trazabilidad | ✅ Durable | AgentRun/ToolExecution incluso en fallos |
-| Evidence Critic | ✅ Grounding estructurado | Auditoría numérica determinista |
+| Evidence Critic | ✅ Scope-aware | Auditoría de scope, claims y coverage |
 | NLP de reseñas | ✅/⚠️ Según artefacto cargado | Manifest y método mostrado |
 | CI full-stack | ✅ Verificada | Badge y workflow |
+
+---
+
+## 🎯 Alcance consistente y respuestas parciales (V4.1)
+
+CommerceOps AI aplica un único `AnalysisScope` inmutable por ronda de investigación.
+Los filtros solo pueden provenir del request DTO, de un parser determinista de lenguaje natural o de una corrección tipada del Evidence Critic. Los agentes no pueden inventar periodos ni analizar universos distintos.
+
+El sistema distingue estrictamente:
+- **Tasa histórica:** proporción observada en datos pasados en el módulo logístico.
+- **Probabilidad predictiva:** salida del modelo ML para un escenario específico.
+- **Gobernanza:** estado de aprobación, métricas y quality gates del modelo ML.
+- **Explicación local:** contribuciones de características (SHAP/Linear) para una predicción válida.
+
+Si no existe un escenario ML válido, el sistema devuelve contexto histórico y gobernanza, pero marca la predicción y explicación como no disponibles. No fabrica probabilidades ni factores SHAP sintéticos.
 
 ---
 

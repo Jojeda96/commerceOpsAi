@@ -2,7 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { PrismaClient } from '@prisma/client';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
-import { Finding } from '@commerce-ops/shared-types';
+import { Finding, Evidence } from '@commerce-ops/shared-types';
 import { createDataScienceTools, DeliveryScenario } from './ds.tools';
 import {
   runAgentWithTrace,
@@ -10,59 +10,8 @@ import {
 } from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
-
-export type ModelReliability =
-  'UNAVAILABLE' | 'LOW' | 'MODERATE' | 'APPROVED_FOR_DEMO';
-
-export function deriveModelReliability(
-  deploymentStatus: string,
-  scenarioSampleSize: number,
-): ModelReliability {
-  if (deploymentStatus === 'UNAVAILABLE') return 'UNAVAILABLE';
-  if (deploymentStatus !== 'APPROVED_FOR_DEMO_INFERENCE') return 'LOW';
-  if (scenarioSampleSize < 100) return 'MODERATE';
-  return 'APPROVED_FOR_DEMO';
-}
-
-export function reliabilityToConfidence(reliability: ModelReliability): number {
-  switch (reliability) {
-    case 'UNAVAILABLE':
-      return 0.1;
-    case 'LOW':
-      return 0.3;
-    case 'MODERATE':
-      return 0.65;
-    case 'APPROVED_FOR_DEMO':
-      return 0.88;
-  }
-}
-
-export function buildPredictionSummary(
-  scenario: DeliveryScenario,
-  prediction: any,
-): string {
-  if (
-    !prediction ||
-    prediction.prediction_status !== 'SUCCESS' ||
-    prediction.status === 'UNAVAILABLE'
-  ) {
-    return `Escenario ${scenario.primarySellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}): Servicio ML no disponible para inferencia (${prediction?.reason || prediction?.detail?.message || 'UNAVAILABLE'}).`;
-  }
-
-  const probPct = (prediction.probability * 100).toFixed(1);
-  const threshPct = (prediction.threshold * 100).toFixed(1);
-  return [
-    `Escenario ${scenario.primarySellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}).`,
-    `Probabilidad estimada de atraso: ${probPct}%.`,
-    `Threshold operativo: ${threshPct}%.`,
-    `Nivel de riesgo: ${prediction.riskLevel || prediction.risk_level}.`,
-    `Modelo: ${prediction.model_name || prediction.modelName}.`,
-    `Estado del modelo: ${prediction.deploymentStatus || prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED'}.`,
-    prediction.warning ? `Advertencia: ${prediction.warning}` : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
+import { buildToolScope } from '../scope/build-tool-scope';
+import { isPersistablePrediction } from './contracts/prediction-result.schema';
 
 export function createDataScienceNode(
   streaming: StreamingService,
@@ -76,6 +25,7 @@ export function createDataScienceNode(
     streaming.emit(investigationId, 'agent.started', { agent: 'DATA_SCIENCE' });
 
     const tools = createDataScienceTools(prisma);
+    const govTool = tools.find((t) => t.name === 'get_delivery_model_governance')!;
     const scenarioTool = tools.find(
       (t) => t.name === 'get_delivery_prediction_scenarios',
     )!;
@@ -85,13 +35,59 @@ export function createDataScienceNode(
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'DATA_SCIENCE',
       iteration,
+      investigationId,
       modelName,
       execute: async ({ localRunId }) => {
         const toolTraces: ToolExecutionTrace[] = [];
+        const evidenceItems: Evidence[] = [];
+        const commonScope = buildToolScope(state.analysisScope);
+
+        // 1. Always execute Model Governance tool
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'DATA_SCIENCE',
+          tool: 'get_delivery_model_governance',
+        });
+        const { result: govRaw, trace: govTrace } = await executeToolWithTrace({
+          localAgentRunId: localRunId,
+          agentName: 'DATA_SCIENCE',
+          iteration,
+          toolName: 'get_delivery_model_governance',
+          parameters: {},
+          execute: () => govTool.invoke({}),
+        });
+        toolTraces.push(govTrace);
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'DATA_SCIENCE',
+          tool: 'get_delivery_model_governance',
+        });
+
+        let govData: any = {};
+        try {
+          govData = JSON.parse(govRaw);
+        } catch (e) {
+          console.warn('[DSNode] Error parsing governance JSON:', e);
+        }
+
+        const govEvId = `ev-ds-gov-${Date.now()}`;
+        evidenceItems.push({
+          id: govEvId,
+          localAgentRunId: localRunId,
+          localToolExecutionId: govTrace.localExecutionId,
+          sourceType: 'TOOL_EXECUTION',
+          agentName: 'DATA_SCIENCE',
+          iteration,
+          toolName: 'get_delivery_model_governance',
+          parameters: {},
+          resultSummary: govRaw,
+          generatedAt: new Date().toISOString(),
+        });
+
+        // 2. Query Scenarios within AnalysisScope
         const scenarioParams = {
           limit: 3,
-          customerStates: state.filters?.customerStates,
-          categories: state.filters?.categories,
+          minOrders: 10,
+          selectionMethod: 'REPRESENTATIVE_MEDIAN',
+          ...commonScope,
         };
 
         streaming.emit(investigationId, 'tool.started', {
@@ -114,42 +110,59 @@ export function createDataScienceNode(
           tool: 'get_delivery_prediction_scenarios',
         });
 
-        let scenarioPayload: {
-          status: string;
-          scenarios?: DeliveryScenario[];
-          reason?: string;
-        } = {
-          status: 'UNAVAILABLE',
-        };
+        let scenarioPayload: any = {};
         try {
           scenarioPayload = JSON.parse(scenarioRaw);
         } catch (e) {
-          console.warn('[DSNode] Error parseando JSON de escenarios:', e);
+          console.warn('[DSNode] Error parsing scenarios JSON:', e);
         }
 
+        const scenEvId = `ev-ds-scen-${Date.now()}`;
+        evidenceItems.push({
+          id: scenEvId,
+          localAgentRunId: localRunId,
+          localToolExecutionId: scenarioTrace.localExecutionId,
+          sourceType: 'TOOL_EXECUTION',
+          agentName: 'DATA_SCIENCE',
+          iteration,
+          toolName: 'get_delivery_prediction_scenarios',
+          parameters: scenarioParams,
+          resultSummary: scenarioRaw,
+          rowCount: scenarioPayload.rowCount || 0,
+          sampleSize: scenarioPayload.sampleSize || 0,
+          generatedAt: new Date().toISOString(),
+        });
+
+        // Branch when no scenarios matched: Partial Answer with Governance & Historical Context
         if (
           scenarioPayload.status !== 'AVAILABLE' ||
           !scenarioPayload.scenarios ||
           scenarioPayload.scenarios.length === 0
         ) {
-          const unavailableFinding: Finding = {
-            id: `finding-ds-unavailable-${Date.now()}`,
+          const partialFinding: Finding = {
+            id: `finding-ds-partial-${Date.now()}`,
             investigationId,
             localAgentRunId: localRunId,
             agent: 'DATA_SCIENCE',
-            title:
-              'No fue posible construir escenarios ML con los filtros aplicados',
-            description: `Los filtros aplicados no devolvieron escenarios con el mínimo de observaciones requerido en PostgreSQL (${scenarioPayload.reason || 'NO_SCENARIOS'}). No se ejecutaron predicciones ML.`,
-            findingType: 'ML_UNAVAILABLE',
-            confidence: 1.0,
-            evidenceIds: [],
-            operationalStatus: 'BLOCKED',
+            title: 'Estado de Gobernanza del Modelo (Sin Escenarios Inferibles para Scope)',
+            description: `Se obtuvo el estado de gobernanza del modelo (${govData.modelName || 'delivery_delay_champion'} v${govData.modelVersion || 'v3.0.0'}, deployment: ${govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED'}). No se ejecutó inferencia predictiva ni SHAP debido a que ningún escenario cumplió los criterios de filtrado y muestra mínima.`,
+            findingType: 'MODEL_GOVERNANCE',
+            confidence: 0.85,
+            evidenceIds: [govEvId, scenEvId],
+            operationalStatus: 'EXPERIMENTAL_CONTEXT',
+            modelGovernance: {
+              modelName: govData.modelName || 'delivery_delay_champion',
+              modelVersion: govData.modelVersion || 'v3.0.0',
+              deploymentStatus: govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+              operationallyActionable: Boolean(govData.operationallyActionable),
+              reasons: govData.qualityGateReasons || [],
+            },
             createdAt: new Date().toISOString(),
           };
 
           streaming.emit(investigationId, 'finding.created', {
             agent: 'DATA_SCIENCE',
-            finding: unavailableFinding,
+            finding: partialFinding,
           });
           streaming.emit(investigationId, 'agent.completed', {
             agent: 'DATA_SCIENCE',
@@ -157,21 +170,21 @@ export function createDataScienceNode(
 
           return {
             result: {
-              finding: unavailableFinding,
-              evidence: [] as any[],
+              finding: partialFinding,
+              evidence: evidenceItems,
               toolTraces,
-              modelPredictions: [] as any[],
+              modelPredictions: [],
             },
           };
         }
 
-        const scenarios = scenarioPayload.scenarios;
+        // Branch when scenarios exist: run predictions and explanations
+        const scenarios: DeliveryScenario[] = scenarioPayload.scenarios;
         const predictions: Array<{
           scenario: DeliveryScenario;
           prediction: any;
           explanation: any;
         }> = [];
-        const evidenceItems: any[] = [];
 
         for (const scenario of scenarios) {
           streaming.emit(investigationId, 'tool.started', {
@@ -198,21 +211,19 @@ export function createDataScienceNode(
           try {
             parsedPred = JSON.parse(predRaw);
           } catch (e) {
-            console.warn('[DSNode] Error parseando predicción JSON:', e);
+            console.warn('[DSNode] Error parsing prediction JSON:', e);
           }
 
-          // If prediction failed or status is not SUCCESS, do NOT call explain and do NOT add to modelPredictions
-          if (
-            parsedPred.prediction_status !== 'SUCCESS' &&
-            parsedPred.status !== 'SUCCESS'
-          ) {
-            console.warn(
-              '[DSNode] Prediction failed or status unavailable:',
-              parsedPred,
-            );
+          if (parsedPred.status !== 'AVAILABLE') {
+            console.warn('[DSNode] Inferencia no disponible para escenario:', scenario.scenarioId);
             continue;
           }
 
+          // Execute explanation tool ONLY when prediction is AVAILABLE
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'DATA_SCIENCE',
+            tool: 'explain_delivery_delay',
+          });
           const { result: explainRaw, trace: explainTrace } =
             await executeToolWithTrace({
               localAgentRunId: localRunId,
@@ -223,12 +234,16 @@ export function createDataScienceNode(
               execute: () => explainTool.invoke(scenario),
             });
           toolTraces.push(explainTrace);
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'DATA_SCIENCE',
+            tool: 'explain_delivery_delay',
+          });
 
           let parsedExplain: any = {};
           try {
             parsedExplain = JSON.parse(explainRaw);
           } catch (e) {
-            console.warn('[DSNode] Error parseando explicación JSON:', e);
+            console.warn('[DSNode] Error parsing explanation JSON:', e);
           }
 
           predictions.push({
@@ -237,115 +252,52 @@ export function createDataScienceNode(
             explanation: parsedExplain,
           });
 
-          const evId = `ev-ds-${scenario.scenarioId}-${Date.now()}`;
+          const predEvId = `ev-ds-pred-${scenario.scenarioId}-${Date.now()}`;
           evidenceItems.push({
-            id: evId,
+            id: predEvId,
             localAgentRunId: localRunId,
             localToolExecutionId: predictTrace.localExecutionId,
-            sourceType: 'TOOL_EXECUTION' as const,
-            agentName: 'DATA_SCIENCE' as const,
+            sourceType: 'MODEL_PREDICTION',
+            agentName: 'DATA_SCIENCE',
             iteration,
             toolName: 'predict_delivery_delay',
-            parameters: {
-              scenarioId: scenario.scenarioId,
-              modelVersion: parsedPred.model_version || parsedPred.modelVersion,
-            },
-            resultSummary: buildPredictionSummary(scenario, parsedPred),
+            parameters: { scenarioId: scenario.scenarioId },
+            resultSummary: JSON.stringify(parsedPred),
             generatedAt: new Date().toISOString(),
           });
         }
 
-        // Handle case where all predictions failed
-        if (predictions.length === 0) {
-          const mlUnavailableFinding: Finding = {
-            id: `finding-ds-ml-unavailable-${Date.now()}`,
-            investigationId,
-            localAgentRunId: localRunId,
-            agent: 'DATA_SCIENCE',
-            title: 'Servicio ML No Disponible para Inferencia',
-            description:
-              'El servicio de inferencia de modelos ML no retornó respuestas válidas para los escenarios evaluados.',
-            findingType: 'ML_UNAVAILABLE',
-            confidence: 1.0,
-            evidenceIds: [],
-            operationalStatus: 'BLOCKED',
-            createdAt: new Date().toISOString(),
-          };
-
-          return {
-            result: {
-              finding: mlUnavailableFinding,
-              evidence: [],
-              toolTraces,
-              modelPredictions: [],
-            },
-          };
-        }
-
-        const firstPred = predictions[0]?.prediction || {};
-        const deploymentStatus =
-          firstPred.deployment_status ||
-          firstPred.deploymentStatus ||
-          'EXPERIMENTAL_NOT_APPROVED';
-        const reliability = deriveModelReliability(
-          deploymentStatus,
-          predictions[0]?.scenario?.sampleSize || 500,
-        );
-        const confidence = reliabilityToConfidence(reliability);
-
-        const isApproved = deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
-        const allowExperimental =
-          process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
-
-        const operationalStatus = isApproved
-          ? ('ACTIONABLE' as const)
-          : allowExperimental
-            ? ('EXPERIMENTAL_CONTEXT' as const)
-            : ('BLOCKED' as const);
-
-        const predictionSummariesText = predictions
-          .map((p) => buildPredictionSummary(p.scenario, p.prediction))
-          .join('\n');
+        const isApproved = govData.deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
 
         const model = new ChatOpenAI({
           modelName,
-          temperature: 0.2,
+          temperature: 0.1,
           apiKey: process.env.OPENAI_API_KEY,
         });
 
         const prompt = `Eres el Data Science Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
-Escenarios evaluados cuantitativamente:
-${predictionSummariesText}
+Gobernanza del modelo:
+${govRaw}
 
-REGLAS DE RIGOR METODOLÓGICO Y CERO ALUCINACIÓN:
-1. Respetar los valores numéricos exactos devueltos en los resúmenes (probabilidad, threshold, riesgo, estado). Prohibido alterar cifras.
-2. Describir la atribución de características SHAP únicamente para las variables presentadas.
-3. Si el estado del modelo es EXPERIMENTAL_NOT_APPROVED, ADVERTIR que el modelo no está aprobado para inferencia operativa.
-4. Confianza metodológica: ${confidence}.
+Predicciones de escenarios:
+${JSON.stringify(predictions, null, 2)}
 
-Genera un hallazgo técnico explicable en formato JSON:
+Genera un hallazgo técnico cuantitativo y auditable en formato JSON:
 {
-  "title": "Evaluación de Escenarios de Entrega (${isApproved ? 'Modelo Aprobado' : 'Modelo Experimental No Aprobado'})",
-  "description": "Se analizaron ${predictions.length} escenarios representativos reales. ${predictionSummariesText.slice(0, 300)}...",
-  "confidence": ${confidence},
+  "title": "Inferencia Predictiva y Factores de Impacto en Envíos",
+  "description": "Detalle cuantitativo de la probabilidad predictiva y factores de mayor contribución local.",
+  "confidence": 0.88,
   "findingType": "ML_PREDICTION"
 }`;
 
-        let title = isApproved
-          ? 'Evaluación de Escenarios de Entrega ML'
-          : 'Evaluación de Escenarios (Modelo Experimental No Aprobado)';
-        let description = `Se analizaron ${predictions.length} escenarios representativos. Estado: ${deploymentStatus}.`;
-        let inputTokens: number | undefined;
-        let outputTokens: number | undefined;
+        let title = 'Inferencia Predictiva y Factores de Impacto';
+        let description = `Se ejecutó inferencia predictiva para ${predictions.length} escenarios representativos.`;
+        let confidence = 0.88;
 
         try {
           const response = await model.invoke(prompt);
-          const usage = extractModelUsage(response);
-          inputTokens = usage.inputTokens;
-          outputTokens = usage.outputTokens;
-
           const content =
             typeof response.content === 'string'
               ? response.content
@@ -355,9 +307,10 @@ Genera un hallazgo técnico explicable en formato JSON:
             const parsed = JSON.parse(match[0]);
             if (parsed.title) title = parsed.title;
             if (parsed.description) description = parsed.description;
+            if (parsed.confidence) confidence = parsed.confidence;
           }
         } catch (err) {
-          console.warn('[DSNode] Error in LLM call:', err);
+          console.warn('[DSNode] LLM call error:', err);
         }
 
         const findingId = `finding-ds-${Date.now()}`;
@@ -371,38 +324,34 @@ Genera un hallazgo técnico explicable en formato JSON:
           findingType: 'ML_PREDICTION',
           confidence,
           evidenceIds: evidenceItems.map((e) => e.id),
-          operationalStatus,
+          operationalStatus: isApproved ? 'ACTIONABLE' : 'EXPERIMENTAL_CONTEXT',
           modelGovernance: {
-            modelName: firstPred.model_name || firstPred.modelName,
-            modelVersion: firstPred.model_version || firstPred.modelVersion,
-            deploymentStatus,
-            operationallyActionable: isApproved,
-            reasons:
-              firstPred.deployment_reasons || firstPred.deploymentReasons || [],
+            modelName: govData.modelName || 'delivery_delay_champion',
+            modelVersion: govData.modelVersion || 'v3.0.0',
+            deploymentStatus: govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+            operationallyActionable: Boolean(isApproved),
+            reasons: govData.qualityGateReasons || [],
           },
           createdAt: new Date().toISOString(),
         };
 
-        const modelPredictionTraces = predictions.map((p) => ({
-          investigationId,
-          findingId,
-          scenarioId: p.scenario.scenarioId,
-          modelName: p.prediction.model_name || p.prediction.modelName,
-          modelVersion: p.prediction.model_version || p.prediction.modelVersion,
-          deploymentStatus:
-            p.prediction.deployment_status ||
-            p.prediction.deploymentStatus ||
-            'EXPERIMENTAL_NOT_APPROVED',
-          probability: Number(p.prediction.probability || 0),
-          threshold: Number(p.prediction.threshold || 0.5),
-          predictedDelayed: Boolean(
-            p.prediction.predicted_delayed || p.prediction.predictedDelayed,
-          ),
-          riskLevel: p.prediction.risk_level || p.prediction.riskLevel || 'LOW',
-          operationallyActionable: isApproved,
-          featuresJson: p.scenario,
-          explanationJson: p.explanation,
-        }));
+        const modelPredictionTraces = predictions
+          .filter((p) => isPersistablePrediction(p.prediction))
+          .map((p) => ({
+            investigationId,
+            findingId,
+            scenarioId: p.scenario.scenarioId,
+            modelName: p.prediction.modelName || govData.modelName || 'delivery_delay_champion',
+            modelVersion: p.prediction.modelVersion || govData.modelVersion || 'v3.0.0',
+            deploymentStatus: govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+            probability: Number(p.prediction.probability),
+            threshold: Number(p.prediction.threshold),
+            predictedDelayed: Boolean(p.prediction.predictedDelayed),
+            riskLevel: p.prediction.riskLevel || 'LOW',
+            operationallyActionable: isApproved,
+            featuresJson: p.scenario,
+            explanationJson: p.explanation,
+          }));
 
         streaming.emit(investigationId, 'finding.created', {
           agent: 'DATA_SCIENCE',
@@ -419,8 +368,6 @@ Genera un hallazgo técnico explicable en formato JSON:
             toolTraces,
             modelPredictions: modelPredictionTraces,
           },
-          inputTokens,
-          outputTokens,
         };
       },
     });

@@ -9,6 +9,7 @@ import {
 } from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
+import { buildToolScope } from '../scope/build-tool-scope';
 
 export function createLogisticsNode(
   prisma: PrismaService,
@@ -37,14 +38,15 @@ export function createLogisticsNode(
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'LOGISTICS',
       iteration,
+      investigationId,
       modelName,
       execute: async ({ localRunId }) => {
         const toolTraces: ToolExecutionTrace[] = [];
         const evidenceItems: any[] = [];
 
+        const commonScope = buildToolScope(state.analysisScope);
         const delParams = {
-          dateFrom: state.filters.dateFrom,
-          dateTo: state.filters.dateTo,
+          ...commonScope,
         };
         streaming.emit(investigationId, 'tool.started', {
           agent: 'LOGISTICS',
@@ -69,6 +71,12 @@ export function createLogisticsNode(
         let routeResult = '';
         let stageResult = '';
         if (isRouteQuestion) {
+          const routeParams = {
+            ...commonScope,
+            sortBy: 'lateRate' as const,
+            minOrders: 10,
+            topN: 10,
+          };
           streaming.emit(investigationId, 'tool.started', {
             agent: 'LOGISTICS',
             tool: 'get_delivery_performance_by_route',
@@ -78,8 +86,8 @@ export function createLogisticsNode(
             agentName: 'LOGISTICS',
             iteration,
             toolName: 'get_delivery_performance_by_route',
-            parameters: { topN: 10 },
-            execute: () => routeTool.invoke({ topN: 10 }),
+            parameters: routeParams,
+            execute: () => routeTool.invoke(routeParams),
           });
           routeResult = rRes;
           toolTraces.push(rTrace);

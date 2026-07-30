@@ -1,6 +1,7 @@
 import { Annotation } from '@langchain/langgraph';
 import {
   AgentName,
+  AnalysisScope,
   FilterState,
   InvestigationTask,
   Finding,
@@ -12,10 +13,15 @@ import {
   AgentRunTrace,
   ToolExecutionTrace,
 } from '@commerce-ops/shared-types';
+import { createEmptyScope } from '../scope/analysis-scope.resolver';
 
 export const CommerceOpsAnnotation = Annotation.Root({
   investigationId: Annotation<string>(),
   userQuestion: Annotation<string>(),
+  analysisScope: Annotation<AnalysisScope>({
+    value: (_, next) => next,
+    default: () => createEmptyScope(),
+  }),
   filters: Annotation<FilterState>({
     value: (prev, next) => ({ ...prev, ...next }),
     default: () => ({}),
@@ -41,7 +47,27 @@ export const CommerceOpsAnnotation = Annotation.Root({
     default: () => [],
   }),
   findings: Annotation<Finding[]>({
-    value: (prev, next) => [...prev, ...next],
+    value: (prev, next) => {
+      const merged = [...prev];
+      for (const item of next) {
+        const itemKey = (item as any).findingKey || `${item.agent || (item as any).agentName}:${item.title}`;
+        for (let i = 0; i < merged.length; i++) {
+          const existingKey = (merged[i] as any).findingKey || `${merged[i].agent || (merged[i] as any).agentName}:${merged[i].title}`;
+          if (existingKey === itemKey && merged[i].status !== 'SUPERSEDED') {
+            merged[i] = {
+              ...merged[i],
+              status: 'SUPERSEDED',
+            };
+            (item as any).supersedesFindingId = merged[i].id;
+          }
+        }
+        merged.push({
+          ...item,
+          status: item.status || 'ACTIVE',
+        });
+      }
+      return merged;
+    },
     default: () => [],
   }),
   evidence: Annotation<Evidence[]>({

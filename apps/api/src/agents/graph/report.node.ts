@@ -28,10 +28,12 @@ export function createReportNode(streaming: StreamingService) {
       summaryPrefix = `Investigación sobre "${userQuestion}" requiere revisión humana tras agotar las iteraciones de análisis automatizado.`;
     }
 
+    const activeFindings = findings.filter((f) => f.status !== 'SUPERSEDED');
+
     const report: FinalReport = {
       investigationId,
-      executiveSummary: `${summaryPrefix} Se registran ${findings.length} hallazgo(s) y ${recommendations.length} recomendación(es).`,
-      keyFindings: findings,
+      executiveSummary: `${summaryPrefix} Se registran ${activeFindings.length} hallazgo(s) activo(s) y ${recommendations.length} recomendación(es).`,
+      keyFindings: activeFindings,
       evidenceList: evidence,
       recommendations,
       limitations: [
@@ -45,7 +47,7 @@ export function createReportNode(streaming: StreamingService) {
     streaming.emit(investigationId, 'report.completed', {
       investigationId,
       qualityScore: score,
-      findingsCount: findings.length,
+      findingsCount: activeFindings.length,
       recommendationsCount: recommendations.length,
     });
 

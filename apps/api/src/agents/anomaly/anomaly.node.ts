@@ -9,6 +9,7 @@ import {
 } from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
+import { buildToolScope } from '../scope/build-tool-scope';
 
 export function createAnomalyNode(
   prisma: PrismaService,
@@ -29,10 +30,16 @@ export function createAnomalyNode(
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'ANOMALY',
       iteration,
+      investigationId,
       modelName,
       execute: async ({ localRunId }) => {
         const toolTraces: ToolExecutionTrace[] = [];
-        const anomalyParams = { metric: 'late_delivery_rate', threshold: 3.0 };
+        const commonScope = buildToolScope(state.analysisScope);
+        const anomalyParams = {
+          metric: 'late_delivery_rate' as const,
+          threshold: 3.0,
+          ...commonScope,
+        };
 
         streaming.emit(investigationId, 'tool.started', {
           agent: 'ANOMALY',

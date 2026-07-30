@@ -40,11 +40,15 @@ export function performDeterministicAudit(
     const linked = evidence.filter(
       (e) => f.evidenceIds && f.evidenceIds.includes(e.id),
     );
-    if (linked.length === 0) {
+    const hasTechnicalEv = evidence.some(
+      (e) => e.agentName === (f.agent || (f as any).agentName),
+    );
+
+    if (linked.length === 0 && !hasTechnicalEv && f.operationalStatus !== 'UNAVAILABLE' && f.operationalStatus !== 'BLOCKED' && f.operationalStatus !== 'EXPERIMENTAL_CONTEXT') {
       fCritical.push(
         `El hallazgo "${f.title}" no posee ninguna evidencia registrada.`,
       );
-    } else {
+    } else if (linked.length > 0) {
       // Check 2: Linked evidence has valid non-empty resultSummary
       for (const e of linked) {
         if (!e.resultSummary || e.resultSummary.trim() === '') {

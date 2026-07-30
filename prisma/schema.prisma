@@ -164,6 +164,8 @@ model Investigation {
   sellerIdsJson      Json?               @map("seller_ids_json")
   categoriesJson     Json?               @map("categories_json")
   customerStatesJson Json?               @map("customer_states_json")
+  resolvedScopeJson  Json?               @map("resolved_scope_json")
+  terminationReason  String?             @map("termination_reason")
   createdAt         DateTime            @default(now()) @map("created_at")
   completedAt       DateTime?           @map("completed_at")
   iterationCount    Int                 @default(0) @map("iteration_count")
@@ -194,7 +196,7 @@ model InvestigationTask {
 
 model AgentRun {
   id              String          @id @default(uuid())
-  localRunId      String          @unique @map("local_run_id")
+  localRunId      String?         @unique @map("local_run_id")
   investigationId String          @map("investigation_id")
   agentName       String          @map("agent_name")
   iteration       Int             @default(1)
@@ -218,12 +220,14 @@ model AgentRun {
 
 model ToolExecution {
   id               String     @id @default(uuid())
-  localExecutionId String     @unique @map("local_execution_id")
+  localExecutionId String?    @unique @map("local_execution_id")
   agentRunId       String     @map("agent_run_id")
   toolName         String     @map("tool_name")
   parametersJson   Json       @map("parameters_json")
   resultSummary    String?    @map("result_summary")
   rawResultPath    String?    @map("raw_result_path")
+  scopeHash        String?    @map("scope_hash")
+  resultStatus     String?    @map("result_status")
   status           String     @default("RUNNING")
   durationMs       Int?       @map("duration_ms")
   errorMessage     String?    @map("error_message")
@@ -241,10 +245,14 @@ model Finding {
   investigationId     String            @map("investigation_id")
   agentRunId          String?           @map("agent_run_id")
   agentName           String            @default("UNKNOWN") @map("agent_name")
+  findingKey          String?           @map("finding_key")
   title               String
   description         String
   findingType         String            @map("finding_type")
-  confidence          Float
+  confidence          Float?
+  confidenceKind      String?           @map("confidence_kind")
+  confidenceRationale Json?             @map("confidence_rationale")
+  auditStatus         String            @default("PENDING") @map("audit_status")
   iteration           Int               @default(1)
   supersedesFindingId String?           @map("supersedes_finding_id")
   status              String            @default("ACTIVE")
@@ -268,6 +276,10 @@ model Evidence {
   iteration       Int?
   evidenceType    String            @map("evidence_type")
   summary         String
+  status          String?           @map("status")
+  scopeHash       String?           @map("scope_hash")
+  appliedScopeJson Json?            @map("applied_scope_json")
+  reasonCode      String?           @map("reason_code")
   rowCount        Int?              @map("row_count")
   sampleSize      Int?              @map("sample_size")
   queryHash       String?           @map("query_hash")
@@ -291,19 +303,23 @@ model FindingEvidence {
 }
 
 model CriticFeedback {
-  id              String        @id @default(uuid())
-  investigationId String        @map("investigation_id")
-  findingId       String?       @map("finding_id")
-  severity        String
-  message         String
-  requiredAction  String?       @map("required_action")
-  status          String        @default("PENDING")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
-  finding         Finding?      @relation(fields: [findingId], references: [id], onDelete: SetNull)
+  id                  String        @id @default(uuid())
+  investigationId     String        @map("investigation_id")
+  findingId           String?       @map("finding_id")
+  severity            String
+  message             String
+  requiredAction      String?       @map("required_action")
+  requestedAgentsJson Json?         @map("requested_agents_json")
+  requiredActionsJson Json?         @map("required_actions_json")
+  iteration           Int?
+  status              String        @default("PENDING")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  investigation       Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  finding             Finding?      @relation(fields: [findingId], references: [id], onDelete: SetNull)
 
   @@map("critic_feedback")
 }
+
 
 model Recommendation {
   id                       String        @id @default(uuid())

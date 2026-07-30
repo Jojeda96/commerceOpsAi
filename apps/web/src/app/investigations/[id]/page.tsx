@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_URL, fetchApi } from '@/lib/api-client';
+import { InvestigationScopeCard } from '@/components/investigations/InvestigationScopeCard';
+import { FindingConfidenceBadge } from '@/components/investigations/FindingConfidenceBadge';
+import { ModelGovernancePanel } from '@/components/investigations/ModelGovernancePanel';
+import { MlPredictionPanel } from '@/components/investigations/MlPredictionPanel';
+import { ModelExplanationPanel } from '@/components/investigations/ModelExplanationPanel';
 
 export default function InvestigationDetailPage() {
   const params = useParams();
@@ -29,7 +34,14 @@ export default function InvestigationDetailPage() {
     eventSource.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data);
-        setEvents((prev) => [parsed, ...prev]);
+
+        // PR-10: Exactly-once deduplication by eventId
+        setEvents((prev) => {
+          if (prev.some((e) => e.eventId === parsed.eventId)) {
+            return prev;
+          }
+          return [parsed, ...prev].slice(0, 200);
+        });
 
         // Recargar datos en tiempo real al recibir eventos clave o finalización
         if (
@@ -60,9 +72,9 @@ export default function InvestigationDetailPage() {
       case 'COMPLETED':
         return { label: 'COMPLETED', badgeClass: 'badge-completed' };
       case 'COMPLETED_WITH_WARNINGS':
-        return { label: 'COMPLETED (CON OBSERVACIONES)', badgeClass: 'badge-warnings' };
+        return { label: 'COMPLETADO CON OBSERVACIONES', badgeClass: 'badge-warnings' };
       case 'REJECTED':
-        return { label: 'RECHAZADA', badgeClass: 'badge-failed' };
+        return { label: 'ANÁLISIS NO CONCLUYENTE (RECHAZADO POR AUDITORÍA)', badgeClass: 'badge-failed' };
       case 'FAILED':
         return { label: 'FALLIDA', badgeClass: 'badge-failed' };
       case 'EXECUTING':
@@ -73,6 +85,7 @@ export default function InvestigationDetailPage() {
   };
 
   const statusInfo = getStatusBadge(investigation.status);
+  const activeFindings = (investigation.findings || []).filter((f: any) => f.status !== 'SUPERSEDED');
 
   return (
     <>
@@ -108,7 +121,7 @@ export default function InvestigationDetailPage() {
                     fontSize: '0.8rem',
                     cursor: 'pointer',
                   }}
-                  title="¿Qué significa 'COMPLETED (CON OBSERVACIONES)'?"
+                  title="¿Qué significa 'COMPLETADO CON OBSERVACIONES'?"
                 >
                   ℹ️
                 </button>
@@ -133,10 +146,7 @@ export default function InvestigationDetailPage() {
                       ℹ️ ¿Por qué figura "Con Observaciones"?
                     </div>
                     <p style={{ lineHeight: '1.4', marginBottom: '6px' }}>
-                      La investigación se ha <strong>completado con observaciones (Calidad {investigation.finalQualityScore || 85}/100)</strong>.
-                    </p>
-                    <p style={{ lineHeight: '1.4', color: 'var(--color-text-muted)' }}>
-                      El <strong>Evidence Critic Agent</strong> emitió observaciones preventivas para asegurar rigurosidad metodológica y evitar afirmaciones no justificadas.
+                      La investigación entregó un resultado parcial totalmente consistente y respaldado con evidencia técnica.
                     </p>
                   </div>
                 )}
@@ -148,70 +158,26 @@ export default function InvestigationDetailPage() {
               <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-accent-success)' }}>
                 Calidad Global: {investigation.finalQualityScore}/100
               </span>
-              <button
-                onClick={() => setShowQualityInfo(!showQualityInfo)}
-                style={{
-                  background: 'var(--color-bg-card)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-muted)',
-                  borderRadius: '50%',
-                  width: '22px',
-                  height: '22px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                }}
-                title="¿Qué es la Calidad Global?"
-              >
-                ℹ️
-              </button>
-
-              {showQualityInfo && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '32px',
-                    right: 0,
-                    width: '320px',
-                    background: 'var(--color-bg-card)',
-                    border: '1px solid var(--color-accent-primary)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '14px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                    zIndex: 100,
-                    fontSize: '0.8rem',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '6px', fontSize: '0.85rem' }}>
-                    ℹ️ ¿De dónde sale la Calidad Global ({investigation.finalQualityScore}/100)?
-                  </div>
-                  <p style={{ lineHeight: '1.4', marginBottom: '8px' }}>
-                    Es la puntuación emitida por el <strong>Evidence Critic Agent</strong> tras auditar la validez de los hallazgos:
-                  </p>
-                  <ul style={{ paddingLeft: '16px', lineHeight: '1.4', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <li><strong>1. Verificación de Evidencia:</strong> Comprobación de que cada hallazgo cuente con herramientas y datos de respaldo.</li>
-                    <li><strong>2. Consistencia Metodológica:</strong> Evaluación de rigor en las conclusiones emitidas por los agentes especialistas.</li>
-                  </ul>
-                </div>
-              )}
             </div>
           )}
         </div>
+      </div>
+
+      {/* AnalysisScope Info Card */}
+      <div style={{ margin: '16px 0' }}>
+        <InvestigationScopeCard analysisScope={investigation.resolvedScopeJson || investigation.analysisScope} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px' }}>
         {/* Columna Izquierda: Resultados */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
-          {/* 1º PRIMERO: Hallazgos de Agentes Especialistas */}
+          {/* Hallazgos de Agentes Especialistas */}
           <div className="glass-card">
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>🔬 Hallazgos de Agentes Especialistas</h2>
-            {investigation.findings && investigation.findings.length > 0 ? (
+            <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>🔬 Hallazgos Activos de Agentes Especialistas ({activeFindings.length})</h2>
+            {activeFindings.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {investigation.findings.map((finding: any) => (
+                {activeFindings.map((finding: any) => (
                   <div
                     key={finding.id}
                     style={{
@@ -225,45 +191,35 @@ export default function InvestigationDetailPage() {
                       <span style={{ fontSize: '0.8rem', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
                         🤖 {finding.agentName || finding.agent}
                       </span>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-accent-success)' }}>
-                          Confianza: {Math.round((finding.confidence || 0.9) * 100)}%
-                        </span>
-                      </div>
+                      <FindingConfidenceBadge
+                        confidence={finding.confidence}
+                        operationalStatus={finding.operationalStatus}
+                        auditStatus={finding.auditStatus || (investigation.status === 'REJECTED' ? 'REJECTED' : 'APPROVED')}
+                        findingType={finding.findingType}
+                      />
                     </div>
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '6px' }}>{finding.title}</h3>
                     <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)', marginTop: '8px' }}>
                       {finding.description}
                     </p>
 
-                    {/* Explicación del Origen del Porcentaje de Confianza */}
-                    <div
-                      style={{
-                        marginTop: '12px',
-                        padding: '10px 12px',
-                        background: 'var(--color-bg-primary)',
-                        borderRadius: 'var(--radius-sm)',
-                        borderLeft: '3px solid var(--color-accent-primary)',
-                        fontSize: '0.8rem',
-                        color: 'var(--color-text-muted)',
-                      }}
-                    >
-                      <span style={{ fontWeight: 600, color: 'var(--color-text-main)' }}>
-                        ℹ️ ¿De dónde sale esta confianza del {Math.round((finding.confidence || 0.9) * 100)}%?
-                      </span>
-                      <p style={{ marginTop: '4px', lineHeight: '1.4' }}>
-                        Nivel de confianza reportado por el agente especialista y auditado por el <strong>Evidence Critic</strong> mediante reglas deterministas de representatividad muestral y consistencia entre hallazgos y evidencias.
-                      </p>
-                    </div>
+                    {/* Subpaneles para hallazgos Data Science */}
+                    {(finding.agent === 'DATA_SCIENCE' || finding.agentName === 'DATA_SCIENCE') && (
+                      <>
+                        <ModelGovernancePanel governance={finding.modelGovernance} />
+                        <MlPredictionPanel modelPredictions={investigation.modelPredictions} />
+                        <ModelExplanationPanel modelPredictions={investigation.modelPredictions} />
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
-              <p style={{ color: 'var(--color-text-muted)' }}>No hay hallazgos disponibles aún.</p>
+              <p style={{ color: 'var(--color-text-muted)' }}>No hay hallazgos activos disponibles.</p>
             )}
           </div>
 
-          {/* 2º SEGUNDO: Recomendaciones Estratégicas Priorizadas */}
+          {/* Recomendaciones Estratégicas Priorizadas */}
           {investigation.recommendations && investigation.recommendations.length > 0 && (
             <div className="glass-card">
               <h2 style={{ fontSize: '1.2rem', marginBottom: '16px', color: 'var(--color-accent-success)' }}>
@@ -287,49 +243,9 @@ export default function InvestigationDetailPage() {
                     <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)', marginTop: '8px' }}>
                       {rec.description}
                     </p>
-                    {rec.expectedImpact && (
-                      <p style={{ fontSize: '0.85rem', color: 'var(--color-accent-primary)', marginTop: '6px' }}>
-                        Impacto Esperado: {rec.expectedImpact}
-                      </p>
-                    )}
                   </div>
                 ))}
               </div>
-
-              {/* Explicación Adaptativa — Condicional según agentes invocados */}
-              {(() => {
-                const agentsInvolved = (investigation.findings || []).map((f: any) => f.agentName || f.agent);
-                const usedDS = agentsInvolved.includes('DATA_SCIENCE');
-
-                return (
-                  <div
-                    style={{
-                      marginTop: '14px',
-                      padding: '10px 12px',
-                      background: 'var(--color-bg-primary)',
-                      borderRadius: 'var(--radius-sm)',
-                      borderLeft: '3px solid var(--color-accent-success)',
-                      fontSize: '0.8rem',
-                      color: 'var(--color-text-muted)',
-                    }}
-                  >
-                    <span style={{ fontWeight: 600, color: 'var(--color-text-main)' }}>
-                      ℹ️ ¿Cómo se proyecta el Impacto Esperado de una Recomendación?
-                    </span>
-                    <p style={{ marginTop: '4px', lineHeight: '1.4' }}>
-                      {usedDS ? (
-                        <>
-                          El <strong>Business Strategy Agent</strong> combina las predicciones probabilísticas del modelo <strong>XGBoost</strong> (Data Science Agent) con los datos de PostgreSQL. Aplica un análisis de escenarios <em>"What-If"</em> para proyectar cuántos pedidos salen de la zona de riesgo al corregir la variable crítica identificada por el modelo ML.
-                        </>
-                      ) : (
-                        <>
-                          El <strong>Business Strategy Agent</strong> aplica un análisis de escenarios <em>"What-If"</em> sobre los datos reales obtenidos por los agentes especialistas ({agentsInvolved.join(', ')}). Proyecta el impacto basándose en la muestra cuantitativa de PostgreSQL y estándares operacionales del mercado de e-commerce.
-                        </>
-                      )}
-                    </p>
-                  </div>
-                );
-              })()}
             </div>
           )}
 
@@ -346,9 +262,9 @@ export default function InvestigationDetailPage() {
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '500px', overflowY: 'auto' }}>
-              {events.map((ev, i) => (
+              {events.map((ev) => (
                 <div
-                  key={i}
+                  key={ev.eventId || `${ev.type}-${ev.timestamp}`}
                   style={{
                     background: 'var(--color-bg-primary)',
                     padding: '8px 12px',

@@ -86,41 +86,51 @@ export class InvestigationOrchestratorService {
         const tracesToPersist = finalState.agentRunTraces ?? [];
 
         for (const trace of tracesToPersist) {
-          const agentRun = await tx.agentRun.upsert({
+          const existingRun = await tx.agentRun.findFirst({
             where: { localRunId: trace.localRunId },
-            create: {
-              localRunId: trace.localRunId,
-              investigationId,
-              agentName: trace.agentName,
-              iteration: trace.iteration || 1,
-              model: trace.model || undefined,
-              executionKind: trace.model ? 'LLM' : 'DETERMINISTIC',
-              promptVersion: trace.promptVersion || 'v1.0',
-              status: trace.status || 'COMPLETED',
-              inputTokens: trace.inputTokens,
-              outputTokens: trace.outputTokens,
-              estimatedCost: trace.estimatedCostUsd,
-              durationMs: trace.durationMs,
-              errorMessage: trace.errorMessage,
-              startedAt: trace.startedAt
-                ? new Date(trace.startedAt)
-                : new Date(),
-              completedAt: trace.completedAt
-                ? new Date(trace.completedAt)
-                : new Date(),
-            },
-            update: {
-              status: trace.status || 'COMPLETED',
-              completedAt: trace.completedAt
-                ? new Date(trace.completedAt)
-                : new Date(),
-              durationMs: trace.durationMs,
-              inputTokens: trace.inputTokens,
-              outputTokens: trace.outputTokens,
-              estimatedCost: trace.estimatedCostUsd,
-              errorMessage: trace.errorMessage,
-            },
           });
+
+          let agentRun;
+          if (existingRun) {
+            agentRun = await tx.agentRun.update({
+              where: { id: existingRun.id },
+              data: {
+                status: trace.status || 'COMPLETED',
+                completedAt: trace.completedAt
+                  ? new Date(trace.completedAt)
+                  : new Date(),
+                durationMs: trace.durationMs,
+                inputTokens: trace.inputTokens,
+                outputTokens: trace.outputTokens,
+                estimatedCost: trace.estimatedCostUsd,
+                errorMessage: trace.errorMessage,
+              },
+            });
+          } else {
+            agentRun = await tx.agentRun.create({
+              data: {
+                localRunId: trace.localRunId,
+                investigationId,
+                agentName: trace.agentName,
+                iteration: trace.iteration || 1,
+                model: trace.model || undefined,
+                executionKind: trace.model ? 'LLM' : 'DETERMINISTIC',
+                promptVersion: trace.promptVersion || 'v1.0',
+                status: trace.status || 'COMPLETED',
+                inputTokens: trace.inputTokens,
+                outputTokens: trace.outputTokens,
+                estimatedCost: trace.estimatedCostUsd,
+                durationMs: trace.durationMs,
+                errorMessage: trace.errorMessage,
+                startedAt: trace.startedAt
+                  ? new Date(trace.startedAt)
+                  : new Date(),
+                completedAt: trace.completedAt
+                  ? new Date(trace.completedAt)
+                  : new Date(),
+              },
+            });
+          }
           agentRunDbMap.set(trace.localRunId, agentRun.id);
         }
 
@@ -128,7 +138,7 @@ export class InvestigationOrchestratorService {
         for (const toolTrace of finalState.toolExecutionTraces || []) {
           let parentAgentRunId = agentRunDbMap.get(toolTrace.localAgentRunId);
           if (!parentAgentRunId) {
-            const dbRun = await tx.agentRun.findUnique({
+            const dbRun = await tx.agentRun.findFirst({
               where: { localRunId: toolTrace.localAgentRunId },
             });
             if (dbRun) {
@@ -143,40 +153,50 @@ export class InvestigationOrchestratorService {
             continue;
           }
 
-          const toolExec = await tx.toolExecution.upsert({
+          const existingToolExec = await tx.toolExecution.findFirst({
             where: { localExecutionId: toolTrace.localExecutionId },
-            create: {
-              localExecutionId: toolTrace.localExecutionId,
-              agentRunId: parentAgentRunId,
-              toolName: toolTrace.toolName,
-              parametersJson: (toolTrace.parameters as any) || {},
-              resultSummary:
-                typeof toolTrace.resultSummary === 'string'
-                  ? toolTrace.resultSummary.substring(0, 1000)
-                  : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
-              status: toolTrace.status || 'COMPLETED',
-              durationMs: toolTrace.durationMs,
-              errorMessage: toolTrace.errorMessage,
-              startedAt: toolTrace.startedAt
-                ? new Date(toolTrace.startedAt)
-                : new Date(),
-              completedAt: toolTrace.completedAt
-                ? new Date(toolTrace.completedAt)
-                : new Date(),
-            },
-            update: {
-              status: toolTrace.status || 'COMPLETED',
-              completedAt: toolTrace.completedAt
-                ? new Date(toolTrace.completedAt)
-                : new Date(),
-              durationMs: toolTrace.durationMs,
-              resultSummary:
-                typeof toolTrace.resultSummary === 'string'
-                  ? toolTrace.resultSummary.substring(0, 1000)
-                  : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
-              errorMessage: toolTrace.errorMessage,
-            },
           });
+
+          let toolExec;
+          if (existingToolExec) {
+            toolExec = await tx.toolExecution.update({
+              where: { id: existingToolExec.id },
+              data: {
+                status: toolTrace.status || 'COMPLETED',
+                durationMs: toolTrace.durationMs,
+                errorMessage: toolTrace.errorMessage,
+                completedAt: toolTrace.completedAt
+                  ? new Date(toolTrace.completedAt)
+                  : new Date(),
+                resultSummary:
+                  typeof toolTrace.resultSummary === 'string'
+                    ? toolTrace.resultSummary.substring(0, 1000)
+                    : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+              },
+            });
+          } else {
+            toolExec = await tx.toolExecution.create({
+              data: {
+                localExecutionId: toolTrace.localExecutionId,
+                agentRunId: parentAgentRunId,
+                toolName: toolTrace.toolName,
+                parametersJson: (toolTrace.parameters as any) || {},
+                resultSummary:
+                  typeof toolTrace.resultSummary === 'string'
+                    ? toolTrace.resultSummary.substring(0, 1000)
+                    : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+                status: toolTrace.status || 'COMPLETED',
+                durationMs: toolTrace.durationMs,
+                errorMessage: toolTrace.errorMessage,
+                startedAt: toolTrace.startedAt
+                  ? new Date(toolTrace.startedAt)
+                  : new Date(),
+                completedAt: toolTrace.completedAt
+                  ? new Date(toolTrace.completedAt)
+                  : new Date(),
+              },
+            });
+          }
           toolExecutionDbMap.set(toolTrace.localExecutionId, toolExec.id);
         }
 
@@ -200,11 +220,15 @@ export class InvestigationOrchestratorService {
               investigationId,
               agentRunId: agentRunId || null,
               agentName: finding.agent || finding.agentName || 'UNKNOWN',
+              findingKey: (finding as any).findingKey || `${finding.agent || (finding as any).agentName}:${finding.title}`,
               title: finding.title,
               description: finding.description,
               findingType: finding.findingType || 'INSIGHT',
-              confidence: finding.confidence || 0.85,
-              iteration: finding.iteration || 1,
+              confidence: finding.confidence !== undefined ? finding.confidence : null,
+              confidenceKind: (finding as any).confidenceDetails?.kind || 'EVIDENCE_QUALITY',
+              confidenceRationale: (finding as any).confidenceDetails?.rationaleCodes || undefined,
+              auditStatus: (finding as any).auditStatus || (finalState.criticDecision === 'REJECTED' ? 'REJECTED' : 'APPROVED'),
+              iteration: finding.iteration || finalState.iteration || 1,
               supersedesFindingId: finding.supersedesFindingId,
               status: finding.status || 'ACTIVE',
               operationalStatus: finding.operationalStatus || 'ACTIONABLE',
@@ -232,12 +256,16 @@ export class InvestigationOrchestratorService {
                   id: ev.id,
                   toolExecutionId: toolExecDbId,
                   agentName: ev.agentName || finding.agent,
-                  iteration: ev.iteration || 1,
+                  iteration: ev.iteration || finalState.iteration || 1,
                   evidenceType: ev.toolName || 'tool_result',
                   summary:
                     typeof ev.resultSummary === 'string'
                       ? ev.resultSummary
                       : JSON.stringify(ev.resultSummary),
+                  status: (ev as any).status || 'AVAILABLE',
+                  scopeHash: (ev as any).scopeHash || (finalState.analysisScope?.scopeHash),
+                  appliedScopeJson: (ev as any).appliedScope ? ((ev as any).appliedScope as any) : (finalState.analysisScope as any),
+                  reasonCode: (ev as any).reasonCode,
                   rawReference: JSON.stringify(ev.parameters || {}),
                   metricsJson: ev.metrics ? (ev.metrics as any) : undefined,
                 },
@@ -321,6 +349,7 @@ export class InvestigationOrchestratorService {
           where: { id: investigationId },
           data: {
             status: finalStatus,
+            resolvedScopeJson: (finalState.analysisScope as any) || undefined,
             completedAt: new Date(),
             finalQualityScore:
               finalState.criticScore ||

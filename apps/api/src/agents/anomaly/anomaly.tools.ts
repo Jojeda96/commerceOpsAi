@@ -6,10 +6,14 @@ export function createAnomalyTools(prisma: PrismaService) {
   const detectMetricAnomalies = tool(
     async ({
       metric = 'late_delivery_rate',
-      threshold = 2.5,
+      threshold = 3.0,
       dateFrom,
       dateTo,
-      category,
+      categories,
+      sellerStates,
+      customerStates,
+      interstateOnly = false,
+      scopeHash = 'unspecified',
     }) => {
       const where: any = { orderStatus: 'delivered' };
 
@@ -19,14 +23,30 @@ export function createAnomalyTools(prisma: PrismaService) {
         if (dateTo) where.orderPurchaseTimestamp.lte = new Date(dateTo);
       }
 
-      if (category) {
+      if (categories && categories.length > 0) {
         where.items = {
           some: {
             product: {
-              productCategoryName: { contains: category, mode: 'insensitive' },
+              productCategoryName: { in: categories },
             },
           },
         };
+      }
+
+      if (interstateOnly || (sellerStates && sellerStates.length > 0) || (customerStates && customerStates.length > 0)) {
+        const itemWhere: any = {};
+        if (sellerStates && sellerStates.length > 0) {
+          itemWhere.seller = { sellerState: { in: sellerStates } };
+        }
+        where.items = {
+          some: {
+            ...where.items?.some,
+            ...itemWhere,
+          },
+        };
+        if (customerStates && customerStates.length > 0) {
+          where.customer = { customerState: { in: customerStates } };
+        }
       }
 
       const orders = await prisma.olistOrder.findMany({
@@ -35,12 +55,51 @@ export function createAnomalyTools(prisma: PrismaService) {
           orderPurchaseTimestamp: true,
           orderDeliveredCustomerDate: true,
           orderEstimatedDeliveryDate: true,
+          customer: { select: { customerState: true } },
+          items: {
+            select: {
+              seller: { select: { sellerState: true } },
+            },
+            take: 1,
+          },
         },
       });
 
+      // If interstateOnly, filter strictly in memory if needed
+      const filteredOrders = interstateOnly
+        ? orders.filter((o) => {
+            const sellerState = o.items[0]?.seller?.sellerState;
+            const custState = o.customer?.customerState;
+            return sellerState && custState && sellerState !== custState;
+          })
+        : orders;
+
+      const totalSampleSize = filteredOrders.length;
+      const appliedScope = {
+        dateFrom: dateFrom || null,
+        dateTo: dateTo || null,
+        categories: categories || null,
+        sellerStates: sellerStates || null,
+        customerStates: customerStates || null,
+        interstateOnly: Boolean(interstateOnly),
+        scopeHash,
+      };
+
+      if (totalSampleSize === 0) {
+        return JSON.stringify({
+          status: 'NO_DATA',
+          reasonCode: 'NO_DELIVERED_ORDERS_IN_SCOPE',
+          appliedScope,
+          scopeHash,
+          rowCount: 0,
+          sampleSize: 0,
+          data: null,
+        });
+      }
+
       const monthlyData: Record<string, { total: number; late: number }> = {};
 
-      for (const o of orders) {
+      for (const o of filteredOrders) {
         const month = o.orderPurchaseTimestamp.toISOString().slice(0, 7); // YYYY-MM
         if (!monthlyData[month]) monthlyData[month] = { total: 0, late: 0 };
         monthlyData[month].total++;
@@ -65,21 +124,18 @@ export function createAnomalyTools(prisma: PrismaService) {
 
       if (monthlyRates.length < 3) {
         return JSON.stringify({
-          metric,
-          appliedFilters: {
-            category: category || 'ALL',
-            dateFrom: dateFrom || null,
-            dateTo: dateTo || null,
-          },
-          error:
-            'Datos insuficientes para análisis de series temporales con los filtros aplicados',
+          status: 'INSUFFICIENT_DATA',
+          reasonCode: 'MINIMUM_THREE_MONTHS_REQUIRED',
+          appliedScope,
+          scopeHash,
+          rowCount: totalSampleSize,
+          sampleSize: totalSampleSize,
           monthsAvailable: monthlyRates.length,
           timeSeries: monthlyRates,
         });
       }
 
       const rates = monthlyRates.map((m) => m.rate);
-
       const sorted = [...rates].sort((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
       const median =
@@ -109,33 +165,38 @@ export function createAnomalyTools(prisma: PrismaService) {
       const anomaliesDetected = timeSeriesWithZScore.filter((a) => a.isAnomaly);
 
       return JSON.stringify({
+        status: 'AVAILABLE',
         metric,
-        appliedFilters: {
-          category: category || 'ALL',
-          dateFrom: dateFrom || null,
-          dateTo: dateTo || null,
-        },
         method: 'ROBUST_Z_SCORE',
-        window: 'monthly',
-        totalMonths: monthlyRates.length,
-        median: Math.round(median * 10) / 10,
-        mad: Math.round(mad * 100) / 100,
         threshold,
-        anomaliesDetected: anomaliesDetected.length,
-        anomalies: anomaliesDetected,
-        timeSeries: timeSeriesWithZScore,
+        appliedScope,
+        scopeHash,
+        rowCount: totalSampleSize,
+        sampleSize: totalSampleSize,
+        data: {
+          totalMonths: monthlyRates.length,
+          median: Math.round(median * 10) / 10,
+          mad: Math.round(mad * 100) / 100,
+          anomaliesDetected: anomaliesDetected.length,
+          anomalies: anomaliesDetected,
+          timeSeries: timeSeriesWithZScore,
+        },
       });
     },
     {
       name: 'detect_metric_anomalies',
       description:
-        'Detecta desviaciones anómalas en series temporales con soporte para filtros de categoría, rango de fechas y métrica configurable.',
+        'Detecta desviaciones anómalas en series temporales mediante Z-Score robusto en el universo del AnalysisScope.',
       schema: z.object({
-        metric: z.string().default('late_delivery_rate'),
-        threshold: z.number().default(2.5),
+        metric: z.enum(['late_delivery_rate']).default('late_delivery_rate'),
+        threshold: z.number().positive().default(3.0),
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),
-        category: z.string().optional(),
+        categories: z.array(z.string()).optional(),
+        sellerStates: z.array(z.string()).optional(),
+        customerStates: z.array(z.string()).optional(),
+        interstateOnly: z.boolean().default(false),
+        scopeHash: z.string(),
       }),
     },
   );

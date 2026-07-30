@@ -3,7 +3,31 @@
 > Generado automáticamente desde `data/governance/model_defense_qa.json` el 2026-07-30.
 > Las respuestas con métricas actuales se actualizan al regenerar este documento.
 
-**Total:** 40 preguntas en 11 categorías.
+**Total:** 45 preguntas en 12 categorías.
+
+---
+
+## Alcance consistente, respuestas parciales y trazabilidad (V4.1)
+
+### ¿Qué diferencia existe entre tasa histórica y probabilidad predictiva?
+
+La tasa histórica es la frecuencia observada en un grupo de pedidos pasados. La probabilidad predictiva es el output de un modelo supervisado para un escenario con features específicas al prediction moment. La primera puede servir como contexto descriptivo, pero no debe presentarse jamás como una inferencia individual o futura.
+
+### ¿Por qué no se muestran factores SHAP cuando no hay predicción?
+
+SHAP local explica una salida concreta del modelo ($f(x)$). Sin escenario inferible y sin score válido no existe una predicción que atribuir; generar SHAP en ese contexto sería metodológicamente incorrecto.
+
+### ¿Por qué puede aprobarse con advertencias una respuesta sin predicción?
+
+Porque el sistema puede responder de manera válida el contexto histórico y la gobernanza, y documentar con evidencia técnica por qué la inferencia no está disponible. La indisponibilidad explícita y trazable no equivale a una alucinación ni a ausencia de rigor.
+
+### ¿Cómo se evita que dos agentes analicen periodos distintos?
+
+Cada ronda recibe un `AnalysisScope` inmutable con un hash determinista SHA-256. Todas las `ToolExecution` y `Evidence` registran ese hash. El Evidence Critic rechaza determinísticamente findings accionables que utilicen scopes distintos en la misma iteración.
+
+### ¿Qué significa la confianza mostrada en el frontend?
+
+La interfaz diferencia calidad de evidencia, confiabilidad del modelo y confianza declarada. Un resultado no disponible no recibe confianza predictiva (muestra NO APLICA), y una cifra declarada por un agente no se presenta como auditada si el Critic rechazó el finding.
 
 ---
 

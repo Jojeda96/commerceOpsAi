@@ -37,7 +37,7 @@ export class InvestigationsService {
       },
     });
 
-    this.streaming.emit(investigation.id, 'investigation.started', {
+    this.streaming.emit(investigation.id, 'investigation.queued', {
       investigationId: investigation.id,
       question: investigation.question,
     });

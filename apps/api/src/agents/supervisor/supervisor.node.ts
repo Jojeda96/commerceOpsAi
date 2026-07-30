@@ -5,9 +5,13 @@ import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { runAgentWithTrace } from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
+import { resolveAnalysisScope } from '../scope/analysis-scope.resolver';
+import { classifyCapabilities } from './capability-classifier';
+import { mapCapabilitiesToAgents } from './capability-agent-map';
 import { z } from 'zod';
 
 const supervisorOutputSchema = z.object({
+  requiredCapabilities: z.array(z.string()).optional(),
   selectedAgents: z.array(
     z.enum([
       'SALES',
@@ -17,16 +21,7 @@ const supervisorOutputSchema = z.object({
       'ANOMALY',
       'DATA_SCIENCE',
     ]),
-  ),
-  resolvedFilters: z
-    .object({
-      dateFrom: z.string().optional(),
-      dateTo: z.string().optional(),
-      categories: z.array(z.string()).optional(),
-      sellerIds: z.array(z.string()).optional(),
-      customerStates: z.array(z.string()).optional(),
-    })
-    .optional(),
+  ).optional(),
   plan: z.array(
     z.object({
       agentName: z.string(),
@@ -46,6 +41,7 @@ export function createSupervisorNode(
       filters,
       criticFeedback,
       iteration,
+      requestedAgents,
     } = state;
     const currentIteration = iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -56,15 +52,22 @@ export function createSupervisorNode(
       iteration: currentIteration,
     });
 
-    const isReiteration =
-      currentIteration > 1 && criticFeedback && criticFeedback.length > 0;
-    const latestFeedback = isReiteration
-      ? criticFeedback[criticFeedback.length - 1]
-      : null;
+    const isReiteration = currentIteration > 1;
+
+    // 1. Resolve canonical AnalysisScope deterministically
+    const analysisScope = resolveAnalysisScope({
+      question: userQuestion,
+      dtoFilters: filters,
+    });
+
+    // 2. Classify capabilities and agents deterministically
+    const deterministicCapabilities = classifyCapabilities(userQuestion);
+    const deterministicAgents = mapCapabilitiesToAgents(deterministicCapabilities);
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SUPERVISOR',
       iteration: currentIteration,
+      investigationId,
       modelName,
       execute: async () => {
         const model = new ChatOpenAI({
@@ -74,51 +77,37 @@ export function createSupervisorNode(
         });
 
         const prompt = `Eres el Operations Supervisor de CommerceOps AI (Iteración ${currentIteration}).
-Tu tarea es analizar la pregunta del usuario, seleccionar los agentes especialistas necesarios y definir el plan operacional.
+Tu tarea es analizar la pregunta del usuario, estructurar los objetivos del plan y confirmar los agentes seleccionados.
 
 Pregunta del usuario: "${userQuestion}"
 
 ${
-  isReiteration
-    ? `⚠️ ATENCIÓN - FEEDBACK DE ITERACIÓN PREVIA DEL EVIDENCE CRITIC:
-${latestFeedback?.message}
-Acción requerida: ${latestFeedback?.requiredAction || 'Revisar y profundizar el análisis'}`
+  isReiteration && criticFeedback && criticFeedback.length > 0
+    ? `⚠️ FEEDBACK DE ITERACIÓN PREVIA DEL EVIDENCE CRITIC:
+${criticFeedback[criticFeedback.length - 1].message}`
     : ''
 }
 
-Filtros previos existentes:
-${JSON.stringify(filters || {}, null, 2)}
+Scope de análisis inmutable asignado (Hash: ${analysisScope.scopeHash}):
+${JSON.stringify(analysisScope, null, 2)}
 
-Agentes especialistas disponibles:
-1. SALES: Ventas, facturación, volumen de pedidos, ticket promedio, métodos de pago y AOV.
-2. LOGISTICS: Entregas a tiempo, tasa de atrasos (lateRate DESC), tiempos de transporte, fletes y SLAs.
-3. CUSTOMER_EXPERIENCE: Calificaciones (1-5 estrellas), análisis NLP de reseñas de clientes, filtrado por fecha/categoría.
-4. SELLER_PERFORMANCE: Ficha de vendedor, ranking por GMV, scorecards y comparaciones entre pares.
-5. ANOMALY: Detección de comportamientos inusuales, outliers de flete y picos repentinos.
-6. DATA_SCIENCE: Modelos predictivos de riesgo de atraso en escenarios representativos reales.
+Agentes seleccionados determinísticamente:
+${deterministicAgents.join(', ')}
 
-Responde estrictamente en formato JSON:
+Responde estrictamente en formato JSON sin inventar campos de filtros:
 {
-  "selectedAgents": ["LOGISTICS", "CUSTOMER_EXPERIENCE"],
-  "resolvedFilters": {
-    "dateFrom": "2018-02-01",
-    "dateTo": "2018-02-28"
-  },
+  "requiredCapabilities": ${JSON.stringify(deterministicCapabilities)},
+  "selectedAgents": ${JSON.stringify(deterministicAgents)},
   "plan": [
     {
-      "agentName": "LOGISTICS",
-      "objective": "Analizar la tasa de atrasos en entregas para febrero de 2018."
+      "agentName": "${deterministicAgents[0] || 'LOGISTICS'}",
+      "objective": "Analizar métricas logísticas y contexto para el scope asignado."
     }
   ]
 }`;
 
-        let selectedAgents: AgentName[] = [
-          'SALES',
-          'LOGISTICS',
-          'CUSTOMER_EXPERIENCE',
-        ];
+        let selectedAgents: AgentName[] = deterministicAgents;
         let planTasks: any[] = [];
-        let extractedFilters: any = {};
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
 
@@ -137,37 +126,32 @@ Responde estrictamente en formato JSON:
             const parsed = JSON.parse(jsonMatch[0]);
             const validation = supervisorOutputSchema.safeParse(parsed);
             if (validation.success) {
-              if (validation.data.selectedAgents.length > 0) {
-                selectedAgents = validation.data.selectedAgents;
-              }
               if (validation.data.plan) {
                 planTasks = validation.data.plan;
-              }
-              if (validation.data.resolvedFilters) {
-                extractedFilters = validation.data.resolvedFilters;
               }
             }
           }
         } catch (err) {
           console.warn(
-            '[SupervisorNode] Error parsing LLM response, using default plan:',
+            '[SupervisorNode] LLM call failed or omitted, using deterministic agent plan:',
             err,
           );
         }
 
-        // Reiteración dirigida estricta: en reiteración se ejecutan ÚNICAMENTE los agentes requeridos por el Critic
-        if (
-          state.iteration > 1 &&
-          state.requestedAgents &&
-          state.requestedAgents.length > 0
-        ) {
-          selectedAgents = state.requestedAgents;
+        // PR-03: Reiteración dirigida estricta: en reiteración se ejecutan ÚNICAMENTE los agentes requeridos
+        if (isReiteration && requestedAgents && requestedAgents.length > 0) {
+          selectedAgents = requestedAgents;
+        } else {
+          // En primera ronda se forzan los agentes clasificados determinísticamente
+          selectedAgents = deterministicAgents;
         }
 
-        const mergedFilters = {
-          ...filters,
-          ...extractedFilters,
-        };
+        if (planTasks.length === 0) {
+          planTasks = selectedAgents.map((ag) => ({
+            agentName: ag,
+            objective: `Ejecutar análisis especializado de ${ag} para el scope asignado.`,
+          }));
+        }
 
         const tasks = planTasks.map((t, idx) => ({
           id: `task-${idx + 1}`,
@@ -179,7 +163,8 @@ Responde estrictamente en formato JSON:
 
         streaming.emit(investigationId, 'plan.created', {
           selectedAgents,
-          resolvedFilters: mergedFilters,
+          analysisScope,
+          scopeHash: analysisScope.scopeHash,
           tasksCount: tasks.length,
         });
 
@@ -192,7 +177,7 @@ Responde estrictamente en formato JSON:
           result: {
             selectedAgents,
             tasks,
-            mergedFilters,
+            analysisScope,
           },
           inputTokens,
           outputTokens,
@@ -203,7 +188,14 @@ Responde estrictamente en formato JSON:
     return {
       activeAgents: result.selectedAgents,
       investigationPlan: result.tasks,
-      filters: result.mergedFilters,
+      analysisScope: result.analysisScope,
+      filters: {
+        dateFrom: result.analysisScope.dateFrom,
+        dateTo: result.analysisScope.dateTo,
+        categories: result.analysisScope.categories,
+        sellerIds: result.analysisScope.sellerIds,
+        customerStates: result.analysisScope.customerStates,
+      },
       agentRunTraces: [agentTrace],
     };
   };

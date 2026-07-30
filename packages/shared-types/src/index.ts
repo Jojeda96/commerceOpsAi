@@ -35,6 +35,43 @@ export interface FilterState {
   customerStates?: string[];
 }
 
+export type ScopeSource =
+  | 'REQUEST_DTO'
+  | 'DETERMINISTIC_QUESTION_PARSER'
+  | 'CRITIC_PATCH'
+  | 'UNSPECIFIED';
+
+export interface ScopeProvenanceEntry {
+  field:
+    | 'dateFrom'
+    | 'dateTo'
+    | 'categories'
+    | 'sellerIds'
+    | 'sellerStates'
+    | 'customerStates'
+    | 'interstateOnly';
+  source: ScopeSource;
+  rawText?: string;
+}
+
+export interface AnalysisScope {
+  dateFrom?: string;
+  dateTo?: string;
+  categories?: string[];
+  sellerIds?: string[];
+  sellerStates?: string[];
+  customerStates?: string[];
+  interstateOnly: boolean;
+  provenance: ScopeProvenanceEntry[];
+  scopeHash: string;
+}
+
+export interface ScopeDatasetCoverage {
+  minDate: string;
+  maxDate: string;
+  isOutsideCoverage: boolean;
+}
+
 export interface EvidenceMetric {
   key: string;
   value: number;
@@ -103,7 +140,8 @@ export interface ToolExecutionTrace {
 export type FindingOperationalStatus =
   | 'ACTIONABLE'
   | 'EXPERIMENTAL_CONTEXT'
-  | 'BLOCKED';
+  | 'BLOCKED'
+  | 'UNAVAILABLE';
 
 export interface ModelGovernanceMetadata {
   modelName: string;
@@ -222,6 +260,7 @@ export interface CommerceOpsState {
 
 export type InvestigationEventType =
   | 'investigation.started'
+  | 'investigation.queued'
   | 'plan.created'
   | 'agent.started'
   | 'agent.completed'
@@ -236,8 +275,11 @@ export type InvestigationEventType =
   | 'investigation.failed';
 
 export interface InvestigationEvent {
+  eventId?: string;
+  sequence?: number;
   type: InvestigationEventType;
   investigationId: string;
+  iteration?: number;
   timestamp: string;
   payload: Record<string, unknown>;
 }

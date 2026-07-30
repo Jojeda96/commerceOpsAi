@@ -46,6 +46,7 @@ export function createCriticNode(streaming: StreamingService) {
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'CRITIC',
       iteration: currentIteration,
+      investigationId,
       modelName,
       execute: async () => {
         const model = new ChatOpenAI({
