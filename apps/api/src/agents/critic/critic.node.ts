@@ -2,7 +2,10 @@ import { ChatOpenAI } from '@langchain/openai';
 import { CriticDecision } from '@commerce-ops/shared-types';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
-import { performDeterministicAudit, enforceDeterministicDecision } from './deterministic-audit';
+import {
+  performDeterministicAudit,
+  enforceDeterministicDecision,
+} from './deterministic-audit';
 
 export function createCriticNode(streaming: StreamingService) {
   return async (state: CommerceOpsStateType) => {
@@ -44,11 +47,13 @@ Responde strictly en formato JSON con la siguiente estructura:
   "feedback": "Los hallazgos de ventas y logística cuentan con evidencias numéricas válidas."
 }`;
 
-    let rawDecision: CriticDecision = audit.criticalErrors.length > 0 ? 'REQUIRES_MORE_ANALYSIS' : 'APPROVED';
+    let rawDecision: CriticDecision =
+      audit.criticalErrors.length > 0 ? 'REQUIRES_MORE_ANALYSIS' : 'APPROVED';
     let score = audit.criticalErrors.length > 0 ? 55 : 85;
-    let feedback = audit.criticalErrors.length > 0
-      ? `Alertas deterministas críticas detectadas: ${audit.criticalErrors.join(' | ')}`
-      : 'Evidencia preliminarmente verificada.';
+    let feedback =
+      audit.criticalErrors.length > 0
+        ? `Alertas deterministas críticas detectadas: ${audit.criticalErrors.join(' | ')}`
+        : 'Evidencia preliminarmente verificada.';
 
     try {
       const response = await model.invoke(prompt);
@@ -67,7 +72,8 @@ Responde strictly en formato JSON con la siguiente estructura:
       console.warn('[CriticNode] Error executing LLM call:', err);
       rawDecision = 'REQUIRES_MORE_ANALYSIS';
       score = 50;
-      feedback = 'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
+      feedback =
+        'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
     }
 
     // Enforcement determinista incorruptible
@@ -82,11 +88,16 @@ Responde strictly en formato JSON con la siguiente estructura:
       investigationId,
       severity: (() => {
         if (finalDecision === 'APPROVED') return 'LOW' as const;
-        if (finalDecision === 'APPROVED_WITH_WARNINGS') return 'MEDIUM' as const;
+        if (finalDecision === 'APPROVED_WITH_WARNINGS')
+          return 'MEDIUM' as const;
         return 'HIGH' as const; // REQUIRES_MORE_ANALYSIS o REJECTED
       })(),
       message: feedback,
-      status: (finalDecision === 'APPROVED' || finalDecision === 'APPROVED_WITH_WARNINGS' ? 'RESOLVED' : 'PENDING') as 'RESOLVED' | 'PENDING',
+      status:
+        finalDecision === 'APPROVED' ||
+        finalDecision === 'APPROVED_WITH_WARNINGS'
+          ? ('RESOLVED' as const)
+          : ('PENDING' as const),
       createdAt: new Date().toISOString(),
     };
 

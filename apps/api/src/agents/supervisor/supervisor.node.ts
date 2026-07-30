@@ -15,20 +15,22 @@ const supervisorOutputSchema = z.object({
       'SELLER_PERFORMANCE',
       'ANOMALY',
       'DATA_SCIENCE',
-    ])
+    ]),
   ),
-  resolvedFilters: z.object({
-    dateFrom: z.string().optional(),
-    dateTo: z.string().optional(),
-    categories: z.array(z.string()).optional(),
-    sellerIds: z.array(z.string()).optional(),
-    customerStates: z.array(z.string()).optional(),
-  }).optional(),
+  resolvedFilters: z
+    .object({
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+      categories: z.array(z.string()).optional(),
+      sellerIds: z.array(z.string()).optional(),
+      customerStates: z.array(z.string()).optional(),
+    })
+    .optional(),
   plan: z.array(
     z.object({
       agentName: z.string(),
       objective: z.string(),
-    })
+    }),
   ),
 });
 
@@ -100,7 +102,7 @@ Responde estrictamente en formato JSON con la siguiente estructura:
         const validation = supervisorOutputSchema.safeParse(parsed);
         if (validation.success) {
           if (validation.data.selectedAgents.length > 0) {
-            selectedAgents = validation.data.selectedAgents as AgentName[];
+            selectedAgents = validation.data.selectedAgents;
           }
           if (validation.data.plan) {
             planTasks = validation.data.plan;

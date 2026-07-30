@@ -1,5 +1,29 @@
-import { AgentName, AgentRunTrace, ToolExecutionTrace } from '@commerce-ops/shared-types';
+import {
+  AgentName,
+  AgentRunTrace,
+  ToolExecutionTrace,
+} from '@commerce-ops/shared-types';
 import { calculateEstimatedCostUsd } from './model-pricing';
+
+export class AgentRunError extends Error {
+  constructor(
+    public readonly originalError: any,
+    public readonly trace: AgentRunTrace,
+  ) {
+    super(originalError?.message || String(originalError));
+    this.name = 'AgentRunError';
+  }
+}
+
+export class ToolExecutionError extends Error {
+  constructor(
+    public readonly originalError: any,
+    public readonly trace: ToolExecutionTrace,
+  ) {
+    super(originalError?.message || String(originalError));
+    this.name = 'ToolExecutionError';
+  }
+}
 
 export interface RunAgentOptions<T> {
   agentName: AgentName;
@@ -22,13 +46,18 @@ export async function runAgentWithTrace<T>(
   const localRunId = `run-${options.agentName.toLowerCase()}-${options.iteration}-${Date.now()}`;
   const startedAt = new Date().toISOString();
   const startTime = Date.now();
-  const modelName = options.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const modelName =
+    options.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   try {
     const { result, inputTokens, outputTokens } = await options.execute();
     const endTime = Date.now();
     const durationMs = endTime - startTime;
-    const estimatedCostUsd = calculateEstimatedCostUsd(modelName, inputTokens, outputTokens);
+    const estimatedCostUsd = calculateEstimatedCostUsd(
+      modelName,
+      inputTokens,
+      outputTokens,
+    );
 
     const trace: AgentRunTrace = {
       localRunId,
@@ -60,10 +89,10 @@ export async function runAgentWithTrace<T>(
       completedAt: new Date(endTime).toISOString(),
       durationMs,
       status: 'FAILED',
-      errorMessage: error.message || String(error),
+      errorMessage: error?.message || String(error),
     };
 
-    throw { error, trace };
+    throw new AgentRunError(error, trace);
   }
 }
 
@@ -98,7 +127,8 @@ export async function executeToolWithTrace<P, R>(
       iteration: options.iteration,
       toolName: options.toolName,
       parameters: options.parameters,
-      resultSummary: typeof result === 'string' ? result : JSON.stringify(result),
+      resultSummary:
+        typeof result === 'string' ? result : JSON.stringify(result),
       startedAt,
       completedAt: new Date(endTime).toISOString(),
       durationMs,
@@ -121,9 +151,9 @@ export async function executeToolWithTrace<P, R>(
       completedAt: new Date(endTime).toISOString(),
       durationMs,
       status: 'FAILED',
-      errorMessage: error.message || String(error),
+      errorMessage: error?.message || String(error),
     };
 
-    throw { error, trace };
+    throw new ToolExecutionError(error, trace);
   }
 }

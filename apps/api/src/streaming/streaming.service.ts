@@ -9,11 +9,19 @@ import {
 @Injectable()
 export class StreamingService {
   private readonly logger = new Logger(StreamingService.name);
-  private readonly streamsMap = new Map<string, ReplaySubject<InvestigationEvent>>();
+  private readonly streamsMap = new Map<
+    string,
+    ReplaySubject<InvestigationEvent>
+  >();
 
-  private getOrCreateSubject(investigationId: string): ReplaySubject<InvestigationEvent> {
+  private getOrCreateSubject(
+    investigationId: string,
+  ): ReplaySubject<InvestigationEvent> {
     if (!this.streamsMap.has(investigationId)) {
-      this.streamsMap.set(investigationId, new ReplaySubject<InvestigationEvent>(100));
+      this.streamsMap.set(
+        investigationId,
+        new ReplaySubject<InvestigationEvent>(100),
+      );
     }
     return this.streamsMap.get(investigationId)!;
   }

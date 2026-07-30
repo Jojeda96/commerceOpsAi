@@ -83,23 +83,24 @@ export class InvestigationOrchestratorService {
         const agentNameDbMap = new Map<string, string>(); // agentName -> DB id
         const toolExecutionDbMap = new Map<string, string>(); // localExecutionId -> DB id
 
-        const tracesToPersist = finalState.agentRunTraces && finalState.agentRunTraces.length > 0
-          ? finalState.agentRunTraces
-          : (finalState.completedAgents || []).map((agentName) => ({
-              localRunId: `run-${agentName.toLowerCase()}-${Date.now()}`,
-              agentName,
-              iteration: 1,
-              model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-              promptVersion: 'v1.0',
-              startedAt: new Date(Date.now() - 1500).toISOString(),
-              completedAt: new Date().toISOString(),
-              durationMs: 1500,
-              inputTokens: 250,
-              outputTokens: 120,
-              estimatedCostUsd: 0.0001,
-              status: 'COMPLETED' as const,
-              errorMessage: undefined as string | undefined,
-            }));
+        const tracesToPersist =
+          finalState.agentRunTraces && finalState.agentRunTraces.length > 0
+            ? finalState.agentRunTraces
+            : (finalState.completedAgents || []).map((agentName) => ({
+                localRunId: `run-${agentName.toLowerCase()}-${Date.now()}`,
+                agentName,
+                iteration: 1,
+                model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+                promptVersion: 'v1.0',
+                startedAt: new Date(Date.now() - 1500).toISOString(),
+                completedAt: new Date().toISOString(),
+                durationMs: 1500,
+                inputTokens: 250,
+                outputTokens: 120,
+                estimatedCostUsd: 0.0001,
+                status: 'COMPLETED' as const,
+                errorMessage: undefined as string | undefined,
+              }));
 
         for (const trace of tracesToPersist) {
           const agentRun = await tx.agentRun.create({
@@ -115,8 +116,12 @@ export class InvestigationOrchestratorService {
               estimatedCost: trace.estimatedCostUsd,
               durationMs: trace.durationMs,
               errorMessage: trace.errorMessage,
-              startedAt: trace.startedAt ? new Date(trace.startedAt) : new Date(),
-              completedAt: trace.completedAt ? new Date(trace.completedAt) : new Date(),
+              startedAt: trace.startedAt
+                ? new Date(trace.startedAt)
+                : new Date(),
+              completedAt: trace.completedAt
+                ? new Date(trace.completedAt)
+                : new Date(),
             },
           });
           agentRunDbMap.set(trace.localRunId, agentRun.id);
@@ -125,21 +130,31 @@ export class InvestigationOrchestratorService {
 
         // Persistir ToolExecutions reales
         for (const toolTrace of finalState.toolExecutionTraces || []) {
-          const parentAgentRunId = agentRunDbMap.get(toolTrace.localAgentRunId) || agentNameDbMap.get(toolTrace.agentName);
+          const parentAgentRunId =
+            agentRunDbMap.get(toolTrace.localAgentRunId) ||
+            agentNameDbMap.get(toolTrace.agentName);
           if (parentAgentRunId) {
             const toolExec = await tx.toolExecution.create({
               data: {
                 agentRunId: parentAgentRunId,
                 toolName: toolTrace.toolName,
                 parametersJson: (toolTrace.parameters as any) || {},
-                resultSummary: typeof toolTrace.resultSummary === 'string'
-                  ? toolTrace.resultSummary.substring(0, 1000)
-                  : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+                resultSummary:
+                  typeof toolTrace.resultSummary === 'string'
+                    ? toolTrace.resultSummary.substring(0, 1000)
+                    : JSON.stringify(toolTrace.resultSummary).substring(
+                        0,
+                        1000,
+                      ),
                 status: toolTrace.status || 'COMPLETED',
                 durationMs: toolTrace.durationMs,
                 errorMessage: toolTrace.errorMessage,
-                startedAt: toolTrace.startedAt ? new Date(toolTrace.startedAt) : new Date(),
-                completedAt: toolTrace.completedAt ? new Date(toolTrace.completedAt) : new Date(),
+                startedAt: toolTrace.startedAt
+                  ? new Date(toolTrace.startedAt)
+                  : new Date(),
+                completedAt: toolTrace.completedAt
+                  ? new Date(toolTrace.completedAt)
+                  : new Date(),
               },
             });
             toolExecutionDbMap.set(toolTrace.localExecutionId, toolExec.id);
@@ -180,7 +195,7 @@ export class InvestigationOrchestratorService {
             if (ev) {
               const toolExecDbId = ev.localToolExecutionId
                 ? toolExecutionDbMap.get(ev.localToolExecutionId)
-                : (ev.toolExecutionId || null);
+                : ev.toolExecutionId || null;
 
               const createdEv = await tx.evidence.create({
                 data: {
@@ -189,7 +204,10 @@ export class InvestigationOrchestratorService {
                   agentName: ev.agentName || agentName,
                   iteration: ev.iteration || 1,
                   evidenceType: ev.toolName || 'tool_result',
-                  summary: typeof ev.resultSummary === 'string' ? ev.resultSummary : JSON.stringify(ev.resultSummary),
+                  summary:
+                    typeof ev.resultSummary === 'string'
+                      ? ev.resultSummary
+                      : JSON.stringify(ev.resultSummary),
                   rawReference: JSON.stringify(ev.parameters || {}),
                 },
               });
@@ -261,7 +279,8 @@ export class InvestigationOrchestratorService {
       this.streaming.emit(investigationId, 'investigation.completed', {
         investigationId,
         status: finalStatus,
-        finalQualityScore: finalState.criticScore || finalState.finalReport?.qualityScore || 90,
+        finalQualityScore:
+          finalState.criticScore || finalState.finalReport?.qualityScore || 90,
       });
       this.streaming.closeStream(investigationId);
 

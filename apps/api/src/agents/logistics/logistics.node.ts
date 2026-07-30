@@ -15,14 +15,22 @@ export function createLogisticsNode(
 
     const tools = createLogisticsTools(prisma);
     const delTool = tools.find((t) => t.name === 'get_delivery_summary')!;
-    const routeTool = tools.find((t) => t.name === 'get_delivery_performance_by_route')!;
-    const stageTool = tools.find((t) => t.name === 'get_delivery_stage_breakdown')!;
+    const routeTool = tools.find(
+      (t) => t.name === 'get_delivery_performance_by_route',
+    )!;
+    const stageTool = tools.find(
+      (t) => t.name === 'get_delivery_stage_breakdown',
+    )!;
 
-    const isRouteQuestion = /ruta|interestatal|regi[oó]n|estado/i.test(userQuestion);
+    const isRouteQuestion = /ruta|interestatal|regi[oó]n|estado/i.test(
+      userQuestion,
+    );
 
     streaming.emit(investigationId, 'tool.started', {
       agent: 'LOGISTICS',
-      tool: isRouteQuestion ? 'get_delivery_performance_by_route' : 'get_delivery_summary',
+      tool: isRouteQuestion
+        ? 'get_delivery_performance_by_route'
+        : 'get_delivery_summary',
     });
 
     const delResult = await delTool.invoke({
@@ -42,7 +50,9 @@ export function createLogisticsNode(
 
     streaming.emit(investigationId, 'tool.completed', {
       agent: 'LOGISTICS',
-      tool: isRouteQuestion ? 'get_delivery_performance_by_route' : 'get_delivery_summary',
+      tool: isRouteQuestion
+        ? 'get_delivery_performance_by_route'
+        : 'get_delivery_summary',
     });
 
     const model = new ChatOpenAI({
@@ -98,13 +108,17 @@ Genera un hallazgo técnico objetivo en formato JSON:
     const evidenceId = `ev-logistics-${Date.now()}`;
     const evidenceItem = {
       id: evidenceId,
-      toolName: isRouteQuestion ? 'get_delivery_performance_by_route' : 'get_delivery_summary',
+      toolName: isRouteQuestion
+        ? 'get_delivery_performance_by_route'
+        : 'get_delivery_summary',
       parameters: {
         dateFrom: state.filters.dateFrom,
         dateTo: state.filters.dateTo,
         isRouteQuestion,
       },
-      resultSummary: isRouteQuestion ? `Resumen: ${delResult} | Rutas: ${routeResult} | Etapas: ${stageResult}` : delResult,
+      resultSummary: isRouteQuestion
+        ? `Resumen: ${delResult} | Rutas: ${routeResult} | Etapas: ${stageResult}`
+        : delResult,
       generatedAt: new Date().toISOString(),
     };
 

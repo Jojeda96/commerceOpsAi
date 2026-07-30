@@ -54,7 +54,7 @@ export default function InvestigationsPage() {
     setLoading(true);
     try {
       let token = await getAuthToken();
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
       let res = await fetch(`${API_URL}/investigations`, {

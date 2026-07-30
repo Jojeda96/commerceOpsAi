@@ -81,17 +81,37 @@ export function createLogisticsTools(prisma: PrismaService) {
           take: 200,
           where: {
             ...(sellerState ? { seller: { sellerState } } : {}),
-            ...(customerState ? { order: { customer: { customerState } } } : {}),
+            ...(customerState
+              ? { order: { customer: { customerState } } }
+              : {}),
           },
-          include: { product: true, order: { include: { customer: true } }, seller: true },
+          include: {
+            product: true,
+            order: { include: { customer: true } },
+            seller: true,
+          },
         });
 
         if (orderItems.length > 0) {
-          const avgFreight = orderItems.reduce((acc, i) => acc + Number(i.freightValue || 0), 0) / orderItems.length;
-          const avgPrice = orderItems.reduce((acc, i) => acc + Number(i.price || 0), 0) / orderItems.length;
-          const avgWeight = orderItems.reduce((acc, i) => acc + Number(i.product?.productWeightG || 500), 0) / orderItems.length;
-          const sampleSellerState = sellerState || orderItems[0].seller?.sellerState || 'SP';
-          const sampleCustomerState = customerState || orderItems[0].order?.customer?.customerState || 'RJ';
+          const avgFreight =
+            orderItems.reduce(
+              (acc, i) => acc + Number(i.freightValue || 0),
+              0,
+            ) / orderItems.length;
+          const avgPrice =
+            orderItems.reduce((acc, i) => acc + Number(i.price || 0), 0) /
+            orderItems.length;
+          const avgWeight =
+            orderItems.reduce(
+              (acc, i) => acc + Number(i.product?.productWeightG || 500),
+              0,
+            ) / orderItems.length;
+          const sampleSellerState =
+            sellerState || orderItems[0].seller?.sellerState || 'SP';
+          const sampleCustomerState =
+            customerState ||
+            orderItems[0].order?.customer?.customerState ||
+            'RJ';
 
           return JSON.stringify({
             status: 'AVAILABLE',
@@ -105,7 +125,10 @@ export function createLogisticsTools(prisma: PrismaService) {
           });
         }
       } catch (err) {
-        console.warn('[LogisticsTools] Could not query scenarios from DB:', err);
+        console.warn(
+          '[LogisticsTools] Could not query scenarios from DB:',
+          err,
+        );
       }
 
       return JSON.stringify({
@@ -118,7 +141,8 @@ export function createLogisticsTools(prisma: PrismaService) {
     },
     {
       name: 'get_delivery_prediction_scenarios',
-      description: 'Consulta escenarios de rutas e ítems reales desde PostgreSQL para inferencia ML.',
+      description:
+        'Consulta escenarios de rutas e ítems reales desde PostgreSQL para inferencia ML.',
       schema: z.object({
         sellerState: z.string().optional(),
         customerState: z.string().optional(),
@@ -148,21 +172,32 @@ export function createLogisticsTools(prisma: PrismaService) {
         },
       });
 
-      const routeMap: Record<string, { total: number; late: number; totalDays: number }> = {};
+      const routeMap: Record<
+        string,
+        { total: number; late: number; totalDays: number }
+      > = {};
       for (const o of orders) {
         const sState = o.items[0]?.seller?.sellerState || 'OTHER';
         const cState = o.customer?.customerState || 'OTHER';
         const routeKey = `${sState}->${cState}`;
 
-        if (!routeMap[routeKey]) routeMap[routeKey] = { total: 0, late: 0, totalDays: 0 };
+        if (!routeMap[routeKey])
+          routeMap[routeKey] = { total: 0, late: 0, totalDays: 0 };
         routeMap[routeKey].total += 1;
 
         if (o.orderDeliveredCustomerDate && o.orderPurchaseTimestamp) {
-          const days = (o.orderDeliveredCustomerDate.getTime() - o.orderPurchaseTimestamp.getTime()) / (1000 * 3600 * 24);
+          const days =
+            (o.orderDeliveredCustomerDate.getTime() -
+              o.orderPurchaseTimestamp.getTime()) /
+            (1000 * 3600 * 24);
           routeMap[routeKey].totalDays += days;
         }
 
-        if (o.orderDeliveredCustomerDate && o.orderEstimatedDeliveryDate && o.orderDeliveredCustomerDate > o.orderEstimatedDeliveryDate) {
+        if (
+          o.orderDeliveredCustomerDate &&
+          o.orderEstimatedDeliveryDate &&
+          o.orderDeliveredCustomerDate > o.orderEstimatedDeliveryDate
+        ) {
           routeMap[routeKey].late += 1;
         }
       }
@@ -182,7 +217,8 @@ export function createLogisticsTools(prisma: PrismaService) {
     },
     {
       name: 'get_delivery_performance_by_route',
-      description: 'Calcula el rendimiento de entregas y tasa de retraso por ruta interestatal/intraestatal (sellerState -> customerState).',
+      description:
+        'Calcula el rendimiento de entregas y tasa de retraso por ruta interestatal/intraestatal (sellerState -> customerState).',
       schema: z.object({
         sellerState: z.string().optional(),
         customerState: z.string().optional(),
@@ -215,9 +251,19 @@ export function createLogisticsTools(prisma: PrismaService) {
       let count = 0;
 
       for (const o of orders) {
-        if (o.orderPurchaseTimestamp && o.orderDeliveredCarrierDate && o.orderDeliveredCustomerDate) {
-          const prep = (o.orderDeliveredCarrierDate.getTime() - o.orderPurchaseTimestamp.getTime()) / (1000 * 3600 * 24);
-          const transit = (o.orderDeliveredCustomerDate.getTime() - o.orderDeliveredCarrierDate.getTime()) / (1000 * 3600 * 24);
+        if (
+          o.orderPurchaseTimestamp &&
+          o.orderDeliveredCarrierDate &&
+          o.orderDeliveredCustomerDate
+        ) {
+          const prep =
+            (o.orderDeliveredCarrierDate.getTime() -
+              o.orderPurchaseTimestamp.getTime()) /
+            (1000 * 3600 * 24);
+          const transit =
+            (o.orderDeliveredCustomerDate.getTime() -
+              o.orderDeliveredCarrierDate.getTime()) /
+            (1000 * 3600 * 24);
           if (prep >= 0 && transit >= 0) {
             totalPrepDays += prep;
             totalTransitDays += transit;
@@ -234,12 +280,14 @@ export function createLogisticsTools(prisma: PrismaService) {
         avgSellerPreparationDays: Math.round(avgPrep * 10) / 10,
         avgCarrierTransitDays: Math.round(avgTransit * 10) / 10,
         totalCycleDays: Math.round((avgPrep + avgTransit) * 10) / 10,
-        dominantStage: avgTransit > avgPrep ? 'CARRIER_TRANSIT' : 'SELLER_PREPARATION',
+        dominantStage:
+          avgTransit > avgPrep ? 'CARRIER_TRANSIT' : 'SELLER_PREPARATION',
       });
     },
     {
       name: 'get_delivery_stage_breakdown',
-      description: 'Desglosa los tiempos de entrega entre preparación del vendedor y tránsito del transportista.',
+      description:
+        'Desglosa los tiempos de entrega entre preparación del vendedor y tránsito del transportista.',
       schema: z.object({
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),

@@ -45,7 +45,9 @@ export function createDataScienceNode(streaming: StreamingService) {
       const parsedPred = JSON.parse(predictResult);
       if (parsedPred.model_version) modelVersionUsed = parsedPred.model_version;
       if (parsedPred.modelVersion) modelVersionUsed = parsedPred.modelVersion;
-      isFallback = modelVersionUsed.includes('heuristic') || !!parsedPred.note?.includes('fallback');
+      isFallback =
+        modelVersionUsed.includes('heuristic') ||
+        !!parsedPred.note?.includes('fallback');
     } catch (e) {
       console.warn('[DSNode] Could not parse predictResult JSON');
     }

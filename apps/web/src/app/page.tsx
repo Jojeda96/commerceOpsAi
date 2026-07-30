@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { API_URL, fetchApi } from '@/lib/api-client';
+import { fetchApi } from '@/lib/api-client';
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState({

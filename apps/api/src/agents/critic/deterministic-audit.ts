@@ -12,44 +12,79 @@ export function performDeterministicAudit(
 ): AuditResult {
   const criticalErrors: string[] = [];
   const warnings: string[] = [];
-  const perFinding: Record<string, { criticalErrors: string[]; warnings: string[] }> = {};
+  const perFinding: Record<
+    string,
+    { criticalErrors: string[]; warnings: string[] }
+  > = {};
 
   for (const f of findings) {
     const fCritical: string[] = [];
     const fWarnings: string[] = [];
 
     // Check 1: Finding has evidence linked
-    const linked = evidence.filter((e) => (f.evidenceIds && f.evidenceIds.includes(e.id)));
+    const linked = evidence.filter(
+      (e) => f.evidenceIds && f.evidenceIds.includes(e.id),
+    );
     if (linked.length === 0) {
-      fCritical.push(`El hallazgo "${f.title}" no posee ninguna evidencia registrada.`);
+      fCritical.push(
+        `El hallazgo "${f.title}" no posee ninguna evidencia registrada.`,
+      );
     } else {
       // Check 2: Linked evidence has valid non-empty resultSummary
       for (const e of linked) {
         if (!e.resultSummary || e.resultSummary.trim() === '') {
-          fCritical.push(`La evidencia "${e.id}" para el hallazgo "${f.title}" contiene un resultado vacío.`);
+          fCritical.push(
+            `La evidencia "${e.id}" para el hallazgo "${f.title}" contiene un resultado vacío.`,
+          );
         }
       }
     }
 
     // Check 3: Strictly causal terms warning
-    const causalTerms = ['causó', 'provocó', 'demuestra que', 'debido únicamente a'];
+    const causalTerms = [
+      'causó',
+      'provocó',
+      'demuestra que',
+      'debido únicamente a',
+    ];
     const text = `${f.title} ${f.description}`;
-    const foundCausal = causalTerms.filter((term) => text.toLowerCase().includes(term));
+    const foundCausal = causalTerms.filter((term) =>
+      text.toLowerCase().includes(term),
+    );
     if (foundCausal.length > 0) {
-      fWarnings.push(`El hallazgo "${f.title}" utiliza afirmaciones de causalidad estricta (${foundCausal.join(', ')}).`);
+      fWarnings.push(
+        `El hallazgo "${f.title}" utiliza afirmaciones de causalidad estricta (${foundCausal.join(', ')}).`,
+      );
     }
 
     // Check 4: Detect hallucinated external variables not present in Olist dataset (weather, traffic, strikes, carrier workload)
-    const hallucinatedTerms = ['clima', 'climática', 'climáticas', 'tráfico', 'huelga', 'carga de trabajo'];
-    const foundHallucinated = hallucinatedTerms.filter((term) => text.toLowerCase().includes(term));
+    const hallucinatedTerms = [
+      'clima',
+      'climática',
+      'climáticas',
+      'tráfico',
+      'huelga',
+      'carga de trabajo',
+    ];
+    const foundHallucinated = hallucinatedTerms.filter((term) =>
+      text.toLowerCase().includes(term),
+    );
     if (foundHallucinated.length > 0) {
-      fCritical.push(`El hallazgo "${f.title}" menciona variables no registradas en el dataset Olist (${foundHallucinated.join(', ')}).`);
+      fCritical.push(
+        `El hallazgo "${f.title}" menciona variables no registradas en el dataset Olist (${foundHallucinated.join(', ')}).`,
+      );
     }
 
     // Check 5: Detect non-Data Science agents claiming SHAP values
     const agentName = f.agent || (f as any).agentName;
-    if (agentName && agentName !== 'DATA_SCIENCE' && text.toLowerCase().includes('shap')) {
-      fWarnings.push(`El agente ${agentName} menciona valores SHAP en "${f.title}", los cuales pertenecen exclusivamente a Data Science.`);
+    if (
+      agentName &&
+      agentName !== 'DATA_SCIENCE' &&
+      text.toLowerCase().includes('shap')
+    ) {
+      fWarnings.push(
+        `El agente ${agentName} menciona valores SHAP en "${f.title}", los cuales pertenecen exclusivamente a Data Science.`,
+      );
     }
 
     if (fCritical.length > 0) criticalErrors.push(...fCritical);

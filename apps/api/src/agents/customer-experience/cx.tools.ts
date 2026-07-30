@@ -108,7 +108,9 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
       const reviews = await prisma.olistOrderReview.findMany({
         where: {
           reviewCommentMessage: { contains: query, mode: 'insensitive' },
-          ...(reviewScores && reviewScores.length > 0 ? { reviewScore: { in: reviewScores } } : {}),
+          ...(reviewScores && reviewScores.length > 0
+            ? { reviewScore: { in: reviewScores } }
+            : {}),
         },
         take: topK,
         select: {

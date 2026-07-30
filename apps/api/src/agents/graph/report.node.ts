@@ -21,7 +21,10 @@ export function createReportNode(streaming: StreamingService) {
       summaryPrefix = `Investigación sobre "${userQuestion}" completada con observaciones metodológicas menores.`;
     } else if (state.criticDecision === 'REJECTED') {
       summaryPrefix = `Investigación sobre "${userQuestion}" rechazada: los hallazgos no alcanzaron la calidad o evidencia requerida.`;
-    } else if (state.requiresHumanReview || state.criticDecision === 'REQUIRES_MORE_ANALYSIS') {
+    } else if (
+      state.requiresHumanReview ||
+      state.criticDecision === 'REQUIRES_MORE_ANALYSIS'
+    ) {
       summaryPrefix = `Investigación sobre "${userQuestion}" requiere revisión humana tras agotar las iteraciones de análisis automatizado.`;
     }
 

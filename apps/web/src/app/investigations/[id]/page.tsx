@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_URL, fetchApi } from '@/lib/api-client';
@@ -14,11 +14,11 @@ export default function InvestigationDetailPage() {
   const [showQualityInfo, setShowQualityInfo] = useState(false);
   const [showStatusWarningInfo, setShowStatusWarningInfo] = useState(false);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     fetchApi<any>(`/investigations/${id}`)
       .then((data) => setInvestigation(data))
       .catch((err) => console.error(err));
-  };
+  }, [id]);
 
   useEffect(() => {
     loadData();
@@ -49,7 +49,7 @@ export default function InvestigationDetailPage() {
     return () => {
       eventSource.close();
     };
-  }, [id]);
+  }, [id, loadData]);
 
   if (!investigation) {
     return <p style={{ color: 'var(--color-text-muted)' }}>Cargando detalle de investigación...</p>;

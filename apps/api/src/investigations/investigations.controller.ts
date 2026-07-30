@@ -10,7 +10,13 @@ import {
   DefaultValuePipe,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import { InvestigationsService } from './investigations.service';
 import { CreateInvestigationDto } from './dto/create-investigation.dto';

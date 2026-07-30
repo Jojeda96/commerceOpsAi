@@ -27,9 +27,11 @@ export function calculateEstimatedCostUsd(
     return undefined;
   }
 
-  const pricing = MODEL_PRICING_TABLE[modelName] || MODEL_PRICING_TABLE['gpt-4o-mini'];
+  const pricing =
+    MODEL_PRICING_TABLE[modelName] || MODEL_PRICING_TABLE['gpt-4o-mini'];
   const inputCost = ((inputTokens || 0) / 1_000_000) * pricing.inputPerMillion;
-  const outputCost = ((outputTokens || 0) / 1_000_000) * pricing.outputPerMillion;
+  const outputCost =
+    ((outputTokens || 0) / 1_000_000) * pricing.outputPerMillion;
 
   return Number((inputCost + outputCost).toFixed(6));
 }
