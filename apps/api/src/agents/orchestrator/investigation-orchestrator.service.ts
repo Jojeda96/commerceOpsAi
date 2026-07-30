@@ -23,7 +23,10 @@ export class InvestigationOrchestratorService {
       throw new Error(`Investigación ${investigationId} no encontrada.`);
     }
 
-    if (investigation.status === 'RUNNING' || investigation.status === 'COMPLETED') {
+    if (
+      investigation.status === 'RUNNING' ||
+      investigation.status === 'COMPLETED'
+    ) {
       throw new Error(
         `Investigación ${investigationId} ya está en estado ${investigation.status}. Rechazando doble ejecución.`,
       );
@@ -42,7 +45,8 @@ export class InvestigationOrchestratorService {
       filters: {
         sellerIds: (investigation.sellerIdsJson as string[]) || undefined,
         categories: (investigation.categoriesJson as string[]) || undefined,
-        customerStates: (investigation.customerStatesJson as string[]) || undefined,
+        customerStates:
+          (investigation.customerStatesJson as string[]) || undefined,
         dateFrom: investigation.dateFrom
           ? investigation.dateFrom.toISOString()
           : undefined,
@@ -170,7 +174,9 @@ export class InvestigationOrchestratorService {
 
           // Persistir evidencias asociadas a su ToolExecution real
           for (const evId of finding.evidenceIds || []) {
-            const ev = (finalState.evidence || []).find((e: any) => e.id === evId);
+            const ev = (finalState.evidence || []).find(
+              (e: any) => e.id === evId,
+            );
             if (ev) {
               const toolExecDbId = ev.localToolExecutionId
                 ? toolExecutionDbMap.get(ev.localToolExecutionId)
@@ -216,7 +222,8 @@ export class InvestigationOrchestratorService {
               scenarioId: mp.scenarioId,
               modelName: mp.modelName || 'xgboost',
               modelVersion: mp.modelVersion || 'delivery-risk-v2.0.0',
-              deploymentStatus: mp.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+              deploymentStatus:
+                mp.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
               probability: mp.probability,
               threshold: mp.threshold,
               predictedDelayed: mp.predictedDelayed,

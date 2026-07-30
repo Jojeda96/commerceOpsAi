@@ -151,7 +151,13 @@ export function createLogisticsTools(prisma: PrismaService) {
   );
 
   const getDeliveryPerformanceByRoute = tool(
-    async ({ sellerState, customerState, sortBy = 'lateRate', minOrders = 50, topN = 10 }) => {
+    async ({
+      sellerState,
+      customerState,
+      sortBy = 'lateRate',
+      minOrders = 50,
+      topN = 10,
+    }) => {
       const where: any = { orderStatus: 'delivered' };
       if (sellerState) {
         where.items = { some: { seller: { sellerState } } };
@@ -212,7 +218,11 @@ export function createLogisticsTools(prisma: PrismaService) {
           avgDeliveryDays: Math.round((data.totalDays / data.total) * 10) / 10,
         }))
         .filter((r) => r.sampleSize >= minOrders)
-        .sort((a, b) => (sortBy === 'lateRate' ? b.lateRate - a.lateRate : b.ordersCount - a.ordersCount))
+        .sort((a, b) =>
+          sortBy === 'lateRate'
+            ? b.lateRate - a.lateRate
+            : b.ordersCount - a.ordersCount,
+        )
         .slice(0, topN);
 
       return JSON.stringify(routes);
@@ -230,7 +240,6 @@ export function createLogisticsTools(prisma: PrismaService) {
       }),
     },
   );
-
 
   const getDeliveryStageBreakdown = tool(
     async ({ dateFrom, dateTo }) => {

@@ -22,7 +22,9 @@ export function createStrategyNode(streaming: StreamingService) {
     const recs: Recommendation[] = [];
 
     if (actionableFindings.length === 0) {
-      console.warn('[StrategyNode] No existen hallazgos accionables para respaldar recomendaciones operativas.');
+      console.warn(
+        '[StrategyNode] No existen hallazgos accionables para respaldar recomendaciones operativas.',
+      );
       streaming.emit(investigationId, 'agent.completed', { agent: 'STRATEGY' });
       return {
         completedAgents: [...state.completedAgents, 'STRATEGY' as const],
@@ -85,16 +87,24 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
               : Array.from(actionableIds);
 
             // Filtrar estricto: no citar hallazgos experimentales o inexistentes
-            const validSupportIds = rawSupportIds.filter((id: string) => actionableIds.has(id));
+            const validSupportIds = rawSupportIds.filter((id: string) =>
+              actionableIds.has(id),
+            );
 
             const rec: Recommendation = {
               id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               investigationId,
               title: item.title || 'Recomendación operacional',
-              description: item.description || 'Implementar monitoreo continuo.',
+              description:
+                item.description || 'Implementar monitoreo continuo.',
               priority: item.priority || 'MEDIUM',
-              expectedImpact: item.expectedImpact || 'Métrica afectada según hallazgos accionables.',
-              supportingFindingIds: validSupportIds.length > 0 ? validSupportIds : Array.from(actionableIds),
+              expectedImpact:
+                item.expectedImpact ||
+                'Métrica afectada según hallazgos accionables.',
+              supportingFindingIds:
+                validSupportIds.length > 0
+                  ? validSupportIds
+                  : Array.from(actionableIds),
               assumptions: item.assumptions || [],
               createdAt: new Date().toISOString(),
             };
@@ -115,7 +125,8 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
         id: `rec-default-${Date.now()}`,
         investigationId,
         title: 'Establecer monitoreo de SLA en rutas con mayor retraso',
-        description: 'Revisar acuerdos con transportistas y capacidad del vendedor.',
+        description:
+          'Revisar acuerdos con transportistas y capacidad del vendedor.',
         priority: 'HIGH',
         expectedImpact: 'Métrica histórica afectada: lateRate.',
         supportingFindingIds: Array.from(actionableIds),

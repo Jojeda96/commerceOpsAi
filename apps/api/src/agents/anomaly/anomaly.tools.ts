@@ -4,7 +4,13 @@ import { PrismaService } from '../../database/prisma.service';
 
 export function createAnomalyTools(prisma: PrismaService) {
   const detectMetricAnomalies = tool(
-    async ({ metric = 'late_delivery_rate', threshold = 2.5, dateFrom, dateTo, category }) => {
+    async ({
+      metric = 'late_delivery_rate',
+      threshold = 2.5,
+      dateFrom,
+      dateTo,
+      category,
+    }) => {
       const where: any = { orderStatus: 'delivered' };
 
       if (dateFrom || dateTo) {
@@ -60,8 +66,13 @@ export function createAnomalyTools(prisma: PrismaService) {
       if (monthlyRates.length < 3) {
         return JSON.stringify({
           metric,
-          appliedFilters: { category: category || 'ALL', dateFrom: dateFrom || null, dateTo: dateTo || null },
-          error: 'Datos insuficientes para análisis de series temporales con los filtros aplicados',
+          appliedFilters: {
+            category: category || 'ALL',
+            dateFrom: dateFrom || null,
+            dateTo: dateTo || null,
+          },
+          error:
+            'Datos insuficientes para análisis de series temporales con los filtros aplicados',
           monthsAvailable: monthlyRates.length,
           timeSeries: monthlyRates,
         });
@@ -99,7 +110,11 @@ export function createAnomalyTools(prisma: PrismaService) {
 
       return JSON.stringify({
         metric,
-        appliedFilters: { category: category || 'ALL', dateFrom: dateFrom || null, dateTo: dateTo || null },
+        appliedFilters: {
+          category: category || 'ALL',
+          dateFrom: dateFrom || null,
+          dateTo: dateTo || null,
+        },
         method: 'ROBUST_Z_SCORE',
         window: 'monthly',
         totalMonths: monthlyRates.length,

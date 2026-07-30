@@ -30,7 +30,7 @@ export interface DeliveryScenarioRow {
 
 export interface GetScenariosOptions {
   limit?: number;
-  selectionMethod?: 'TOP_VOLUME' | 'LATE_RATE' | string;
+  selectionMethod?: string;
   customerStates?: string[];
   categories?: string[];
   minOrders?: number;
@@ -41,7 +41,9 @@ export interface GetScenariosOptions {
 export class DeliveryScenariosRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async getScenarios(options: GetScenariosOptions = {}): Promise<DeliveryScenarioRow[]> {
+  async getScenarios(
+    options: GetScenariosOptions = {},
+  ): Promise<DeliveryScenarioRow[]> {
     const limit = options.limit || 3;
     const minOrders = options.minOrders || 10;
     const selectionMethod = options.selectionMethod || 'TOP_VOLUME';

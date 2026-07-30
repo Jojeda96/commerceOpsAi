@@ -40,7 +40,13 @@ export function createSupervisorNode(
   streaming: StreamingService,
 ) {
   return async (state: CommerceOpsStateType) => {
-    const { userQuestion, investigationId, filters, criticFeedback, iteration } = state;
+    const {
+      userQuestion,
+      investigationId,
+      filters,
+      criticFeedback,
+      iteration,
+    } = state;
     const currentIteration = iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
@@ -50,8 +56,11 @@ export function createSupervisorNode(
       iteration: currentIteration,
     });
 
-    const isReiteration = currentIteration > 0 && criticFeedback && criticFeedback.length > 0;
-    const latestFeedback = isReiteration ? criticFeedback[criticFeedback.length - 1] : null;
+    const isReiteration =
+      currentIteration > 0 && criticFeedback && criticFeedback.length > 0;
+    const latestFeedback = isReiteration
+      ? criticFeedback[criticFeedback.length - 1]
+      : null;
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SUPERVISOR',
@@ -103,7 +112,11 @@ Responde estrictamente en formato JSON:
   ]
 }`;
 
-        let selectedAgents: AgentName[] = ['SALES', 'LOGISTICS', 'CUSTOMER_EXPERIENCE'];
+        let selectedAgents: AgentName[] = [
+          'SALES',
+          'LOGISTICS',
+          'CUSTOMER_EXPERIENCE',
+        ];
         let planTasks: any[] = [];
         let extractedFilters: any = {};
         let inputTokens: number | undefined;
@@ -115,7 +128,10 @@ Responde estrictamente en formato JSON:
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const jsonMatch = content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
@@ -133,12 +149,21 @@ Responde estrictamente en formato JSON:
             }
           }
         } catch (err) {
-          console.warn('[SupervisorNode] Error parsing LLM response, using default plan:', err);
+          console.warn(
+            '[SupervisorNode] Error parsing LLM response, using default plan:',
+            err,
+          );
         }
 
         // Reiteración dirigida: si el Critic solicitó agentes específicos, forzarlos obligatoriamente
-        if (state.iteration > 0 && state.requestedAgents && state.requestedAgents.length > 0) {
-          selectedAgents = Array.from(new Set([...selectedAgents, ...state.requestedAgents]));
+        if (
+          state.iteration > 0 &&
+          state.requestedAgents &&
+          state.requestedAgents.length > 0
+        ) {
+          selectedAgents = Array.from(
+            new Set([...selectedAgents, ...state.requestedAgents]),
+          );
         }
 
         const mergedFilters = {

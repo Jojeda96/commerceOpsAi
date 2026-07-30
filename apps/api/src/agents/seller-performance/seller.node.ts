@@ -3,7 +3,10 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createSellerPerformanceTools } from './seller.tools';
-import { runAgentWithTrace, executeToolWithTrace } from '../../observability/agent-runner';
+import {
+  runAgentWithTrace,
+  executeToolWithTrace,
+} from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 
@@ -16,7 +19,9 @@ export function createSellerPerformanceNode(
     const iteration = state.iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
-    streaming.emit(investigationId, 'agent.started', { agent: 'SELLER_PERFORMANCE' });
+    streaming.emit(investigationId, 'agent.started', {
+      agent: 'SELLER_PERFORMANCE',
+    });
 
     const tools = createSellerPerformanceTools(prisma);
     const scorecardTool = tools.find((t) => t.name === 'get_seller_scorecard')!;
@@ -40,18 +45,25 @@ export function createSellerPerformanceNode(
         const toolTraces: ToolExecutionTrace[] = [];
         const scorecardParams = { sellerId: targetSellerId };
 
-        streaming.emit(investigationId, 'tool.started', { agent: 'SELLER_PERFORMANCE', tool: 'get_seller_scorecard' });
-
-        const { result: scorecardResult, trace: scorecardTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'SELLER_PERFORMANCE',
-          iteration,
-          toolName: 'get_seller_scorecard',
-          parameters: scorecardParams,
-          execute: () => scorecardTool.invoke(scorecardParams),
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'SELLER_PERFORMANCE',
+          tool: 'get_seller_scorecard',
         });
+
+        const { result: scorecardResult, trace: scorecardTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'SELLER_PERFORMANCE',
+            iteration,
+            toolName: 'get_seller_scorecard',
+            parameters: scorecardParams,
+            execute: () => scorecardTool.invoke(scorecardParams),
+          });
         toolTraces.push(scorecardTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'SELLER_PERFORMANCE', tool: 'get_seller_scorecard' });
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'SELLER_PERFORMANCE',
+          tool: 'get_seller_scorecard',
+        });
 
         const evidenceItem = {
           id: `ev-seller-${Date.now()}`,
@@ -98,7 +110,10 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
@@ -124,8 +139,13 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
           createdAt: new Date().toISOString(),
         };
 
-        streaming.emit(investigationId, 'finding.created', { agent: 'SELLER_PERFORMANCE', finding: findingItem });
-        streaming.emit(investigationId, 'agent.completed', { agent: 'SELLER_PERFORMANCE' });
+        streaming.emit(investigationId, 'finding.created', {
+          agent: 'SELLER_PERFORMANCE',
+          finding: findingItem,
+        });
+        streaming.emit(investigationId, 'agent.completed', {
+          agent: 'SELLER_PERFORMANCE',
+        });
 
         return {
           result: {
@@ -140,7 +160,10 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
     });
 
     return {
-      completedAgents: [...state.completedAgents, 'SELLER_PERFORMANCE' as const],
+      completedAgents: [
+        ...state.completedAgents,
+        'SELLER_PERFORMANCE' as const,
+      ],
       agentRunTraces: [agentTrace],
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],

@@ -3,7 +3,10 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createAnomalyTools } from './anomaly.tools';
-import { runAgentWithTrace, executeToolWithTrace } from '../../observability/agent-runner';
+import {
+  runAgentWithTrace,
+  executeToolWithTrace,
+} from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 
@@ -19,7 +22,9 @@ export function createAnomalyNode(
     streaming.emit(investigationId, 'agent.started', { agent: 'ANOMALY' });
 
     const tools = createAnomalyTools(prisma);
-    const anomalyTool = tools.find((t) => t.name === 'detect_metric_anomalies')!;
+    const anomalyTool = tools.find(
+      (t) => t.name === 'detect_metric_anomalies',
+    )!;
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'ANOMALY',
@@ -29,18 +34,25 @@ export function createAnomalyNode(
         const toolTraces: ToolExecutionTrace[] = [];
         const anomalyParams = { metric: 'late_delivery_rate', threshold: 3.0 };
 
-        streaming.emit(investigationId, 'tool.started', { agent: 'ANOMALY', tool: 'detect_metric_anomalies' });
-
-        const { result: anomalyResult, trace: anomalyTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'ANOMALY',
-          iteration,
-          toolName: 'detect_metric_anomalies',
-          parameters: anomalyParams,
-          execute: () => anomalyTool.invoke(anomalyParams),
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'ANOMALY',
+          tool: 'detect_metric_anomalies',
         });
+
+        const { result: anomalyResult, trace: anomalyTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'ANOMALY',
+            iteration,
+            toolName: 'detect_metric_anomalies',
+            parameters: anomalyParams,
+            execute: () => anomalyTool.invoke(anomalyParams),
+          });
         toolTraces.push(anomalyTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'ANOMALY', tool: 'detect_metric_anomalies' });
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'ANOMALY',
+          tool: 'detect_metric_anomalies',
+        });
 
         const evidenceItem = {
           id: `ev-anomaly-${Date.now()}`,
@@ -76,7 +88,8 @@ Genera un hallazgo técnico sobre anomalías en JSON:
 }`;
 
         let title = 'Análisis de anomalías operacionales completado';
-        let description = 'Se evaluó la presencia de valores atípicos en la operación.';
+        let description =
+          'Se evaluó la presencia de valores atípicos en la operación.';
         let confidence = 0.93;
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
@@ -87,7 +100,10 @@ Genera un hallazgo técnico sobre anomalías en JSON:
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
@@ -113,8 +129,13 @@ Genera un hallazgo técnico sobre anomalías en JSON:
           createdAt: new Date().toISOString(),
         };
 
-        streaming.emit(investigationId, 'finding.created', { agent: 'ANOMALY', finding: findingItem });
-        streaming.emit(investigationId, 'agent.completed', { agent: 'ANOMALY' });
+        streaming.emit(investigationId, 'finding.created', {
+          agent: 'ANOMALY',
+          finding: findingItem,
+        });
+        streaming.emit(investigationId, 'agent.completed', {
+          agent: 'ANOMALY',
+        });
 
         return {
           result: {

@@ -3,7 +3,10 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createCustomerExperienceTools } from './cx.tools';
-import { runAgentWithTrace, executeToolWithTrace } from '../../observability/agent-runner';
+import {
+  runAgentWithTrace,
+  executeToolWithTrace,
+} from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 
@@ -74,7 +77,9 @@ export function createCustomerExperienceNode(
     const iteration = state.iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
-    streaming.emit(investigationId, 'agent.started', { agent: 'CUSTOMER_EXPERIENCE' });
+    streaming.emit(investigationId, 'agent.started', {
+      agent: 'CUSTOMER_EXPERIENCE',
+    });
 
     const tools = createCustomerExperienceTools(prisma);
     const ratingTool = tools.find((t) => t.name === 'get_rating_summary')!;
@@ -95,18 +100,25 @@ export function createCustomerExperienceNode(
           dateTo: state.filters.dateTo,
           category: detectedCategory,
         };
-        streaming.emit(investigationId, 'tool.started', { agent: 'CUSTOMER_EXPERIENCE', tool: 'get_rating_summary' });
-
-        const { result: ratingResult, trace: ratingTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'CUSTOMER_EXPERIENCE',
-          iteration,
-          toolName: 'get_rating_summary',
-          parameters: ratingParams,
-          execute: () => ratingTool.invoke(ratingParams),
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'CUSTOMER_EXPERIENCE',
+          tool: 'get_rating_summary',
         });
+
+        const { result: ratingResult, trace: ratingTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'CUSTOMER_EXPERIENCE',
+            iteration,
+            toolName: 'get_rating_summary',
+            parameters: ratingParams,
+            execute: () => ratingTool.invoke(ratingParams),
+          });
         toolTraces.push(ratingTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'CUSTOMER_EXPERIENCE', tool: 'get_rating_summary' });
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'CUSTOMER_EXPERIENCE',
+          tool: 'get_rating_summary',
+        });
 
         evidenceItems.push({
           id: `ev-cx-rating-${Date.now()}`,
@@ -122,31 +134,43 @@ export function createCustomerExperienceNode(
         });
 
         // Tool 2: Semantic review search
-        const reviewScores = /1\s*estrella|una\s*estrella|baja\s*calificaci[oó]n|atraso|retraso/i.test(userQuestion)
-          ? [1, 2]
-          : undefined;
+        const reviewScores =
+          /1\s*estrella|una\s*estrella|baja\s*calificaci[oó]n|atraso|retraso/i.test(
+            userQuestion,
+          )
+            ? [1, 2]
+            : undefined;
 
         const searchParams = {
           query: userQuestion,
           topK: 5,
           reviewScores,
-          categories: detectedCategory ? [detectedCategory] : state.filters.categories,
+          categories: detectedCategory
+            ? [detectedCategory]
+            : state.filters.categories,
           dateFrom: state.filters.dateFrom,
           dateTo: state.filters.dateTo,
         };
 
-        streaming.emit(investigationId, 'tool.started', { agent: 'CUSTOMER_EXPERIENCE', tool: 'search_reviews_semantic' });
-
-        const { result: searchResult, trace: searchTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'CUSTOMER_EXPERIENCE',
-          iteration,
-          toolName: 'search_reviews_semantic',
-          parameters: searchParams,
-          execute: () => searchTool.invoke(searchParams),
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'CUSTOMER_EXPERIENCE',
+          tool: 'search_reviews_semantic',
         });
+
+        const { result: searchResult, trace: searchTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'CUSTOMER_EXPERIENCE',
+            iteration,
+            toolName: 'search_reviews_semantic',
+            parameters: searchParams,
+            execute: () => searchTool.invoke(searchParams),
+          });
         toolTraces.push(searchTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'CUSTOMER_EXPERIENCE', tool: 'search_reviews_semantic' });
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'CUSTOMER_EXPERIENCE',
+          tool: 'search_reviews_semantic',
+        });
 
         evidenceItems.push({
           id: `ev-cx-semantic-${Date.now()}`,
@@ -202,7 +226,8 @@ Estructura JSON requerida:
 }`;
 
         let title = 'Análisis de satisfacción y calificaciones completado';
-        let description = 'Se evaluó la distribución de estrellas de los clientes.';
+        let description =
+          'Se evaluó la distribución de estrellas de los clientes.';
         let confidence = 0.94;
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
@@ -213,7 +238,10 @@ Estructura JSON requerida:
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
@@ -239,8 +267,13 @@ Estructura JSON requerida:
           createdAt: new Date().toISOString(),
         };
 
-        streaming.emit(investigationId, 'finding.created', { agent: 'CUSTOMER_EXPERIENCE', finding: findingItem });
-        streaming.emit(investigationId, 'agent.completed', { agent: 'CUSTOMER_EXPERIENCE' });
+        streaming.emit(investigationId, 'finding.created', {
+          agent: 'CUSTOMER_EXPERIENCE',
+          finding: findingItem,
+        });
+        streaming.emit(investigationId, 'agent.completed', {
+          agent: 'CUSTOMER_EXPERIENCE',
+        });
 
         return {
           result: {
@@ -255,7 +288,10 @@ Estructura JSON requerida:
     });
 
     return {
-      completedAgents: [...state.completedAgents, 'CUSTOMER_EXPERIENCE' as const],
+      completedAgents: [
+        ...state.completedAgents,
+        'CUSTOMER_EXPERIENCE' as const,
+      ],
       agentRunTraces: [agentTrace],
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],

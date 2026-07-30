@@ -4,15 +4,15 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
 import { Finding } from '@commerce-ops/shared-types';
 import { createDataScienceTools, DeliveryScenario } from './ds.tools';
-import { runAgentWithTrace, executeToolWithTrace } from '../../observability/agent-runner';
+import {
+  runAgentWithTrace,
+  executeToolWithTrace,
+} from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 
 export type ModelReliability =
-  | 'UNAVAILABLE'
-  | 'LOW'
-  | 'MODERATE'
-  | 'APPROVED_FOR_DEMO';
+  'UNAVAILABLE' | 'LOW' | 'MODERATE' | 'APPROVED_FOR_DEMO';
 
 export function deriveModelReliability(
   deploymentStatus: string,
@@ -27,9 +27,9 @@ export function deriveModelReliability(
 export function reliabilityToConfidence(reliability: ModelReliability): number {
   switch (reliability) {
     case 'UNAVAILABLE':
-      return 0.10;
+      return 0.1;
     case 'LOW':
-      return 0.30;
+      return 0.3;
     case 'MODERATE':
       return 0.65;
     case 'APPROVED_FOR_DEMO':
@@ -55,10 +55,15 @@ export function buildPredictionSummary(
     `Nivel de riesgo: ${prediction.riskLevel || prediction.risk_level}.`,
     `Estado del modelo: ${prediction.deploymentStatus || prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED'}.`,
     prediction.warning ? `Advertencia: ${prediction.warning}` : '',
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
-export function createDataScienceNode(streaming: StreamingService, prisma: PrismaClient) {
+export function createDataScienceNode(
+  streaming: StreamingService,
+  prisma: PrismaClient,
+) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
     const iteration = state.iteration || 1;
@@ -67,7 +72,9 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
     streaming.emit(investigationId, 'agent.started', { agent: 'DATA_SCIENCE' });
 
     const tools = createDataScienceTools(prisma);
-    const scenarioTool = tools.find((t) => t.name === 'get_delivery_prediction_scenarios')!;
+    const scenarioTool = tools.find(
+      (t) => t.name === 'get_delivery_prediction_scenarios',
+    )!;
     const predictTool = tools.find((t) => t.name === 'predict_delivery_delay')!;
     const explainTool = tools.find((t) => t.name === 'explain_delivery_delay')!;
 
@@ -83,20 +90,31 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
           categories: state.filters?.categories,
         };
 
-        streaming.emit(investigationId, 'tool.started', { agent: 'DATA_SCIENCE', tool: 'get_delivery_prediction_scenarios' });
-
-        const { result: scenarioRaw, trace: scenarioTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'DATA_SCIENCE',
-          iteration,
-          toolName: 'get_delivery_prediction_scenarios',
-          parameters: scenarioParams,
-          execute: () => scenarioTool.invoke(scenarioParams),
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'DATA_SCIENCE',
+          tool: 'get_delivery_prediction_scenarios',
         });
-        toolTraces.push(scenarioTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'DATA_SCIENCE', tool: 'get_delivery_prediction_scenarios' });
 
-        let scenarioPayload: { status: string; scenarios?: DeliveryScenario[]; reason?: string } = {
+        const { result: scenarioRaw, trace: scenarioTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'DATA_SCIENCE',
+            iteration,
+            toolName: 'get_delivery_prediction_scenarios',
+            parameters: scenarioParams,
+            execute: () => scenarioTool.invoke(scenarioParams),
+          });
+        toolTraces.push(scenarioTrace);
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'DATA_SCIENCE',
+          tool: 'get_delivery_prediction_scenarios',
+        });
+
+        let scenarioPayload: {
+          status: string;
+          scenarios?: DeliveryScenario[];
+          reason?: string;
+        } = {
           status: 'UNAVAILABLE',
         };
         try {
@@ -105,13 +123,18 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
           console.warn('[DSNode] Error parseando JSON de escenarios:', e);
         }
 
-        if (scenarioPayload.status !== 'AVAILABLE' || !scenarioPayload.scenarios || scenarioPayload.scenarios.length === 0) {
+        if (
+          scenarioPayload.status !== 'AVAILABLE' ||
+          !scenarioPayload.scenarios ||
+          scenarioPayload.scenarios.length === 0
+        ) {
           const unavailableFinding: Finding = {
             id: `finding-ds-unavailable-${Date.now()}`,
             investigationId,
             localAgentRunId: localRunId,
             agent: 'DATA_SCIENCE',
-            title: 'No fue posible construir escenarios ML con los filtros aplicados',
+            title:
+              'No fue posible construir escenarios ML con los filtros aplicados',
             description: `Los filtros aplicados no devolvieron escenarios con el mínimo de observaciones requerido en PostgreSQL (${scenarioPayload.reason || 'NO_SCENARIOS'}). No se ejecutaron predicciones ML.`,
             findingType: 'ML_UNAVAILABLE',
             confidence: 1.0,
@@ -120,8 +143,13 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
             createdAt: new Date().toISOString(),
           };
 
-          streaming.emit(investigationId, 'finding.created', { agent: 'DATA_SCIENCE', finding: unavailableFinding });
-          streaming.emit(investigationId, 'agent.completed', { agent: 'DATA_SCIENCE' });
+          streaming.emit(investigationId, 'finding.created', {
+            agent: 'DATA_SCIENCE',
+            finding: unavailableFinding,
+          });
+          streaming.emit(investigationId, 'agent.completed', {
+            agent: 'DATA_SCIENCE',
+          });
 
           return {
             result: {
@@ -134,31 +162,43 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
         }
 
         const scenarios = scenarioPayload.scenarios;
-        const predictions: Array<{ scenario: DeliveryScenario; prediction: any; explanation: any }> = [];
+        const predictions: Array<{
+          scenario: DeliveryScenario;
+          prediction: any;
+          explanation: any;
+        }> = [];
         const evidenceItems: any[] = [];
 
         for (const scenario of scenarios) {
-          streaming.emit(investigationId, 'tool.started', { agent: 'DATA_SCIENCE', tool: 'predict_delivery_delay' });
-
-          const { result: predRaw, trace: predictTrace } = await executeToolWithTrace({
-            localAgentRunId: localRunId,
-            agentName: 'DATA_SCIENCE',
-            iteration,
-            toolName: 'predict_delivery_delay',
-            parameters: scenario,
-            execute: () => predictTool.invoke(scenario),
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'DATA_SCIENCE',
+            tool: 'predict_delivery_delay',
           });
+
+          const { result: predRaw, trace: predictTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'DATA_SCIENCE',
+              iteration,
+              toolName: 'predict_delivery_delay',
+              parameters: scenario,
+              execute: () => predictTool.invoke(scenario),
+            });
           toolTraces.push(predictTrace);
-          streaming.emit(investigationId, 'tool.completed', { agent: 'DATA_SCIENCE', tool: 'predict_delivery_delay' });
-
-          const { result: explainRaw, trace: explainTrace } = await executeToolWithTrace({
-            localAgentRunId: localRunId,
-            agentName: 'DATA_SCIENCE',
-            iteration,
-            toolName: 'explain_delivery_delay',
-            parameters: scenario,
-            execute: () => explainTool.invoke(scenario),
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'DATA_SCIENCE',
+            tool: 'predict_delivery_delay',
           });
+
+          const { result: explainRaw, trace: explainTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'DATA_SCIENCE',
+              iteration,
+              toolName: 'explain_delivery_delay',
+              parameters: scenario,
+              execute: () => explainTool.invoke(scenario),
+            });
           toolTraces.push(explainTrace);
 
           let parsedPred: any = {};
@@ -167,7 +207,10 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
             parsedPred = JSON.parse(predRaw);
             parsedExplain = JSON.parse(explainRaw);
           } catch (e) {
-            console.warn('[DSNode] Error parseando predicción/explicación JSON:', e);
+            console.warn(
+              '[DSNode] Error parseando predicción/explicación JSON:',
+              e,
+            );
           }
 
           predictions.push({
@@ -185,27 +228,39 @@ export function createDataScienceNode(streaming: StreamingService, prisma: Prism
             agentName: 'DATA_SCIENCE' as const,
             iteration,
             toolName: 'predict_delivery_delay',
-            parameters: { scenarioId: scenario.scenarioId, modelVersion: parsedPred.model_version || 'delivery-risk-v2.0.0' },
+            parameters: {
+              scenarioId: scenario.scenarioId,
+              modelVersion: parsedPred.model_version || 'delivery-risk-v2.0.0',
+            },
             resultSummary: buildPredictionSummary(scenario, parsedPred),
             generatedAt: new Date().toISOString(),
           });
         }
 
         const firstPred = predictions[0]?.prediction || {};
-        const deploymentStatus = firstPred.deployment_status || firstPred.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED';
-        const reliability = deriveModelReliability(deploymentStatus, predictions[0]?.scenario?.sampleSize || 500);
+        const deploymentStatus =
+          firstPred.deployment_status ||
+          firstPred.deploymentStatus ||
+          'EXPERIMENTAL_NOT_APPROVED';
+        const reliability = deriveModelReliability(
+          deploymentStatus,
+          predictions[0]?.scenario?.sampleSize || 500,
+        );
         const confidence = reliabilityToConfidence(reliability);
 
         const isApproved = deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
-        const allowExperimental = process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
+        const allowExperimental =
+          process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
 
         const operationalStatus = isApproved
           ? ('ACTIONABLE' as const)
           : allowExperimental
-          ? ('EXPERIMENTAL_CONTEXT' as const)
-          : ('BLOCKED' as const);
+            ? ('EXPERIMENTAL_CONTEXT' as const)
+            : ('BLOCKED' as const);
 
-        const predictionSummariesText = predictions.map((p) => buildPredictionSummary(p.scenario, p.prediction)).join('\n');
+        const predictionSummariesText = predictions
+          .map((p) => buildPredictionSummary(p.scenario, p.prediction))
+          .join('\n');
 
         const model = new ChatOpenAI({
           modelName,
@@ -246,7 +301,10 @@ Genera un hallazgo técnico explicable en formato JSON:
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
@@ -285,7 +343,8 @@ Genera un hallazgo técnico explicable en formato JSON:
           scenarioId: p.scenario.scenarioId,
           modelName: p.prediction.model_name || 'xgboost',
           modelVersion: p.prediction.model_version || 'delivery-risk-v2.0.0',
-          deploymentStatus: p.prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED',
+          deploymentStatus:
+            p.prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED',
           probability: Number(p.prediction.probability || 0),
           threshold: Number(p.prediction.threshold || 0.5),
           predictedDelayed: Boolean(p.prediction.predicted_delayed),
@@ -295,8 +354,13 @@ Genera un hallazgo técnico explicable en formato JSON:
           explanationJson: p.explanation,
         }));
 
-        streaming.emit(investigationId, 'finding.created', { agent: 'DATA_SCIENCE', finding: findingItem });
-        streaming.emit(investigationId, 'agent.completed', { agent: 'DATA_SCIENCE' });
+        streaming.emit(investigationId, 'finding.created', {
+          agent: 'DATA_SCIENCE',
+          finding: findingItem,
+        });
+        streaming.emit(investigationId, 'agent.completed', {
+          agent: 'DATA_SCIENCE',
+        });
 
         return {
           result: {

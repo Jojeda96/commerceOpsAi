@@ -3,7 +3,10 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
 import { createSalesTools } from './sales.tools';
-import { runAgentWithTrace, executeToolWithTrace } from '../../observability/agent-runner';
+import {
+  runAgentWithTrace,
+  executeToolWithTrace,
+} from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 
@@ -21,11 +24,19 @@ export function createSalesNode(
     const tools = createSalesTools(prisma);
     const revSummaryTool = tools.find((t) => t.name === 'get_revenue_summary')!;
     const revCatTool = tools.find((t) => t.name === 'get_sales_by_category')!;
-    const paymentTool = tools.find((t) => t.name === 'get_sales_by_payment_method')!;
-    const aovTrendTool = tools.find((t) => t.name === 'get_average_order_value_trend')!;
+    const paymentTool = tools.find(
+      (t) => t.name === 'get_sales_by_payment_method',
+    )!;
+    const aovTrendTool = tools.find(
+      (t) => t.name === 'get_average_order_value_trend',
+    )!;
 
-    const asksPayment = /pago|tarjeta|boleto|cuota|installments/i.test(userQuestion);
-    const asksAov = /ticket promedio|aov|valor promedio|tendencia/i.test(userQuestion);
+    const asksPayment = /pago|tarjeta|boleto|cuota|installments/i.test(
+      userQuestion,
+    );
+    const asksAov = /ticket promedio|aov|valor promedio|tendencia/i.test(
+      userQuestion,
+    );
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SALES',
@@ -36,19 +47,29 @@ export function createSalesNode(
         const evidenceItems: any[] = [];
 
         // Tool 1: Revenue Summary
-        const revSummaryParams = { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo };
-        streaming.emit(investigationId, 'tool.started', { agent: 'SALES', tool: 'get_revenue_summary' });
-
-        const { result: revSummaryResult, trace: revSummaryTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'SALES',
-          iteration,
-          toolName: 'get_revenue_summary',
-          parameters: revSummaryParams,
-          execute: () => revSummaryTool.invoke(revSummaryParams),
+        const revSummaryParams = {
+          dateFrom: state.filters.dateFrom,
+          dateTo: state.filters.dateTo,
+        };
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'SALES',
+          tool: 'get_revenue_summary',
         });
+
+        const { result: revSummaryResult, trace: revSummaryTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'SALES',
+            iteration,
+            toolName: 'get_revenue_summary',
+            parameters: revSummaryParams,
+            execute: () => revSummaryTool.invoke(revSummaryParams),
+          });
         toolTraces.push(revSummaryTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'SALES', tool: 'get_revenue_summary' });
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'SALES',
+          tool: 'get_revenue_summary',
+        });
 
         evidenceItems.push({
           id: `ev-sales-summary-${Date.now()}`,
@@ -64,19 +85,30 @@ export function createSalesNode(
         });
 
         // Tool 2: Sales by Category
-        const revCatParams = { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo, topN: 5 };
-        streaming.emit(investigationId, 'tool.started', { agent: 'SALES', tool: 'get_sales_by_category' });
-
-        const { result: revCatResult, trace: revCatTrace } = await executeToolWithTrace({
-          localAgentRunId: localRunId,
-          agentName: 'SALES',
-          iteration,
-          toolName: 'get_sales_by_category',
-          parameters: revCatParams,
-          execute: () => revCatTool.invoke(revCatParams),
+        const revCatParams = {
+          dateFrom: state.filters.dateFrom,
+          dateTo: state.filters.dateTo,
+          topN: 5,
+        };
+        streaming.emit(investigationId, 'tool.started', {
+          agent: 'SALES',
+          tool: 'get_sales_by_category',
         });
+
+        const { result: revCatResult, trace: revCatTrace } =
+          await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'SALES',
+            iteration,
+            toolName: 'get_sales_by_category',
+            parameters: revCatParams,
+            execute: () => revCatTool.invoke(revCatParams),
+          });
         toolTraces.push(revCatTrace);
-        streaming.emit(investigationId, 'tool.completed', { agent: 'SALES', tool: 'get_sales_by_category' });
+        streaming.emit(investigationId, 'tool.completed', {
+          agent: 'SALES',
+          tool: 'get_sales_by_category',
+        });
 
         evidenceItems.push({
           id: `ev-sales-category-${Date.now()}`,
@@ -94,20 +126,30 @@ export function createSalesNode(
         // Tool 3: Payment Method (optional)
         let paymentResult: string | undefined;
         if (asksPayment) {
-          const paymentParams = { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo };
-          streaming.emit(investigationId, 'tool.started', { agent: 'SALES', tool: 'get_sales_by_payment_method' });
-
-          const { result: pRes, trace: paymentTrace } = await executeToolWithTrace({
-            localAgentRunId: localRunId,
-            agentName: 'SALES',
-            iteration,
-            toolName: 'get_sales_by_payment_method',
-            parameters: paymentParams,
-            execute: () => paymentTool.invoke(paymentParams),
+          const paymentParams = {
+            dateFrom: state.filters.dateFrom,
+            dateTo: state.filters.dateTo,
+          };
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'SALES',
+            tool: 'get_sales_by_payment_method',
           });
+
+          const { result: pRes, trace: paymentTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'SALES',
+              iteration,
+              toolName: 'get_sales_by_payment_method',
+              parameters: paymentParams,
+              execute: () => paymentTool.invoke(paymentParams),
+            });
           paymentResult = pRes;
           toolTraces.push(paymentTrace);
-          streaming.emit(investigationId, 'tool.completed', { agent: 'SALES', tool: 'get_sales_by_payment_method' });
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'SALES',
+            tool: 'get_sales_by_payment_method',
+          });
 
           evidenceItems.push({
             id: `ev-sales-payment-${Date.now()}`,
@@ -126,20 +168,30 @@ export function createSalesNode(
         // Tool 4: AOV Trend (optional)
         let aovTrendResult: string | undefined;
         if (asksAov) {
-          const aovParams = { dateFrom: state.filters.dateFrom, dateTo: state.filters.dateTo };
-          streaming.emit(investigationId, 'tool.started', { agent: 'SALES', tool: 'get_average_order_value_trend' });
-
-          const { result: aovRes, trace: aovTrace } = await executeToolWithTrace({
-            localAgentRunId: localRunId,
-            agentName: 'SALES',
-            iteration,
-            toolName: 'get_average_order_value_trend',
-            parameters: aovParams,
-            execute: () => aovTrendTool.invoke(aovParams),
+          const aovParams = {
+            dateFrom: state.filters.dateFrom,
+            dateTo: state.filters.dateTo,
+          };
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'SALES',
+            tool: 'get_average_order_value_trend',
           });
+
+          const { result: aovRes, trace: aovTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'SALES',
+              iteration,
+              toolName: 'get_average_order_value_trend',
+              parameters: aovParams,
+              execute: () => aovTrendTool.invoke(aovParams),
+            });
           aovTrendResult = aovRes;
           toolTraces.push(aovTrace);
-          streaming.emit(investigationId, 'tool.completed', { agent: 'SALES', tool: 'get_average_order_value_trend' });
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'SALES',
+            tool: 'get_average_order_value_trend',
+          });
 
           evidenceItems.push({
             id: `ev-sales-aov-${Date.now()}`,
@@ -179,7 +231,8 @@ Analiza estos datos y genera un hallazgo técnico claro en JSON con el siguiente
 }`;
 
         let title = 'Análisis de ventas e ingresos completado';
-        let description = 'Se analizaron los totales de facturación y distribución por categoría.';
+        let description =
+          'Se analizaron los totales de facturación y distribución por categoría.';
         let confidence = 0.95;
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
@@ -190,7 +243,10 @@ Analiza estos datos y genera un hallazgo técnico claro en JSON con el siguiente
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
@@ -216,7 +272,10 @@ Analiza estos datos y genera un hallazgo técnico claro en JSON con el siguiente
           createdAt: new Date().toISOString(),
         };
 
-        streaming.emit(investigationId, 'finding.created', { agent: 'SALES', finding: findingItem });
+        streaming.emit(investigationId, 'finding.created', {
+          agent: 'SALES',
+          finding: findingItem,
+        });
         streaming.emit(investigationId, 'agent.completed', { agent: 'SALES' });
 
         return {

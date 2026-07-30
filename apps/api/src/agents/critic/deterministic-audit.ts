@@ -78,7 +78,11 @@ export function performDeterministicAudit(
     // Check 5: ML Governance Audit - If Data Science finding uses unapproved model, add warning
     const agentName = f.agent || (f as any).agentName;
     if (agentName === 'DATA_SCIENCE') {
-      if (text.includes('EXPERIMENTAL_NOT_APPROVED') || text.includes('No Aprobado') || text.includes('experimental')) {
+      if (
+        text.includes('EXPERIMENTAL_NOT_APPROVED') ||
+        text.includes('No Aprobado') ||
+        text.includes('experimental')
+      ) {
         fWarnings.push(
           `El hallazgo de Data Science "${f.title}" se basa en un modelo en estado experimental no aprobado para inferencia operativa.`,
         );
@@ -100,7 +104,10 @@ export function enforceDeterministicDecision(
 ): { decision: CriticDecision; enforcedReason?: string } {
   // Regla estricta: Si existen errores críticos, NUNCA se permite APPROVED ni APPROVED_WITH_WARNINGS
   if (audit.criticalErrors.length > 0) {
-    if (llmDecision === 'APPROVED' || llmDecision === 'APPROVED_WITH_WARNINGS') {
+    if (
+      llmDecision === 'APPROVED' ||
+      llmDecision === 'APPROVED_WITH_WARNINGS'
+    ) {
       return {
         decision: 'REQUIRES_MORE_ANALYSIS',
         enforcedReason: `Decisión forzada a REQUIRES_MORE_ANALYSIS por errores críticos deterministas: ${audit.criticalErrors.join(' | ')}`,

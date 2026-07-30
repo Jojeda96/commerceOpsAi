@@ -84,7 +84,9 @@ Responde estrictamente en formato JSON con la siguiente estructura:
 }`;
 
         let rawDecision: CriticDecision =
-          audit.criticalErrors.length > 0 ? 'REQUIRES_MORE_ANALYSIS' : 'APPROVED';
+          audit.criticalErrors.length > 0
+            ? 'REQUIRES_MORE_ANALYSIS'
+            : 'APPROVED';
         let score = audit.criticalErrors.length > 0 ? 55 : 85;
         let feedback =
           audit.criticalErrors.length > 0
@@ -101,16 +103,19 @@ Responde estrictamente en formato JSON con la siguiente estructura:
           inputTokens = usage.inputTokens;
           outputTokens = usage.outputTokens;
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const content =
+            typeof response.content === 'string'
+              ? response.content
+              : JSON.stringify(response.content);
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);
             const validation = criticOutputSchema.safeParse(parsed);
             if (validation.success) {
-              rawDecision = validation.data.decision as CriticDecision;
+              rawDecision = validation.data.decision;
               score = validation.data.score;
               feedback = validation.data.feedback;
-              requestedAgents = validation.data.requestedAgents as AgentName[];
+              requestedAgents = validation.data.requestedAgents;
               requiredActions = validation.data.requiredActions;
             }
           }
@@ -118,7 +123,8 @@ Responde estrictamente en formato JSON con la siguiente estructura:
           console.warn('[CriticNode] Error executing LLM call:', err);
           rawDecision = 'REQUIRES_MORE_ANALYSIS';
           score = 50;
-          feedback = 'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
+          feedback =
+            'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
         }
 
         // Enforcement determinista incorruptible
@@ -128,7 +134,10 @@ Responde estrictamente en formato JSON con la siguiente estructura:
           feedback = `${feedback} (${enforced.enforcedReason})`;
         }
 
-        if (finalDecision === 'REQUIRES_MORE_ANALYSIS' && requestedAgents.length === 0) {
+        if (
+          finalDecision === 'REQUIRES_MORE_ANALYSIS' &&
+          requestedAgents.length === 0
+        ) {
           // Si hubo errores en hallazgos específicos, solicitar re-ejecución de los agentes afectados
           const affectedAgents = new Set<AgentName>();
           for (const f of findings) {
@@ -158,13 +167,15 @@ Responde estrictamente en formato JSON con la siguiente estructura:
       investigationId,
       severity: (() => {
         if (result.finalDecision === 'APPROVED') return 'LOW' as const;
-        if (result.finalDecision === 'APPROVED_WITH_WARNINGS') return 'MEDIUM' as const;
+        if (result.finalDecision === 'APPROVED_WITH_WARNINGS')
+          return 'MEDIUM' as const;
         return 'HIGH' as const;
       })(),
       message: result.feedback,
       requiredAction: result.requiredActions.join(' | ') || undefined,
       status:
-        result.finalDecision === 'APPROVED' || result.finalDecision === 'APPROVED_WITH_WARNINGS'
+        result.finalDecision === 'APPROVED' ||
+        result.finalDecision === 'APPROVED_WITH_WARNINGS'
           ? ('RESOLVED' as const)
           : ('PENDING' as const),
       createdAt: new Date().toISOString(),

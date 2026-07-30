@@ -54,7 +54,9 @@ export async function runAgentWithTrace<T>(
     options.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   try {
-    const { result, inputTokens, outputTokens } = await options.execute({ localRunId });
+    const { result, inputTokens, outputTokens } = await options.execute({
+      localRunId,
+    });
     const endTime = Date.now();
     const durationMs = endTime - startTime;
     const estimatedCostUsd = calculateEstimatedCostUsd(

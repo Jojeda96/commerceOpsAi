@@ -33,7 +33,9 @@ export class AppController {
   }
 
   @Get('health')
-  @ApiOperation({ summary: 'Salud agregada del sistema multiagente (API, DB, Redis, ML)' })
+  @ApiOperation({
+    summary: 'Salud agregada del sistema multiagente (API, DB, Redis, ML)',
+  })
   async getHealth() {
     let dbStatus = 'DOWN';
     try {
@@ -59,8 +61,8 @@ export class AppController {
     const overallStatus = isFullyUp
       ? 'OPERATIONAL'
       : isAnyUp
-      ? 'DEGRADED'
-      : 'DOWN';
+        ? 'DEGRADED'
+        : 'DOWN';
 
     return {
       status: overallStatus,

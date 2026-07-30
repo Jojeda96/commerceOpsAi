@@ -37,7 +37,13 @@ export function createDataScienceTools(prisma: PrismaClient) {
   const repo = new DeliveryScenariosRepository(prisma);
 
   const getDeliveryPredictionScenarios = tool(
-    async ({ limit, selectionMethod, customerStates, categories, minOrders }) => {
+    async ({
+      limit,
+      selectionMethod,
+      customerStates,
+      categories,
+      minOrders,
+    }) => {
       try {
         const scenarios = await repo.getScenarios({
           limit,
@@ -62,7 +68,10 @@ export function createDataScienceTools(prisma: PrismaClient) {
           scenarios,
         });
       } catch (error: any) {
-        console.warn('[DS Tools] Error consultando escenarios en PostgreSQL:', error);
+        console.warn(
+          '[DS Tools] Error consultando escenarios en PostgreSQL:',
+          error,
+        );
         return JSON.stringify({
           status: 'ERROR',
           reason: 'DATABASE_QUERY_FAILED',
@@ -87,8 +96,10 @@ export function createDataScienceTools(prisma: PrismaClient) {
 
   const predictDeliveryDelay = tool(
     async (scenario) => {
-      const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
-      const allowExperimental = process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
+      const mlServiceUrl =
+        process.env.ML_SERVICE_URL || 'http://localhost:8000';
+      const allowExperimental =
+        process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
 
       const url = new URL('/models/delivery-delay/predict', mlServiceUrl);
       if (allowExperimental) {
@@ -144,15 +155,18 @@ export function createDataScienceTools(prisma: PrismaClient) {
     },
     {
       name: 'predict_delivery_delay',
-      description: 'Ejecuta la inferencia del modelo ML sobre un escenario real de entrega.',
+      description:
+        'Ejecuta la inferencia del modelo ML sobre un escenario real de entrega.',
       schema: deliveryScenarioSchema.partial({ scenarioId: true }),
     },
   );
 
   const explainDeliveryDelay = tool(
     async (scenario) => {
-      const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
-      const allowExperimental = process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
+      const mlServiceUrl =
+        process.env.ML_SERVICE_URL || 'http://localhost:8000';
+      const allowExperimental =
+        process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
 
       const url = new URL('/models/delivery-delay/explain', mlServiceUrl);
       if (allowExperimental) {
@@ -204,10 +218,15 @@ export function createDataScienceTools(prisma: PrismaClient) {
     },
     {
       name: 'explain_delivery_delay',
-      description: 'Obtiene la atribución de características SHAP para una predicción real.',
+      description:
+        'Obtiene la atribución de características SHAP para una predicción real.',
       schema: deliveryScenarioSchema.partial({ scenarioId: true }),
     },
   );
 
-  return [getDeliveryPredictionScenarios, predictDeliveryDelay, explainDeliveryDelay];
+  return [
+    getDeliveryPredictionScenarios,
+    predictDeliveryDelay,
+    explainDeliveryDelay,
+  ];
 }

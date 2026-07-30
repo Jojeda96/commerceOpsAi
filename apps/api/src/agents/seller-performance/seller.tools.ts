@@ -96,12 +96,19 @@ export function createSellerPerformanceTools(prisma: PrismaService) {
         },
       });
 
-      const sellerAgg: Record<string, { gmv: number; items: number; state: string }> = {};
+      const sellerAgg: Record<
+        string,
+        { gmv: number; items: number; state: string }
+      > = {};
       for (const item of items) {
         const sid = item.sellerId;
         const gmv = Number(item.price) + Number(item.freightValue || 0);
         if (!sellerAgg[sid]) {
-          sellerAgg[sid] = { gmv: 0, items: 0, state: item.seller?.sellerState || 'UNK' };
+          sellerAgg[sid] = {
+            gmv: 0,
+            items: 0,
+            state: item.seller?.sellerState || 'UNK',
+          };
         }
         sellerAgg[sid].gmv += gmv;
         sellerAgg[sid].items += 1;
