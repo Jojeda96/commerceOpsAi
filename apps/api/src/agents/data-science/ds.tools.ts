@@ -5,7 +5,7 @@ import { DeliveryScenariosRepository } from './delivery-scenarios.repository';
 
 export const deliveryScenarioSchema = z.object({
   scenarioId: z.string(),
-  sellerState: z.string().length(2),
+  primarySellerState: z.string().length(2),
   customerState: z.string().length(2),
   totalFreight: z.number().nonnegative(),
   totalPrice: z.number().positive(),
@@ -20,15 +20,15 @@ export const deliveryScenarioSchema = z.object({
   purchaseHour: z.number().int().min(0).max(23),
   purchaseMonth: z.number().int().min(1).max(12),
   purchaseWeek: z.number().int().min(1).max(53),
-  primaryCategory: z.string().nullable(),
+  primaryCategory: z.string().min(1),
   sellerPriorOrders: z.number().int().nonnegative(),
-  sellerPriorLateRate: z.number().min(0).max(1).nullable(),
+  sellerPriorLateRateSmoothed: z.number().min(0).max(1),
   routePriorOrders: z.number().int().nonnegative(),
-  routePriorLateRate: z.number().min(0).max(1).nullable(),
+  routePriorLateRateSmoothed: z.number().min(0).max(1),
   categoryPriorOrders: z.number().int().nonnegative(),
-  categoryPriorLateRate: z.number().min(0).max(1).nullable(),
-  sampleSize: z.number().int().positive(),
-  historicalLateRate: z.number().min(0).max(1),
+  categoryPriorLateRateSmoothed: z.number().min(0).max(1),
+  sampleSize: z.number().int().positive().optional(),
+  historicalLateRate: z.number().min(0).max(1).optional(),
 });
 
 export type DeliveryScenario = z.infer<typeof deliveryScenarioSchema>;
@@ -57,14 +57,14 @@ export function createDataScienceTools(prisma: PrismaClient) {
           return JSON.stringify({
             status: 'UNAVAILABLE',
             reason: 'NO_SCENARIOS_MATCH_FILTERS',
-            selectionMethod: selectionMethod || 'TOP_VOLUME',
+            selectionMethod: selectionMethod || 'REPRESENTATIVE_MEDIAN',
             scenarios: [],
           });
         }
 
         return JSON.stringify({
           status: 'AVAILABLE',
-          selectionMethod: selectionMethod || 'TOP_VOLUME',
+          selectionMethod: selectionMethod || 'REPRESENTATIVE_MEDIAN',
           scenarios,
         });
       } catch (error: any) {
@@ -112,7 +112,7 @@ export function createDataScienceTools(prisma: PrismaClient) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             scenario_id: scenario.scenarioId || 'scen-custom',
-            seller_state: scenario.sellerState,
+            primary_seller_state: scenario.primarySellerState,
             customer_state: scenario.customerState,
             total_freight: scenario.totalFreight,
             total_price: scenario.totalPrice,
@@ -129,7 +129,13 @@ export function createDataScienceTools(prisma: PrismaClient) {
             purchase_week: scenario.purchaseWeek,
             primary_category: scenario.primaryCategory,
             seller_prior_orders: scenario.sellerPriorOrders,
-            seller_prior_late_rate: scenario.sellerPriorLateRate,
+            seller_prior_late_rate_smoothed:
+              scenario.sellerPriorLateRateSmoothed,
+            route_prior_orders: scenario.routePriorOrders,
+            route_prior_late_rate_smoothed: scenario.routePriorLateRateSmoothed,
+            category_prior_orders: scenario.categoryPriorOrders,
+            category_prior_late_rate_smoothed:
+              scenario.categoryPriorLateRateSmoothed,
           }),
         });
 
@@ -179,7 +185,7 @@ export function createDataScienceTools(prisma: PrismaClient) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             scenario_id: scenario.scenarioId || 'scen-custom',
-            seller_state: scenario.sellerState,
+            primary_seller_state: scenario.primarySellerState,
             customer_state: scenario.customerState,
             total_freight: scenario.totalFreight,
             total_price: scenario.totalPrice,
@@ -196,7 +202,13 @@ export function createDataScienceTools(prisma: PrismaClient) {
             purchase_week: scenario.purchaseWeek,
             primary_category: scenario.primaryCategory,
             seller_prior_orders: scenario.sellerPriorOrders,
-            seller_prior_late_rate: scenario.sellerPriorLateRate,
+            seller_prior_late_rate_smoothed:
+              scenario.sellerPriorLateRateSmoothed,
+            route_prior_orders: scenario.routePriorOrders,
+            route_prior_late_rate_smoothed: scenario.routePriorLateRateSmoothed,
+            category_prior_orders: scenario.categoryPriorOrders,
+            category_prior_late_rate_smoothed:
+              scenario.categoryPriorLateRateSmoothed,
           }),
         });
 

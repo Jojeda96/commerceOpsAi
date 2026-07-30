@@ -86,12 +86,15 @@ export class InvestigationOrchestratorService {
         const tracesToPersist = finalState.agentRunTraces ?? [];
 
         for (const trace of tracesToPersist) {
-          const agentRun = await tx.agentRun.create({
-            data: {
+          const agentRun = await tx.agentRun.upsert({
+            where: { localRunId: trace.localRunId },
+            create: {
+              localRunId: trace.localRunId,
               investigationId,
               agentName: trace.agentName,
               iteration: trace.iteration || 1,
-              model: trace.model || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+              model: trace.model || undefined,
+              executionKind: trace.model ? 'LLM' : 'DETERMINISTIC',
               promptVersion: trace.promptVersion || 'v1.0',
               status: trace.status || 'COMPLETED',
               inputTokens: trace.inputTokens,
@@ -106,21 +109,44 @@ export class InvestigationOrchestratorService {
                 ? new Date(trace.completedAt)
                 : new Date(),
             },
+            update: {
+              status: trace.status || 'COMPLETED',
+              completedAt: trace.completedAt
+                ? new Date(trace.completedAt)
+                : new Date(),
+              durationMs: trace.durationMs,
+              inputTokens: trace.inputTokens,
+              outputTokens: trace.outputTokens,
+              estimatedCost: trace.estimatedCostUsd,
+              errorMessage: trace.errorMessage,
+            },
           });
           agentRunDbMap.set(trace.localRunId, agentRun.id);
         }
 
-        // Persistir ToolExecutions vinculadas estrictamente a su AgentRun por localRunId
+        // Persistir ToolExecutions
         for (const toolTrace of finalState.toolExecutionTraces || []) {
-          const parentAgentRunId = agentRunDbMap.get(toolTrace.localAgentRunId);
+          let parentAgentRunId = agentRunDbMap.get(toolTrace.localAgentRunId);
           if (!parentAgentRunId) {
-            throw new Error(
-              `Tool execution ${toolTrace.toolName} (${toolTrace.localExecutionId}) no tiene AgentRun trace correspondiente (${toolTrace.localAgentRunId}).`,
-            );
+            const dbRun = await tx.agentRun.findUnique({
+              where: { localRunId: toolTrace.localAgentRunId },
+            });
+            if (dbRun) {
+              parentAgentRunId = dbRun.id;
+            }
           }
 
-          const toolExec = await tx.toolExecution.create({
-            data: {
+          if (!parentAgentRunId) {
+            this.logger.warn(
+              `Tool execution ${toolTrace.toolName} (${toolTrace.localExecutionId}) no tiene AgentRun trace correspondiente (${toolTrace.localAgentRunId}).`,
+            );
+            continue;
+          }
+
+          const toolExec = await tx.toolExecution.upsert({
+            where: { localExecutionId: toolTrace.localExecutionId },
+            create: {
+              localExecutionId: toolTrace.localExecutionId,
               agentRunId: parentAgentRunId,
               toolName: toolTrace.toolName,
               parametersJson: (toolTrace.parameters as any) || {},
@@ -138,6 +164,18 @@ export class InvestigationOrchestratorService {
                 ? new Date(toolTrace.completedAt)
                 : new Date(),
             },
+            update: {
+              status: toolTrace.status || 'COMPLETED',
+              completedAt: toolTrace.completedAt
+                ? new Date(toolTrace.completedAt)
+                : new Date(),
+              durationMs: toolTrace.durationMs,
+              resultSummary:
+                typeof toolTrace.resultSummary === 'string'
+                  ? toolTrace.resultSummary.substring(0, 1000)
+                  : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+              errorMessage: toolTrace.errorMessage,
+            },
           });
           toolExecutionDbMap.set(toolTrace.localExecutionId, toolExec.id);
         }
@@ -150,7 +188,7 @@ export class InvestigationOrchestratorService {
         }
         const uniqueFindings = Array.from(uniqueFindingsMap.values());
 
-        // Persistir findings en DB vinculados a su AgentRun real
+        // Persistir findings en DB
         for (const finding of uniqueFindings) {
           const agentRunId = finding.localAgentRunId
             ? agentRunDbMap.get(finding.localAgentRunId)
@@ -169,10 +207,17 @@ export class InvestigationOrchestratorService {
               iteration: finding.iteration || 1,
               supersedesFindingId: finding.supersedesFindingId,
               status: finding.status || 'ACTIVE',
+              operationalStatus: finding.operationalStatus || 'ACTIONABLE',
+              modelGovernanceJson: finding.modelGovernance
+                ? finding.modelGovernance
+                : undefined,
+              numericClaimsJson: finding.numericClaims
+                ? finding.numericClaims
+                : undefined,
             },
           });
 
-          // Persistir evidencias asociadas a su ToolExecution real
+          // Persistir evidencias asociadas
           for (const evId of finding.evidenceIds || []) {
             const ev = (finalState.evidence || []).find(
               (e: any) => e.id === evId,
@@ -181,12 +226,6 @@ export class InvestigationOrchestratorService {
               const toolExecDbId = ev.localToolExecutionId
                 ? toolExecutionDbMap.get(ev.localToolExecutionId)
                 : ev.toolExecutionId || null;
-
-              if (ev.sourceType === 'TOOL_EXECUTION' && !toolExecDbId) {
-                throw new Error(
-                  `Evidence ${ev.id} de tool ${ev.toolName} no está vinculada a una ToolExecution real.`,
-                );
-              }
 
               const createdEv = await tx.evidence.create({
                 data: {
@@ -200,6 +239,7 @@ export class InvestigationOrchestratorService {
                       ? ev.resultSummary
                       : JSON.stringify(ev.resultSummary),
                   rawReference: JSON.stringify(ev.parameters || {}),
+                  metricsJson: ev.metrics ? (ev.metrics as any) : undefined,
                 },
               });
 
@@ -213,7 +253,7 @@ export class InvestigationOrchestratorService {
           }
         }
 
-        // Persistir predicciones de modelos ML (ModelPrediction) de manera transaccional
+        // Persistir predicciones ML
         for (const mp of finalState.modelPredictions || []) {
           await tx.modelPrediction.create({
             data: {
@@ -221,7 +261,7 @@ export class InvestigationOrchestratorService {
               findingId: mp.findingId || null,
               scenarioId: mp.scenarioId,
               modelName: mp.modelName || 'xgboost',
-              modelVersion: mp.modelVersion || 'delivery-risk-v2.0.0',
+              modelVersion: mp.modelVersion || 'delivery-risk-v3.0.0',
               deploymentStatus:
                 mp.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
               probability: mp.probability,
@@ -235,7 +275,7 @@ export class InvestigationOrchestratorService {
           });
         }
 
-        // Persistir recomendaciones en DB
+        // Persistir recomendaciones
         for (const rec of finalState.recommendations || []) {
           await tx.recommendation.create({
             data: {
@@ -245,6 +285,9 @@ export class InvestigationOrchestratorService {
               description: rec.description,
               priority: rec.priority,
               expectedImpact: rec.expectedImpact,
+              expectedImpactClaimsJson: rec.expectedImpactClaims
+                ? (rec.expectedImpactClaims as any)
+                : undefined,
               assumptionsJson: rec.assumptions,
             },
           });
@@ -262,7 +305,6 @@ export class InvestigationOrchestratorService {
           });
         }
 
-        // Actualizar status final de la investigación según decisión del crítico y estado de revisión
         if (finalState.criticDecision === 'REJECTED') {
           finalStatus = 'REJECTED';
         } else if (finalState.criticDecision === 'APPROVED_WITH_WARNINGS') {

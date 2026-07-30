@@ -1,4 +1,5 @@
 import { CriticDecision, Finding, Evidence } from '@commerce-ops/shared-types';
+import { auditNumericClaims } from './numeric-grounding';
 
 export interface AuditResult {
   criticalErrors: string[];
@@ -17,9 +18,23 @@ export function performDeterministicAudit(
     { criticalErrors: string[]; warnings: string[] }
   > = {};
 
+  // Numeric Grounding Audit
+  const numericViolations = auditNumericClaims(findings, evidence);
+  for (const v of numericViolations) {
+    criticalErrors.push(`[${v.code}] ${v.details}`);
+  }
+
   for (const f of findings) {
     const fCritical: string[] = [];
     const fWarnings: string[] = [];
+
+    // Include numeric violations for this finding
+    const fNumericViolations = numericViolations.filter(
+      (v) => v.findingId === f.id,
+    );
+    for (const nv of fNumericViolations) {
+      fCritical.push(`[${nv.code}] ${nv.details}`);
+    }
 
     // Check 1: Finding has evidence linked
     const linked = evidence.filter(

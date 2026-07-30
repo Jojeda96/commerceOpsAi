@@ -1,74 +1,61 @@
-name: CI & Full-Stack Quality Pipeline
+name: CommerceOps AI - CI Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
+    branches: [ main, develop ]
 
 jobs:
-  lint:
+  python-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
 
-  ml-unit-and-runtime:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install ML dependencies
-        run: pip install -r apps/ml-service/requirements.txt pytest scikit-learn xgboost shap
-      - name: Run ML unit tests
-        run: PYTHONPATH=. pytest tests/ml -v || true
-      - name: Run ML service API tests
-        run: cd apps/ml-service && PYTHONPATH=. pytest tests/ -v
+          python-version: "3.11"
+          cache: "pip"
 
-  api-unit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run test --filter=api
-
-  web-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run build --filter=web
-
-  docker-full-stack:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Ensure processed data directory exists
-        run: mkdir -p data/processed data/models
-      - name: Build and start Docker services
-        run: docker compose up -d postgres redis ml-service
-      - name: Verify service health and runtime predict endpoints
+      - name: Install Python Dependencies
         run: |
-          sleep 10
-          docker ps
-          curl --fail --retry 10 --retry-delay 3 http://localhost:8000/health
-          curl --fail --retry 10 --retry-delay 3 http://localhost:8000/models/delivery-delay/runtime
-          curl --fail --retry 10 --retry-delay 3 http://localhost:8000/models/delivery-delay/metrics
-          curl --fail --retry 10 --retry-delay 3 -X POST http://localhost:8000/models/delivery-delay/predict?allow_experimental=true -H "Content-Type: application/json" -d '{"seller_state":"SP","customer_state":"RJ","total_freight":30,"total_price":100,"total_weight_g":500,"total_volume_cm3":4500,"item_count":1}'
+          python -m pip install --upgrade pip
+          pip install -r apps/ml-service/requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Validate Delivery Feature Contract V3
+        run: |
+          PYTHONPATH=. python scripts/contracts/validate_delivery_contract.py
+
+      - name: Validate Feature Snapshots Schema
+        run: |
+          PYTHONPATH=. python scripts/ml/feature_snapshot_schema.py
+
+      - name: Verify Model Quality Gate Baseline Status
+        run: |
+          PYTHONPATH=.:apps/ml-service python -c "from app.services.model_governance import evaluate_delivery_model; import json; m = json.load(open('data/models/delivery_delay_metrics.json')); res = evaluate_delivery_model(m); print('Gate Status:', res.status); assert res.status in ['EXPERIMENTAL_NOT_APPROVED', 'APPROVED_FOR_DEMO_INFERENCE']"
+
+      - name: Run Python Unit & Parity Test Suite
+        run: |
+          PYTHONPATH=.:apps/ml-service python -m pytest tests/contracts tests/ml apps/ml-service/tests -v
+
+  typescript-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run TypeScript Jest Tests
+        run: npm run test

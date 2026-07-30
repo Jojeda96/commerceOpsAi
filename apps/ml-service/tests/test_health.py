@@ -3,24 +3,46 @@ from app.main import app
 
 client = TestClient(app)
 
+VALID_V3_PAYLOAD = {
+    "scenario_id": "HEALTH_TEST_001",
+    "primary_seller_state": "SP",
+    "customer_state": "RJ",
+    "total_freight": 45.0,
+    "total_price": 100.0,
+    "total_weight_g": 500.0,
+    "total_volume_cm3": 4500.0,
+    "estimated_delivery_days": 10.0,
+    "shipping_window_days": 5.0,
+    "route_distance_km": 400.0,
+    "purchase_dow": 2,
+    "purchase_hour": 14,
+    "purchase_month": 6,
+    "purchase_week": 24,
+    "item_count": 2,
+    "seller_count": 1,
+    "seller_prior_orders": 10,
+    "seller_prior_late_rate_smoothed": 0.08,
+    "route_prior_orders": 5,
+    "route_prior_late_rate_smoothed": 0.08,
+    "category_prior_orders": 50,
+    "category_prior_late_rate_smoothed": 0.08,
+    "primary_category": "beleza_saude",
+}
+
 def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["runtime_ready"] is True
+    assert data["bundle_schema_version"] in ["2.1", "3.0"]
+    assert "delivery-features-v3" in data["feature_contract_version"]
+    assert "deployment_status" in data
 
 def test_predict_endpoint_unapproved_model_rejected():
-    # Por defecto debe rechazar con 503 porque el modelo no está aprobado por el Quality Gate
     response = client.post(
         "/models/delivery-delay/predict",
-        json={
-            "seller_state": "SP",
-            "customer_state": "RJ",
-            "total_freight": 45.0,
-            "total_price": 100.0,
-            "total_weight_g": 500.0,
-            "total_volume_cm3": 4500.0,
-            "item_count": 2,
-        },
+        json=VALID_V3_PAYLOAD,
     )
     assert response.status_code == 503
     data = response.json()["detail"]
@@ -29,15 +51,7 @@ def test_predict_endpoint_unapproved_model_rejected():
 def test_predict_endpoint_experimental_allowed():
     response = client.post(
         "/models/delivery-delay/predict?allow_experimental=true",
-        json={
-            "seller_state": "SP",
-            "customer_state": "RJ",
-            "total_freight": 45.0,
-            "total_price": 100.0,
-            "total_weight_g": 500.0,
-            "total_volume_cm3": 4500.0,
-            "item_count": 2,
-        },
+        json=VALID_V3_PAYLOAD,
     )
     assert response.status_code == 200
     data = response.json()
@@ -49,20 +63,11 @@ def test_predict_endpoint_experimental_allowed():
 def test_explain_endpoint_experimental_allowed():
     response = client.post(
         "/models/delivery-delay/explain?allow_experimental=true",
-        json={
-            "seller_state": "SP",
-            "customer_state": "RJ",
-            "total_freight": 45.0,
-            "total_price": 100.0,
-            "total_weight_g": 500.0,
-            "total_volume_cm3": 4500.0,
-            "item_count": 2,
-        },
+        json=VALID_V3_PAYLOAD,
     )
     assert response.status_code == 200
     data = response.json()
     assert "contributions" in data
-    assert data["explanation_scale"] == "XGBOOST_RAW_MARGIN"
 
 def test_metrics_endpoint():
     response = client.get("/models/delivery-delay/metrics")

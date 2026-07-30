@@ -57,7 +57,7 @@ export function createSupervisorNode(
     });
 
     const isReiteration =
-      currentIteration > 0 && criticFeedback && criticFeedback.length > 0;
+      currentIteration > 1 && criticFeedback && criticFeedback.length > 0;
     const latestFeedback = isReiteration
       ? criticFeedback[criticFeedback.length - 1]
       : null;
@@ -155,15 +155,13 @@ Responde estrictamente en formato JSON:
           );
         }
 
-        // Reiteración dirigida: si el Critic solicitó agentes específicos, forzarlos obligatoriamente
+        // Reiteración dirigida estricta: en reiteración se ejecutan ÚNICAMENTE los agentes requeridos por el Critic
         if (
-          state.iteration > 0 &&
+          state.iteration > 1 &&
           state.requestedAgents &&
           state.requestedAgents.length > 0
         ) {
-          selectedAgents = Array.from(
-            new Set([...selectedAgents, ...state.requestedAgents]),
-          );
+          selectedAgents = state.requestedAgents;
         }
 
         const mergedFilters = {

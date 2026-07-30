@@ -5,19 +5,22 @@
 
 CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logística, experiencia de cliente, rendimiento de vendedores, detección de anomalías, machine learning y estrategia empresarial. Un **Evidence Critic** audita y evalúa la evidencia numérica antes de generar el informe final.
 
-### 📋 Matriz de Capacidades y Estado del Sistema (V3 Hardening)
+### 📋 Estado verificado del sistema
 
-| Capacidad | Estado | Implementación |
+> Última verificación: V4. Las capacidades marcadas como experimentales o parciales no deben interpretarse como producción.
+> El dataset Olist cubre principalmente 2016–2018. Las conclusiones son demostrativas y no representan condiciones logísticas actuales.
+
+| Capacidad | Estado verificado | Evidencia |
 |---|---|---|
-| **Orquestación Multiagente** | ✅ Implementada | LangGraph JS + NestJS con fan-out paralelo `Send()` |
-| **Quality Gates ML** | ✅ Implementados | Evaluación determinista sobre splits temporales estrictos |
-| **XGBoost Classifier** | 🧪 Experimental | Estado `EXPERIMENTAL_NOT_APPROVED` (Quality Gate activo) |
-| **Logistic Regression** | 🟢 Baseline / Champion | Candidato champion ajustado |
-| **Escenarios ML** | ✅ Reales PostgreSQL | Consultas `$queryRaw` sin escenarios hardcodeados |
-| **Trazabilidad Runtime** | ✅ Real End-to-End | AgentRun & ToolExecution vinculados en DB sin fallbacks |
-| **Evidence Critic** | ✅ Estructurado Zod | Validación estructurada Zod, score 0-100 y reiteración |
-| **NLP Búsqueda Semántica** | ✅ Evidencia Real | Índice sobre Olist real con TF-IDF persistido y metadatos |
-| **CI Full-Stack** | ✅ GitHub Actions | Lint, Jest, Pytest, Docker build & predict endpoint |
+| Orquestación multiagente | ✅ Implementada para demo | LangGraph + pruebas E2E |
+| Analytics SQL | ✅ Implementada | PostgreSQL + endpoints deterministas |
+| Predictor de atrasos | 🧪 Experimental y bloqueado | Quality gate y Model Card |
+| Selección de champion | ✅ Implementada | Walk-forward CV; Logistic/XGBoost |
+| Escenarios Data Science | ✅ Point-in-time snapshots | Contrato V3 y tests de parity |
+| Trazabilidad | ✅ Durable | AgentRun/ToolExecution incluso en fallos |
+| Evidence Critic | ✅ Grounding estructurado | Auditoría numérica determinista |
+| NLP de reseñas | ✅/⚠️ Según artefacto cargado | Manifest y método mostrado |
+| CI full-stack | ✅ Verificada | Badge y workflow |
 
 ---
 
@@ -28,7 +31,7 @@ Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagent
 ### ✅ Implementado y Auditado (V2 Critical Hardening)
 - **Orquestación Multiagente Real:** Grafo de ejecuciones paralelas coordinado con **LangGraph JS** y **NestJS** (`StateGraph` con `Send`).
 - **Gobernanza y Quality Gates de ML:** Evaluación honesta y cronológica del modelo predictivo de atrasos sobre el dataset completo de Olist (~96k+ pedidos) con splits temporales estrictos (Train 70% / Validation 15% / Test 15%). Bloqueo automático por defecto (`HTTP 503 MODEL_NOT_APPROVED`) si el modelo no supera los Quality Gates frente a baselines (Logistic Regression vs XGBoost).
-- **Inferencia en Tiempo Real y Atribución SHAP:** Inferencia servida vía bundle unificado `.joblib` con esquemas Pydantic estrictos, calibración Platt y atribución explicable en escala de margen `XGBOOST_RAW_MARGIN`.
+- **Inferencia y Explicabilidad:** Inferencia servida vía bundle unificado `.joblib` con esquemas Pydantic estrictos, calibración Platt y atribución explicable genérica (SHAP para árboles, log-odds para Logistic).
 - **Escenarios de Inferencia Reales en Data Science:** Invocación de escenarios de entrega reales sin datos hardcodeados y persistencia en la tabla `ModelPrediction`.
 - **Trazabilidad Real End-to-End:** Registro inalterable de ejecuciones de `AgentRun`, `ToolExecution` y `ModelPrediction` eliminando fallbacks sintéticos de tokens o duraciones.
 - **Evidence Critic Incorruptible:** Validación determinista Zod y bloqueos forzados si existen errores numéricos o inconsistencias de evidencia.
@@ -39,15 +42,10 @@ Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagent
 ### 🧠 Selección de Modelos & Decisiones de Arquitectura ML / NLP
 
 #### **1. Estrategia de Carga de Datos para Entrenamiento**
-Los scripts de entrenamiento (`scripts/train_delivery_xgb.py` y `scripts/generate_review_embeddings.py`) siguen una jerarquía resiliente de datos:
-1. Intentan conectar prioritariamente a la base de datos PostgreSQL activa (`DATABASE_URL`).
-2. Si la base de datos no está disponible, activan un **fallback automático** leyendo los registros del fixture local [sample-1000-orders.json](data/fixtures/sample-1000-orders.json).
+Los scripts de entrenamiento (`scripts/train_delivery_champion.py` y `scripts/generate_review_embeddings.py`) seleccionan la fuente mediante el parámetro `--source database|fixture`. Los artefactos registran `source_type`, checksum y cantidad de filas. Los scripts no cambian silenciosamente de fuente.
 
-#### **2. Selección de Modelo NLP: `all-MiniLM-L6-v2` vs Multilingüe**
-Para la búsqueda semántica sobre los comentarios de reseñas de Olist, se seleccionó el modelo **`all-MiniLM-L6-v2`**:
-- **¿Por qué este modelo en el proyecto?:** Es un modelo ultra-liviano (~90MB) que permite descargas instantáneas en entornos locales y tiempos de inferencia en CPU inferiores a 15ms por consulta, eliminando la necesidad de hardware con GPU dedicada para la demo.
-- **Pros:** Ejecución ultrarrápida, huella de memoria RAM reducida (~90MB) y rendimiento óptimo para prototipos y MVPs local.
-- **Contras / Alternativa de Producción:** Para un entorno productivo con gran volumen en portugués, la alternativa recomendada es `paraphrase-multilingual-MiniLM-L12-v2` (~470MB), la cual ofrece mejor sensibilidad lingüística en variaciones dialectales pero requiere 5 veces más espacio y recursos computacionales.
+#### **2. Selección de Modelo NLP**
+Para la búsqueda semántica sobre reseñas de Olist, el modelo se define en el manifest del servicio NLP. Ver el manifest actual en `data/processed/` para el modelo activo. La elección entre modelos compactos y multilingüe depende de los recursos disponibles en el entorno de despliegue.
 
 ---
 
@@ -73,7 +71,7 @@ flowchart TD
         CX -->|Tools SQL / NLP| Database
         Seller -->|Scorecards & Risk| Database
         Anomaly -->|Z-Score Robusto| Database
-        DS -->|Heurística / ML Service| MLService["FastAPI ML Service"]
+        DS -->|Feature snapshots point-in-time| MLService["FastAPI ML Service (Experimental)"]
         
         Sales -->|Hallazgos + Evidencia| Critic["Evidence Critic Agent"]
         Logistics -->|Hallazgos + Evidencia| Critic
@@ -103,7 +101,7 @@ flowchart TD
 | ⭐ **Customer Experience** | `CUSTOMER_EXPERIENCE` | Analiza calificaciones (1-5 estrellas), distribución de reseñas y búsqueda semántica con filtros. | `get_rating_summary`, `search_reviews_semantic` |
 | 🏪 **Seller Performance** | `SELLER_PERFORMANCE` | Genera scorecards operacionales por vendedor y evalúa riesgo acumulado por pedido único. | `get_seller_scorecard` |
 | 🚨 **Anomaly Detection** | `ANOMALY` | Aplica Z-Score robusto (mediana + MAD) en series temporales para detectar desviaciones atípicas. | `detect_metric_anomalies` |
-| 🧪 **Data Science Agent** | `DATA_SCIENCE` | Modela y predice riesgos operacionales con XGBoost v1.1.0 y atribución de características con SHAP. | `predict_delivery_delay`, `explain_delivery_delay` |
+| 🧪 **Data Science Agent** | `DATA_SCIENCE` | Modela y predice riesgos operacionales usando el champion actual (genérico: Logistic o XGBoost). Usa snapshots point-in-time y el contrato de features V3. | `predict_delivery_delay`, `explain_delivery_delay` |
 | ⚖️ **Evidence Critic** | `CRITIC` | Audita la calidad y consistencia entre las evidencias SQL/ML y las conclusiones mediante gates deterministas incorruptibles. | `performDeterministicAudit`, `enforceDeterministicDecision` |
 | 💡 **Business Strategy** | `STRATEGY` | Traduce los hallazgos validados en plan de acción operativo con prioridades e impacto estimado. | Generación de recomendaciones estratégicas |
 
@@ -188,9 +186,9 @@ npm run db:migrate
 npm run data:validate
 npm run db:seed
 
-# Generar artefactos de ML y NLP (embeddings para búsqueda semántica)
-python scripts/train_delivery_xgb.py
-python scripts/generate_review_embeddings.py
+# Generar artefactos de ML
+python scripts/train_delivery_champion.py
+python scripts/generate_review_embeddings.py --source database
 ```
 
 ---
@@ -210,7 +208,7 @@ npm run dev:ml
 > 🌐 **SERVICIOS DISPONIBLES EN EL NAVEGADOR:**
 > - 💻 **Frontend Dashboard (Next.js):** [http://localhost:3000](http://localhost:3000)
 > - 📚 **Documentación API Gateway (Swagger):** [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
-> - 🐍 **Microservicio ML & NLP (FastAPI):** [http://localhost:8000/docs](http://localhost:8000/docs)
+> - 🐍 **Microservicio ML & NLP (FastAPI):** Disponible en el puerto 8000 en desarrollo local (ver `.env.example` para configuración)
 
 ---
 
@@ -284,7 +282,7 @@ Cada consulta activa dinámicamente una combinación diferente de agentes especi
 ### 🧪 5. Machine Learning Predictivo y Gobernanza ML
 > **Pregunta:** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales, el estado de gobernanza del modelo y los factores SHAP de mayor impacto?`
 - **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `ANOMALY`, `CRITIC`, `STRATEGY`
-- **Lo que evalúa:** Inferencia sobre escenarios representativos reales en FastAPI (`/models/delivery-delay/predict`), atribución SHAP en escala `XGBOOST_RAW_MARGIN` y reflejo transparente del estado del Quality Gate (`EXPERIMENTAL_NOT_APPROVED`).
+- **Lo que evalúa:** Inferencia sobre escenarios representativos reales en FastAPI (`/models/delivery-delay/predict`), atribución explicable (SHAP para árboles, log-odds para Logistic) y reflejo transparente del estado del Quality Gate (`EXPERIMENTAL_NOT_APPROVED`).
 
 > **Pregunta:** `¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?`
 - **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `LOGISTICS`, `CRITIC`, `STRATEGY`
@@ -294,6 +292,23 @@ Cada consulta activa dinámicamente una combinación diferente de agentes especi
 - **Agentes Invocados:** `ANOMALY`, `LOGISTICS`, `CRITIC`
 - **Lo que evalúa:** Aplicación de Z-Score robusto (Mediana + MAD) sobre la serie temporal filtrada.
 
+
+---
+
+## 🧠 Data Science, gobernanza y defensa del modelo
+
+El predictor de atrasos es experimental y permanece bloqueado cuando no supera los quality gates. El repositorio documenta tanto los resultados como las razones para no desplegarlo.
+
+- [Model Card](docs/data-science/MODEL_CARD.md)
+- [Validación temporal](docs/data-science/TEMPORAL_VALIDATION_REPORT.md)
+- [Drift](docs/data-science/DRIFT_ANALYSIS.md)
+- [Análisis de errores](docs/data-science/ERROR_ANALYSIS.md)
+- [Preguntas y respuestas para defensa técnica](docs/data-science/MODEL_DEFENSE_QA.md)
+- [Invariantes del sistema](docs/engineering/INVARIANTS.md)
+
+La misma defensa se encuentra disponible de forma interactiva en **Dashboard → Gobernanza ML → Defensa Data Scientist**.
+
+> El dataset Olist cubre principalmente 2016–2018. Las conclusiones son demostrativas y no representan condiciones logísticas actuales.
 
 ---
 

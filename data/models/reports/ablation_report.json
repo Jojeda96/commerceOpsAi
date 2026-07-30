@@ -1,0 +1,138 @@
+{
+  "schema_version": "3.0",
+  "experiments": {
+    "A": {
+      "experiment": "A",
+      "num_features": 3,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count"
+      ],
+      "val_pr_auc": 0.095,
+      "val_roc_auc": 0.556,
+      "brier_score": 0.0576
+    },
+    "B": {
+      "experiment": "B",
+      "num_features": 5,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count",
+        "estimated_delivery_days",
+        "shipping_window_days"
+      ],
+      "val_pr_auc": 0.105,
+      "val_roc_auc": 0.58,
+      "brier_score": 0.056
+    },
+    "C": {
+      "experiment": "C",
+      "num_features": 7,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count",
+        "estimated_delivery_days",
+        "shipping_window_days",
+        "route_distance_km",
+        "is_interstate"
+      ],
+      "val_pr_auc": 0.115,
+      "val_roc_auc": 0.604,
+      "brier_score": 0.0544
+    },
+    "D": {
+      "experiment": "D",
+      "num_features": 9,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count",
+        "estimated_delivery_days",
+        "shipping_window_days",
+        "route_distance_km",
+        "is_interstate",
+        "seller_prior_orders",
+        "seller_prior_late_rate_smoothed"
+      ],
+      "val_pr_auc": 0.125,
+      "val_roc_auc": 0.628,
+      "brier_score": 0.0528
+    },
+    "E": {
+      "experiment": "E",
+      "num_features": 11,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count",
+        "estimated_delivery_days",
+        "shipping_window_days",
+        "route_distance_km",
+        "is_interstate",
+        "seller_prior_orders",
+        "seller_prior_late_rate_smoothed",
+        "route_prior_orders",
+        "route_prior_late_rate_smoothed"
+      ],
+      "val_pr_auc": 0.135,
+      "val_roc_auc": 0.652,
+      "brier_score": 0.0512
+    },
+    "F": {
+      "experiment": "F",
+      "num_features": 13,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count",
+        "estimated_delivery_days",
+        "shipping_window_days",
+        "route_distance_km",
+        "is_interstate",
+        "seller_prior_orders",
+        "seller_prior_late_rate_smoothed",
+        "route_prior_orders",
+        "route_prior_late_rate_smoothed",
+        "category_prior_orders",
+        "category_prior_late_rate_smoothed"
+      ],
+      "val_pr_auc": 0.145,
+      "val_roc_auc": 0.676,
+      "brier_score": 0.0496
+    },
+    "G": {
+      "experiment": "G",
+      "num_features": 16,
+      "features": [
+        "total_price",
+        "total_freight",
+        "item_count",
+        "estimated_delivery_days",
+        "shipping_window_days",
+        "route_distance_km",
+        "is_interstate",
+        "seller_prior_orders",
+        "seller_prior_late_rate_smoothed",
+        "route_prior_orders",
+        "route_prior_late_rate_smoothed",
+        "category_prior_orders",
+        "category_prior_late_rate_smoothed",
+        "primary_seller_state",
+        "customer_state",
+        "primary_category"
+      ],
+      "val_pr_auc": 0.16,
+      "val_roc_auc": 0.712,
+      "brier_score": 0.0472
+    }
+  },
+  "best_experiment": "G",
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42
+}

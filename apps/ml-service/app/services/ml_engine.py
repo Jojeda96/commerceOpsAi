@@ -5,8 +5,11 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional
 
+from app.models.delivery_contracts import PredictionRequest
+from app.services.delivery_feature_builder import build_delivery_feature_row, FeatureContractError
 from app.services.model_bundle import validate_bundle
 from app.services.model_governance import evaluate_delivery_model, ModelGateResult
+from app.services.model_adapters.factory import get_model_adapter
 
 
 class ModelNotApprovedError(RuntimeError):
@@ -33,16 +36,20 @@ class MLEngine:
             curr = parent
         self.root_dir = curr if os.path.exists(os.path.join(curr, "data")) else os.getcwd()
         self.models_dir = os.path.join(self.root_dir, "data", "models")
-        self.bundle_path = os.path.join(self.models_dir, "delivery_delay_xgb.joblib")
+        
+        self.bundle_path = os.getenv(
+            "DELIVERY_MODEL_BUNDLE_PATH",
+            os.path.join(self.models_dir, "delivery_delay_champion.joblib"),
+        )
         self.metrics_path = os.path.join(self.models_dir, "delivery_delay_metrics.json")
         
         self.bundle: Dict[str, Any] = {}
         self.model = None
+        self.adapter = None
         self.preprocessor = None
         self.calibrator = None
         self.metrics: Dict[str, Any] = {}
         self.threshold: float = 0.5
-        self.explainer = None
         self.load_error: Optional[str] = None
         self.model_name: Optional[str] = None
 
@@ -73,22 +80,19 @@ class MLEngine:
 
             self.bundle = loaded
             self.model = loaded["model"]
+            self.adapter = get_model_adapter(self.model, loaded.get("model_family"))
             self.preprocessor = loaded["preprocessor"]
             self.calibrator = loaded.get("calibrator")
             self.threshold = float(loaded["threshold"])
             self.metrics = loaded.get("metrics", {})
-            self.model_name = loaded.get("model_name", "xgboost")
+            self.model_name = loaded.get("model_name", "xgboost_baseline")
             self.load_error = None
-            print(f"[MLEngine] [OK] Bundle v2.1 cargado desde: {self.bundle_path}")
+            print(f"[MLEngine] [OK] Bundle cargado desde: {self.bundle_path} con adapter: {self.adapter.__class__.__name__}")
 
-            try:
-                import shap
-                self.explainer = shap.TreeExplainer(self.model)
-            except Exception as e:
-                print(f"[MLEngine] SHAP Explainer no inicializado: {e}")
         except Exception as exc:
             self.bundle = {}
             self.model = None
+            self.adapter = None
             self.preprocessor = None
             self.calibrator = None
             self.load_error = f"{type(exc).__name__}: {exc}"
@@ -108,9 +112,10 @@ class MLEngine:
                 and self.preprocessor is not None
             ),
             "bundle_path": self.bundle_path,
-            "bundle_schema_version": self.bundle.get("bundle_schema_version"),
-            "model_name": self.bundle.get("model_name"),
-            "model_version": self.bundle.get("model_version"),
+            "bundle_schema_version": self.bundle.get("bundle_schema_version", "3.0"),
+            "feature_contract_version": self.bundle.get("feature_contract_version", "delivery-features-v3.0.0"),
+            "model_name": self.bundle.get("model_name", "xgboost_baseline"),
+            "model_version": self.bundle.get("model_version", "delivery-risk-v3.0.0"),
             "deployment_status": self.bundle.get("deployment_status", "UNAVAILABLE"),
             "load_error": self.load_error,
         }
@@ -123,7 +128,7 @@ class MLEngine:
             )
         return gate
 
-    def predict_delay(self, request_dict: Dict[str, Any], allow_experimental: bool = False) -> Dict[str, Any]:
+    def predict_delay(self, request: PredictionRequest, allow_experimental: bool = False) -> Dict[str, Any]:
         if self.model is None or self.preprocessor is None:
             raise ModelUnavailableError(
                 self.load_error or "MODEL_RUNTIME_UNAVAILABLE"
@@ -131,57 +136,18 @@ class MLEngine:
 
         gate = self._assert_model_is_approved(allow_experimental=allow_experimental)
 
-        scenario_id = str(request_dict.get("scenario_id", "scenario-default"))
-        seller_st = str(request_dict.get("seller_state", "SP"))
-        cust_st = str(request_dict.get("customer_state", "RJ"))
-        route_pair = f"{seller_st}->{cust_st}"
+        raw_features = self.bundle.get("raw_features", [])
+        if not raw_features:
+            raise FeatureContractError("Bundle raw_features non-existent or empty.")
 
-        freight_value = float(request_dict.get("total_freight", request_dict.get("freight_value", 30.0)))
-        price = float(request_dict.get("total_price", request_dict.get("price", 100.0)))
-        freight_ratio = freight_value / (price + freight_value + 1e-6)
-        item_count = int(request_dict.get("item_count", 1))
-        weight_g = float(request_dict.get("total_weight_g", request_dict.get("product_weight_g", 500.0)))
-        volume_cm3 = float(request_dict.get("total_volume_cm3", request_dict.get("product_volume_cm3", 4500.0)))
-        est_days = float(request_dict.get("estimated_delivery_days", 10.0))
-        ship_days = float(request_dict.get("shipping_window_days", est_days))
+        input_df = build_delivery_feature_row(request, raw_features)
 
-        route_dist = request_dict.get("route_distance_km")
-        route_dist_val = float(route_dist) if route_dist is not None else np.nan
-
-        row_dict = {
-            "total_price": price,
-            "total_freight": freight_value,
-            "freight_ratio": freight_ratio,
-            "estimated_delivery_days": est_days,
-            "shipping_window_days": ship_days,
-            "avg_item_price": price / max(item_count, 1),
-            "avg_item_weight_g": weight_g / max(item_count, 1),
-            "avg_item_volume_cm3": volume_cm3 / max(item_count, 1),
-            "route_distance_km": route_dist_val,
-            "purchase_dow": int(request_dict.get("purchase_dow", 2)),
-            "purchase_hour": int(request_dict.get("purchase_hour", 14)),
-            "purchase_month": int(request_dict.get("purchase_month", 6)),
-            "purchase_week": int(request_dict.get("purchase_week", 24)),
-            "item_count": item_count,
-            "seller_count": int(request_dict.get("seller_count", 1)),
-            "seller_prior_orders": int(request_dict.get("seller_prior_orders", 0)),
-            "seller_prior_late_rate_smoothed": float(request_dict.get("seller_prior_late_rate", 0.08) or 0.08),
-            "route_prior_orders": 0,
-            "route_prior_late_rate_smoothed": 0.08,
-            "category_prior_orders": 0,
-            "category_prior_late_rate_smoothed": 0.08,
-            "primary_seller_state": seller_st,
-            "customer_state": cust_st,
-            "route_pair": route_pair,
-            "primary_category": request_dict.get("primary_category", "beleza_saude"),
-            "is_interstate": 1 if seller_st != cust_st else 0,
-        }
-
-        input_df = pd.DataFrame([row_dict])
         warning_msg = None if gate.approved else f"⚠ Modelo experimental no aprobado ({', '.join(gate.reasons)}) — no utilizar para decisiones operativas."
 
         X_trans = self.preprocessor.transform(input_df)
-        raw_prob = float(self.model.predict_proba(X_trans)[0][1])
+        
+        adapter = self.adapter or get_model_adapter(self.model, self.bundle.get("model_family"))
+        raw_prob = float(adapter.predict_proba(X_trans)[0][1])
 
         if self.calibrator is not None:
             prob = float(self.calibrator.predict(np.array([raw_prob]))[0])
@@ -200,36 +166,25 @@ class MLEngine:
         else:
             risk_level = "LOW"
 
-        contributions = []
-        if self.explainer is not None:
-            shap_vals = self.explainer.shap_values(X_trans)[0]
-            feature_names = self.bundle.get("feature_names", [f"f_{i}" for i in range(len(shap_vals))])
-            for feat, val in zip(feature_names, shap_vals):
-                contributions.append({
-                    "feature": feat,
-                    "raw_margin_contribution": round(float(val), 6),
-                    "direction": "INCREASES_MODEL_SCORE" if val > 0 else "DECREASES_MODEL_SCORE",
-                })
-
-            contributions = sorted(contributions, key=lambda x: abs(x["raw_margin_contribution"]), reverse=True)[:10]
+        feature_names = self.bundle.get("feature_names", [f"f_{i}" for i in range(X_trans.shape[1])])
+        explanation = adapter.explain(X_trans, feature_names=feature_names, preprocessor=self.preprocessor)
 
         return {
-            "scenario_id": scenario_id,
+            "scenario_id": request.scenario_id,
             "probability": prob,
             "threshold": round(opt_thresh, 4),
             "predicted_delayed": is_delayed,
             "risk_level": risk_level,
-            "model_version": self.bundle.get("model_version", "delivery-risk-v2.0.0"),
+            "model_version": self.bundle.get("model_version", "delivery-risk-v3.0.0"),
+            "model_name": self.bundle.get("model_name", "xgboost_baseline"),
+            "bundle_schema_version": self.bundle.get("bundle_schema_version", "3.0"),
+            "feature_contract_version": self.bundle.get("feature_contract_version", "delivery-features-v3.0.0"),
+            "prediction_status": "SUCCESS",
             "deployment_status": gate.status,
             "model_reliability": "EXPERIMENTAL_NOT_APPROVED" if not gate.approved else "APPROVED_FOR_DEMO",
             "warning": warning_msg,
-            "features": request_dict,
-            "explanation": {
-                "explanation_scale": "XGBOOST_RAW_MARGIN",
-                "causal_interpretation": False,
-                "base_value": round(float(getattr(self.explainer, "expected_value", 0.15)), 4) if self.explainer else 0.15,
-                "contributions": contributions,
-            }
+            "features": request.model_dump(),
+            "explanation": explanation
         }
 
     def get_metrics(self) -> Dict[str, Any]:
@@ -245,5 +200,5 @@ class MLEngine:
             "deployment_status": "UNAVAILABLE",
             "model_version": None,
             "metrics": None,
-            "message": "No existe un artefacto de métricas válido. Ejecute scripts/train_delivery_xgb.py.",
+            "message": "No existe un artefacto de métricas válido. Ejecute scripts/train_delivery_champion.py.",
         }

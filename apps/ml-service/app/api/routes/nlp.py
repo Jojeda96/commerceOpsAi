@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from app.services.nlp_engine import NLPEngine
@@ -35,8 +35,32 @@ async def search_reviews(request: SearchRequest):
         date_from=request.date_from,
         date_to=request.date_to,
     )
+    if res.get("status") == "INDEX_UNAVAILABLE":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "NLP_RESOURCE_NOT_FOUND",
+                "message": res.get("warning", "Indice de reseñas NLP no disponible."),
+            },
+        )
     return SearchResponse(
         query=res["query"],
         results=[SearchResponseItem(**r) for r in res["results"]],
-        method=res["method"],
+        method=res.get("method", "UNKNOWN"),
     )
+
+@router.get("/review-topics")
+async def get_review_topics():
+    engine = NLPEngine.get_instance()
+    if engine.embeddings is None or len(engine.reviews) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "NLP_RESOURCE_NOT_FOUND",
+                "message": engine.load_error or "Modelo o indice NLP no cargado.",
+            },
+        )
+    return {
+        "status": "AVAILABLE",
+        "topics": engine.metadata.get("topics", []),
+    }

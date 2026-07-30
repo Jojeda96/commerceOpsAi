@@ -1,0 +1,17 @@
+{
+  "schema_version": "3.0",
+  "uncalibrated": {
+    "brier_score": 0.0629,
+    "log_loss": 0.2507
+  },
+  "calibrated": {
+    "brier_score": 0.0618,
+    "log_loss": 0.2435
+  },
+  "brier_improvement_pct": 1.82,
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42
+}

@@ -4,6 +4,7 @@ import {
   ToolExecutionTrace,
 } from '@commerce-ops/shared-types';
 import { calculateEstimatedCostUsd } from './model-pricing';
+import { getGlobalTraceSink } from './trace-context';
 
 export class AgentRunError extends Error {
   constructor(
@@ -32,7 +33,9 @@ export interface RunAgentContext {
 export interface RunAgentOptions<T> {
   agentName: AgentName;
   iteration: number;
+  investigationId?: string;
   modelName?: string;
+  executionKind?: 'LLM' | 'DETERMINISTIC';
   promptVersion?: string;
   execute: (context: RunAgentContext) => Promise<{
     result: T;
@@ -48,17 +51,32 @@ export async function runAgentWithTrace<T>(
   trace: AgentRunTrace;
 }> {
   const localRunId = `run-${options.agentName.toLowerCase()}-${options.iteration}-${Date.now()}`;
-  const startedAt = new Date().toISOString();
-  const startTime = Date.now();
+  const startDate = new Date();
+  const startedAt = startDate.toISOString();
+  const startTime = startDate.getTime();
   const modelName =
     options.modelName || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+  const sink = getGlobalTraceSink();
+  if (sink && options.investigationId) {
+    await sink.onAgentStarted({
+      localRunId,
+      investigationId: options.investigationId,
+      agentName: options.agentName,
+      iteration: options.iteration,
+      modelName:
+        options.executionKind === 'DETERMINISTIC' ? undefined : modelName,
+      executionKind: options.executionKind || 'LLM',
+      startedAt: startDate,
+    });
+  }
 
   try {
     const { result, inputTokens, outputTokens } = await options.execute({
       localRunId,
     });
-    const endTime = Date.now();
-    const durationMs = endTime - startTime;
+    const endDate = new Date();
+    const durationMs = endDate.getTime() - startTime;
     const estimatedCostUsd = calculateEstimatedCostUsd(
       modelName,
       inputTokens,
@@ -69,10 +87,10 @@ export async function runAgentWithTrace<T>(
       localRunId,
       agentName: options.agentName,
       iteration: options.iteration,
-      model: modelName,
+      model: options.executionKind === 'DETERMINISTIC' ? undefined : modelName,
       promptVersion: options.promptVersion || 'v1.0',
       startedAt,
-      completedAt: new Date(endTime).toISOString(),
+      completedAt: endDate.toISOString(),
       durationMs,
       inputTokens,
       outputTokens,
@@ -80,23 +98,43 @@ export async function runAgentWithTrace<T>(
       status: 'COMPLETED',
     };
 
+    if (sink) {
+      await sink.onAgentCompleted({
+        localRunId,
+        completedAt: endDate,
+        durationMs,
+        inputTokens,
+        outputTokens,
+        estimatedCost: estimatedCostUsd,
+      });
+    }
+
     return { result, trace };
   } catch (error: any) {
-    const endTime = Date.now();
-    const durationMs = endTime - startTime;
+    const endDate = new Date();
+    const durationMs = endDate.getTime() - startTime;
 
     const trace: AgentRunTrace = {
       localRunId,
       agentName: options.agentName,
       iteration: options.iteration,
-      model: modelName,
+      model: options.executionKind === 'DETERMINISTIC' ? undefined : modelName,
       promptVersion: options.promptVersion || 'v1.0',
       startedAt,
-      completedAt: new Date(endTime).toISOString(),
+      completedAt: endDate.toISOString(),
       durationMs,
       status: 'FAILED',
       errorMessage: error?.message || String(error),
     };
+
+    if (sink) {
+      await sink.onAgentFailed({
+        localRunId,
+        completedAt: endDate,
+        durationMs,
+        errorMessage: error?.message || String(error),
+      });
+    }
 
     throw new AgentRunError(error, trace);
   }
@@ -118,13 +156,29 @@ export async function executeToolWithTrace<P, R>(
   trace: ToolExecutionTrace;
 }> {
   const localExecutionId = `tool-${options.toolName.toLowerCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const startedAt = new Date().toISOString();
-  const startTime = Date.now();
+  const startDate = new Date();
+  const startedAt = startDate.toISOString();
+  const startTime = startDate.getTime();
+
+  const sink = getGlobalTraceSink();
+  if (sink) {
+    await sink.onToolStarted({
+      localExecutionId,
+      localAgentRunId: options.localAgentRunId,
+      agentName: options.agentName,
+      iteration: options.iteration,
+      toolName: options.toolName,
+      parameters: options.parameters,
+      startedAt: startDate,
+    });
+  }
 
   try {
     const result = await options.execute();
-    const endTime = Date.now();
-    const durationMs = endTime - startTime;
+    const endDate = new Date();
+    const durationMs = endDate.getTime() - startTime;
+    const resultSummary =
+      typeof result === 'string' ? result : JSON.stringify(result);
 
     const trace: ToolExecutionTrace = {
       localExecutionId,
@@ -133,18 +187,26 @@ export async function executeToolWithTrace<P, R>(
       iteration: options.iteration,
       toolName: options.toolName,
       parameters: options.parameters,
-      resultSummary:
-        typeof result === 'string' ? result : JSON.stringify(result),
+      resultSummary,
       startedAt,
-      completedAt: new Date(endTime).toISOString(),
+      completedAt: endDate.toISOString(),
       durationMs,
       status: 'COMPLETED',
     };
 
+    if (sink) {
+      await sink.onToolCompleted({
+        localExecutionId,
+        completedAt: endDate,
+        durationMs,
+        resultSummary,
+      });
+    }
+
     return { result, trace };
   } catch (error: any) {
-    const endTime = Date.now();
-    const durationMs = endTime - startTime;
+    const endDate = new Date();
+    const durationMs = endDate.getTime() - startTime;
 
     const trace: ToolExecutionTrace = {
       localExecutionId,
@@ -154,11 +216,20 @@ export async function executeToolWithTrace<P, R>(
       toolName: options.toolName,
       parameters: options.parameters,
       startedAt,
-      completedAt: new Date(endTime).toISOString(),
+      completedAt: endDate.toISOString(),
       durationMs,
       status: 'FAILED',
       errorMessage: error?.message || String(error),
     };
+
+    if (sink) {
+      await sink.onToolFailed({
+        localExecutionId,
+        completedAt: endDate,
+        durationMs,
+        errorMessage: error?.message || String(error),
+      });
+    }
 
     throw new ToolExecutionError(error, trace);
   }

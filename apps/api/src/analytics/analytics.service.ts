@@ -1,6 +1,12 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  ServiceUnavailableException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class AnalyticsService {
@@ -202,5 +208,75 @@ export class AnalyticsService {
         load_error: err?.message || 'ML Service unreachable',
       };
     }
+  }
+
+  private readReportJson(filename: string): unknown {
+    const reportsDir = path.resolve(process.cwd(), '../../data/models/reports');
+    const filePath = path.join(reportsDir, filename);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException({
+        code: 'REPORT_NOT_FOUND',
+        message: `Report file not found: ${filename}`,
+      });
+    }
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(raw);
+  }
+
+  private readMetricsJson(): Record<string, unknown> {
+    const metricsPath = path.resolve(
+      process.cwd(),
+      '../../data/models/delivery_delay_metrics.json',
+    );
+    if (!fs.existsSync(metricsPath)) return {};
+    return JSON.parse(fs.readFileSync(metricsPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  async getMlValidation() {
+    return this.readReportJson('walk_forward_metrics.json');
+  }
+
+  async getMlDrift() {
+    return this.readReportJson('drift_report.json');
+  }
+
+  async getMlDefense() {
+    const qaPath = path.resolve(
+      process.cwd(),
+      '../../data/governance/model_defense_qa.json',
+    );
+    const metrics = this.readMetricsJson();
+    const champion = (metrics.champion as Record<string, unknown>) || {};
+    const finalTest =
+      (champion.final_test_metrics as Record<string, unknown>) || {};
+    const gate = (metrics.quality_gate as Record<string, unknown>) || {};
+
+    const metricsSnapshot = {
+      champion_model_name: metrics.champion_model_name || metrics.model_name,
+      deployment_status: metrics.deployment_status,
+      roc_auc_test: finalTest.roc_auc,
+      pr_auc_test: finalTest.pr_auc,
+      brier_score_test: finalTest.brier_score,
+      gate_status: gate.status,
+      gate_reasons: gate.reasons,
+      trained_at: metrics.trained_at,
+      model_version: metrics.model_version,
+      positive_ratio: metrics.positive_ratio,
+    };
+
+    if (fs.existsSync(qaPath)) {
+      const qa = JSON.parse(fs.readFileSync(qaPath, 'utf-8'));
+      return { ...qa, metrics_snapshot: metricsSnapshot };
+    }
+
+    // Fallback: return empty categories with metrics snapshot
+    return {
+      schema_version: '1.0',
+      categories: [],
+      metrics_snapshot: metricsSnapshot,
+    };
   }
 }

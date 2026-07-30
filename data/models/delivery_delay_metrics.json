@@ -1,4 +1,56 @@
 {
+  "metrics_schema_version": "3.0",
+  "champion": {
+    "model_name": "xgboost_baseline",
+    "selection_dataset": "TEMPORAL_CV_DEVELOPMENT",
+    "selection_metrics": {
+      "roc_auc": 0.7371,
+      "pr_auc": 0.1593,
+      "brier_score": 0.0479
+    },
+    "final_test_metrics": {
+      "roc_auc": 0.4528,
+      "pr_auc": 0.0698,
+      "pr_auc_lift_over_prevalence": 1.0553,
+      "precision": 0.0635,
+      "recall": 0.2309,
+      "f1": 0.0997,
+      "brier_score": 0.0652
+    }
+  },
+  "candidates": {
+    "logistic_unweighted": {
+      "roc_auc": 0.7264,
+      "pr_auc": 0.1441,
+      "brier_score": 0.0483
+    },
+    "logistic_balanced": {
+      "roc_auc": 0.7236,
+      "pr_auc": 0.1382,
+      "brier_score": 0.0485
+    },
+    "logistic_cw_1_3": {
+      "roc_auc": 0.7254,
+      "pr_auc": 0.1417,
+      "brier_score": 0.0484
+    },
+    "xgboost_baseline": {
+      "roc_auc": 0.7371,
+      "pr_auc": 0.1593,
+      "brier_score": 0.0479
+    }
+  },
+  "best_logistic_candidate": "logistic_unweighted",
+  "quality_gate": {
+    "status": "EXPERIMENTAL_NOT_APPROVED",
+    "reasons": [
+      "ROC_AUC_BELOW_0_60",
+      "PR_AUC_INSUFFICIENT_LIFT_OVER_PREVALENCE",
+      "RECALL_BELOW_0_50",
+      "PRECISION_BELOW_0_15"
+    ],
+    "thresholds_version": "delivery-gates-v3"
+  },
   "sample_count": 14471,
   "positive_count": 957,
   "positive_ratio": 0.06613226452905811,
@@ -43,7 +95,7 @@
   "test_positive_count": 957,
   "test_samples": 14471,
   "test_positive_ratio": 0.0661,
-  "champion_model_name": "xgboost",
+  "champion_model_name": "xgboost_baseline",
   "candidates_val_summary": {
     "logistic_unweighted": {
       "roc_auc": 0.7264,
@@ -60,7 +112,7 @@
       "pr_auc": 0.1417,
       "brier_score": 0.0484
     },
-    "xgboost": {
+    "xgboost_baseline": {
       "roc_auc": 0.7371,
       "pr_auc": 0.1593,
       "brier_score": 0.0479
@@ -73,7 +125,7 @@
     "RECALL_BELOW_0_50",
     "PRECISION_BELOW_0_15"
   ],
-  "model_version": "delivery-risk-v2.0.0",
+  "model_version": "delivery-risk-v3.0.0",
   "trained_at": "2026-07-30T18:12:35.025295+00:00",
   "features": [
     "total_price",

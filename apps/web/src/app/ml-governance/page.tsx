@@ -2,169 +2,301 @@
 
 import { useState, useEffect } from 'react';
 import { fetchApi } from '@/lib/api-client';
+import type {
+  MlMetricsV3,
+  MlRuntimeStatus,
+  WalkForwardValidation,
+  DriftReport,
+  MlDefenseResponse,
+} from './types';
+import { GovernanceSummary } from './components/GovernanceSummary';
+import { CandidateComparison } from './components/CandidateComparison';
+import { TemporalValidation } from './components/TemporalValidation';
+import { DriftPanel } from './components/DriftPanel';
+import { ModelLimitations } from './components/ModelLimitations';
+import { DataScientistDefense } from './components/DataScientistDefense';
+
+// PR-11: Strictly typed page. No `any`. No direct ML service fallback.
+// All data served through API Gateway (/api/analytics/*).
+
+type TabId =
+  | 'summary'
+  | 'candidates'
+  | 'temporal'
+  | 'drift'
+  | 'limitations'
+  | 'defense';
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'summary', label: '1. Estado y decisión' },
+  { id: 'candidates', label: '2. Candidatos' },
+  { id: 'temporal', label: '3. Validación temporal' },
+  { id: 'drift', label: '4. Drift y errores' },
+  { id: 'limitations', label: '5. Limitaciones' },
+  { id: 'defense', label: '6. Defensa DS' },
+];
+
+interface PageData {
+  metrics: MlMetricsV3;
+  runtime: MlRuntimeStatus | null;
+  validation: WalkForwardValidation;
+  drift: DriftReport;
+  defense: MlDefenseResponse;
+}
+
+interface LoadState {
+  data: PageData | null;
+  loading: boolean;
+  error: string | null;
+}
+
+function LoadingSkeleton() {
+  return (
+    <div style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div
+            key={i}
+            style={{
+              height: '36px',
+              width: '130px',
+              background: 'rgba(255,255,255,0.05)',
+              borderRadius: '8px',
+            }}
+          />
+        ))}
+      </div>
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          style={{
+            height: '80px',
+            background: 'rgba(255,255,255,0.04)',
+            borderRadius: '10px',
+            marginBottom: '12px',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function MLGovernancePage() {
-  const [metrics, setMetrics] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<LoadState>({
+    data: null,
+    loading: true,
+    error: null,
+  });
+  const [activeTab, setActiveTab] = useState<TabId>('summary');
 
   useEffect(() => {
-    fetchApi<any>('/analytics/ml-metrics')
-      .then((data) => {
-        setMetrics(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        // Fallback a endpoint de ml-service
-        fetch('http://localhost:8000/models/delivery-delay/metrics')
-          .then((res) => res.json())
-          .then((data) => {
-            setMetrics(data);
-            setLoading(false);
-          })
-          .catch((e) => {
-            setError('No se pudo cargar la información del modelo ML');
-            setLoading(false);
+    async function loadAll() {
+      try {
+        const [metrics, runtime, validation, drift, defense] = await Promise.allSettled([
+          fetchApi<MlMetricsV3>('/analytics/ml-metrics'),
+          fetchApi<MlRuntimeStatus>('/analytics/ml-runtime'),
+          fetchApi<WalkForwardValidation>('/analytics/ml-validation'),
+          fetchApi<DriftReport>('/analytics/ml-drift'),
+          fetchApi<MlDefenseResponse>('/analytics/ml-defense'),
+        ]);
+
+        if (metrics.status === 'rejected') {
+          setState({
+            data: null,
+            loading: false,
+            error: 'No se pudo cargar las métricas del modelo ML. El servicio puede estar no disponible.',
           });
-      });
+          return;
+        }
+
+        setState({
+          data: {
+            metrics: metrics.value,
+            runtime: runtime.status === 'fulfilled' ? runtime.value : null,
+            validation: validation.status === 'fulfilled' ? validation.value : null as unknown as WalkForwardValidation,
+            drift: drift.status === 'fulfilled' ? drift.value : null as unknown as DriftReport,
+            defense: defense.status === 'fulfilled'
+              ? defense.value
+              : { schema_version: '1.0', categories: [], metrics_snapshot: null as unknown as MlDefenseResponse['metrics_snapshot'] },
+          },
+          loading: false,
+          error: null,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error desconocido';
+        setState({ data: null, loading: false, error: message });
+      }
+    }
+
+    void loadAll();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="glass-card">
-        <h2>Gobernanza del Modelo ML</h2>
-        <p style={{ color: 'var(--color-text-muted)' }}>Cargando métricas y Quality Gates del modelo...</p>
-      </div>
-    );
-  }
-
-  if (error || !metrics) {
-    return (
-      <div className="glass-card">
-        <h2>Gobernanza del Modelo ML</h2>
-        <p style={{ color: 'var(--color-accent-error)' }}>{error || 'Métricas no disponibles.'}</p>
-      </div>
-    );
-  }
-
-  const isApproved = metrics.deployment_status === 'APPROVED_FOR_DEMO_INFERENCE';
+  const { data, loading, error } = state;
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '12px',
+          marginBottom: '24px',
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 700 }}>Gobernanza del Modelo ML</h1>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
-            Estado de evaluación, Quality Gates e inferencia del predictor de atrasos
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Gobernanza del Modelo ML</h1>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+            Gobernanza, validación temporal, drift, limitaciones y defensa técnica del predictor
+            de atrasos
           </p>
         </div>
-        <span
-          className={`badge badge-${isApproved ? 'completed' : 'failed'}`}
-          style={{ fontSize: '1rem', padding: '8px 16px' }}
-        >
-          {isApproved ? '🟢 APROBADO PARA DEMO' : '🔴 EXPERIMENTAL NO APROBADO'}
-        </span>
       </div>
 
-      {!isApproved && (
-        <div className="glass-card" style={{ borderLeft: '4px solid var(--color-accent-warning)', marginTop: '20px' }}>
-          <h3 style={{ color: 'var(--color-accent-warning)', fontSize: '1.1rem' }}>
-            ⚠️ Modelo Bloqueado por Quality Gate
-          </h3>
-          <p style={{ fontSize: '0.9rem', marginTop: '8px' }}>
-            El modelo actual ha sido bloqueado automáticamente para decisiones operativas por no superar los baselines o faltar lift representativo sobre la prevalencia. La API responde HTTP 503 por defecto.
+      {loading && <LoadingSkeleton />}
+
+      {error && !loading && (
+        <div
+          className="glass-card"
+          style={{
+            borderLeft: '4px solid var(--color-accent-error, #ef4444)',
+            padding: '20px',
+          }}
+        >
+          <h2 style={{ color: 'var(--color-accent-error, #ef4444)', fontSize: '1rem', fontWeight: 600 }}>
+            🔴 Servicio no disponible
+          </h2>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '8px' }}>
+            {error}
           </p>
-          {metrics.deployment_reasons && (
-            <ul style={{ marginTop: '12px', paddingLeft: '20px', fontSize: '0.85rem' }}>
-              {metrics.deployment_reasons.map((reason: string, idx: number) => (
-                <li key={idx} style={{ color: 'var(--color-text-muted)' }}>
-                  <code>{reason}</code>
-                </li>
-              ))}
-            </ul>
-          )}
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '8px' }}>
+            Estado: <code>UNAVAILABLE</code> — no se muestran métricas ficticias.
+          </p>
         </div>
       )}
 
-      <div className="grid-kpi" style={{ marginTop: '20px' }}>
-        <div className="kpi-card">
-          <span className="kpi-title">Versión del Modelo</span>
-          <span className="kpi-value" style={{ fontSize: '1.2rem' }}>
-            {metrics.model_version || 'v2.0.0'}
-          </span>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-title">ROC-AUC (Test Set)</span>
-          <span className="kpi-value">{metrics.roc_auc !== undefined ? metrics.roc_auc : '--'}</span>
-          {metrics.roc_auc_ci_95 && (
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-              CI 95%: [{metrics.roc_auc_ci_95[0]}, {metrics.roc_auc_ci_95[1]}]
-            </span>
-          )}
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-title">PR-AUC (Test Set)</span>
-          <span className="kpi-value">{metrics.pr_auc !== undefined ? metrics.pr_auc : '--'}</span>
-          {metrics.pr_auc_lift_over_prevalence && (
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-              Lift: {metrics.pr_auc_lift_over_prevalence}x sobre prevalencia
-            </span>
-          )}
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-title">Muestras de Test</span>
-          <span className="kpi-value">{metrics.test_samples ? metrics.test_samples.toLocaleString() : '--'}</span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            Atrasos reales: {metrics.test_positive_count || 0}
-          </span>
-        </div>
-      </div>
+      {data && !loading && (
+        <>
+          {/* Tab navigation */}
+          <div
+            role="tablist"
+            aria-label="Secciones de gobernanza ML"
+            style={{
+              display: 'flex',
+              gap: '4px',
+              flexWrap: 'wrap',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              marginBottom: '24px',
+              paddingBottom: '0',
+            }}
+          >
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                id={`tab-${tab.id}`}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`tabpanel-${tab.id}`}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom:
+                    activeTab === tab.id
+                      ? '2px solid var(--color-accent-primary, #6366f1)'
+                      : '2px solid transparent',
+                  color:
+                    activeTab === tab.id
+                      ? 'var(--color-accent-primary, #6366f1)'
+                      : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  padding: '8px 14px',
+                  fontSize: '0.83rem',
+                  fontWeight: activeTab === tab.id ? 600 : 400,
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="glass-card" style={{ marginTop: '24px' }}>
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Comparación Frente a Baselines</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-              <th style={{ padding: '8px' }}>Modelo</th>
-              <th style={{ padding: '8px' }}>ROC-AUC</th>
-              <th style={{ padding: '8px' }}>PR-AUC</th>
-              <th style={{ padding: '8px' }}>Precision</th>
-              <th style={{ padding: '8px' }}>Recall</th>
-              <th style={{ padding: '8px' }}>F1 Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-              <td style={{ padding: '8px', fontWeight: 600 }}>XGBoost Tuned (v2.0.0)</td>
-              <td style={{ padding: '8px' }}>{metrics.roc_auc}</td>
-              <td style={{ padding: '8px' }}>{metrics.pr_auc}</td>
-              <td style={{ padding: '8px' }}>{metrics.precision}</td>
-              <td style={{ padding: '8px' }}>{metrics.recall}</td>
-              <td style={{ padding: '8px' }}>{metrics.f1}</td>
-            </tr>
-            {metrics.baselines?.logistic_regression && (
-              <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                <td style={{ padding: '8px' }}>Logistic Regression Baseline</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.logistic_regression.roc_auc}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.logistic_regression.pr_auc}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.logistic_regression.precision}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.logistic_regression.recall}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.logistic_regression.f1}</td>
-              </tr>
-            )}
-            {metrics.baselines?.dummy_classifier && (
-              <tr>
-                <td style={{ padding: '8px' }}>Dummy Prior Baseline</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.dummy_classifier.roc_auc}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.dummy_classifier.pr_auc}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.dummy_classifier.precision}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.dummy_classifier.recall}</td>
-                <td style={{ padding: '8px' }}>{metrics.baselines.dummy_classifier.f1}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          {/* Tab panels */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <div
+              id="tabpanel-summary"
+              role="tabpanel"
+              aria-labelledby="tab-summary"
+              hidden={activeTab !== 'summary'}
+            >
+              <GovernanceSummary metrics={data.metrics} runtime={data.runtime} />
+            </div>
+
+            <div
+              id="tabpanel-candidates"
+              role="tabpanel"
+              aria-labelledby="tab-candidates"
+              hidden={activeTab !== 'candidates'}
+            >
+              <CandidateComparison metrics={data.metrics} />
+            </div>
+
+            <div
+              id="tabpanel-temporal"
+              role="tabpanel"
+              aria-labelledby="tab-temporal"
+              hidden={activeTab !== 'temporal'}
+            >
+              {data.validation ? (
+                <TemporalValidation
+                  validation={data.validation}
+                  testRocAuc={data.metrics.champion.final_test_metrics.roc_auc}
+                  testPrAuc={data.metrics.champion.final_test_metrics.pr_auc}
+                />
+              ) : (
+                <p style={{ color: 'var(--color-text-muted)' }}>
+                  Reporte de validación temporal no disponible.
+                </p>
+              )}
+            </div>
+
+            <div
+              id="tabpanel-drift"
+              role="tabpanel"
+              aria-labelledby="tab-drift"
+              hidden={activeTab !== 'drift'}
+            >
+              {data.drift ? (
+                <DriftPanel drift={data.drift} />
+              ) : (
+                <p style={{ color: 'var(--color-text-muted)' }}>
+                  Reporte de drift no disponible.
+                </p>
+              )}
+            </div>
+
+            <div
+              id="tabpanel-limitations"
+              role="tabpanel"
+              aria-labelledby="tab-limitations"
+              hidden={activeTab !== 'limitations'}
+            >
+              <ModelLimitations deploymentStatus={data.metrics.deployment_status} />
+            </div>
+
+            <div
+              id="tabpanel-defense"
+              role="tabpanel"
+              aria-labelledby="tab-defense"
+              hidden={activeTab !== 'defense'}
+            >
+              <DataScientistDefense defense={data.defense} />
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

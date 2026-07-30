@@ -1,0 +1,37 @@
+{
+  "contract_version": "delivery-features-v3.0.0",
+  "prediction_moment": "ORDER_PURCHASE",
+  "target": {
+    "name": "is_delayed",
+    "definition": "delivered_date > estimated_date",
+    "available_at_inference": false
+  },
+  "features": [
+    {"name":"total_price","type":"float","required":true,"nullable":false,"available_at":"ORDER_PURCHASE"},
+    {"name":"total_freight","type":"float","required":true,"nullable":false,"available_at":"ORDER_PURCHASE"},
+    {"name":"freight_ratio","type":"float","required":true,"nullable":false,"derived_from":["total_price","total_freight"]},
+    {"name":"estimated_delivery_days","type":"float","required":true,"nullable":false,"available_at":"ORDER_PURCHASE"},
+    {"name":"shipping_window_days","type":"float","required":true,"nullable":false,"source":"last_shipping_limit - purchase_date"},
+    {"name":"avg_item_price","type":"float","required":true,"nullable":false},
+    {"name":"avg_item_weight_g","type":"float","required":true,"nullable":false},
+    {"name":"avg_item_volume_cm3","type":"float","required":true,"nullable":false},
+    {"name":"route_distance_km","type":"float","required":true,"nullable":true,"missing_policy":"MODEL_IMPUTER"},
+    {"name":"purchase_dow","type":"integer","required":true,"nullable":false,"min":0,"max":6},
+    {"name":"purchase_hour","type":"integer","required":true,"nullable":false,"min":0,"max":23},
+    {"name":"purchase_month","type":"integer","required":true,"nullable":false,"min":1,"max":12},
+    {"name":"purchase_week","type":"integer","required":true,"nullable":false,"min":1,"max":53},
+    {"name":"item_count","type":"integer","required":true,"nullable":false,"min":1},
+    {"name":"seller_count","type":"integer","required":true,"nullable":false,"min":1},
+    {"name":"seller_prior_orders","type":"integer","required":true,"nullable":false,"min":0},
+    {"name":"seller_prior_late_rate_smoothed","type":"float","required":true,"nullable":false,"min":0,"max":1},
+    {"name":"route_prior_orders","type":"integer","required":true,"nullable":false,"min":0},
+    {"name":"route_prior_late_rate_smoothed","type":"float","required":true,"nullable":false,"min":0,"max":1},
+    {"name":"category_prior_orders","type":"integer","required":true,"nullable":false,"min":0},
+    {"name":"category_prior_late_rate_smoothed","type":"float","required":true,"nullable":false,"min":0,"max":1},
+    {"name":"primary_seller_state","type":"string","required":true,"nullable":false},
+    {"name":"customer_state","type":"string","required":true,"nullable":false},
+    {"name":"route_pair","type":"string","required":true,"nullable":false},
+    {"name":"primary_category","type":"string","required":true,"nullable":false},
+    {"name":"is_interstate","type":"integer","required":true,"nullable":false,"min":0,"max":1}
+  ]
+}

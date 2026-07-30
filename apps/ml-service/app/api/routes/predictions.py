@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, Dict, Any
 from app.services.ml_engine import MLEngine, ModelNotApprovedError, ModelUnavailableError
+from app.services.delivery_feature_builder import FeatureContractError
 from app.models.delivery_contracts import PredictionRequest, PredictionResponse
 
 router = APIRouter(prefix="/models/delivery-delay", tags=["Predictions"])
@@ -18,7 +19,7 @@ async def predict_delay(
 ):
     engine = MLEngine.get_instance()
     try:
-        res = engine.predict_delay(request.model_dump(), allow_experimental=allow_experimental)
+        res = engine.predict_delay(request, allow_experimental=allow_experimental)
         return PredictionResponse(
             scenario_id=res["scenario_id"],
             probability=res["probability"],
@@ -26,12 +27,24 @@ async def predict_delay(
             threshold=res["threshold"],
             risk_level=res["risk_level"],
             model_version=res["model_version"],
+            model_name=res["model_name"],
+            bundle_schema_version=res["bundle_schema_version"],
+            feature_contract_version=res["feature_contract_version"],
+            prediction_status=res["prediction_status"],
             deployment_status=res.get("deployment_status", "UNAVAILABLE"),
             model_reliability=res.get("model_reliability", "LOW"),
             warning=res.get("warning"),
             features=res["features"],
             explanation=res.get("explanation"),
         )
+    except FeatureContractError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "FEATURE_CONTRACT_VIOLATION",
+                "message": str(exc),
+            },
+        ) from exc
     except ModelUnavailableError as exc:
         raise HTTPException(
             status_code=503,
@@ -58,8 +71,16 @@ async def explain_prediction(
 ):
     engine = MLEngine.get_instance()
     try:
-        res = engine.predict_delay(request.model_dump(), allow_experimental=allow_experimental)
+        res = engine.predict_delay(request, allow_experimental=allow_experimental)
         return res.get("explanation", {})
+    except FeatureContractError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "FEATURE_CONTRACT_VIOLATION",
+                "message": str(exc),
+            },
+        ) from exc
     except ModelUnavailableError as exc:
         raise HTTPException(
             status_code=503,

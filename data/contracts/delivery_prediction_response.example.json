@@ -1,0 +1,25 @@
+{
+  "scenario_id": "SCENARIO_EXAMPLE_001",
+  "delay_probability": 0.0825,
+  "delay_risk_level": "LOW",
+  "threshold": 0.092665,
+  "is_delay_predicted": false,
+  "model_version": "delivery-risk-v3.0.0",
+  "model_name": "xgboost_baseline",
+  "bundle_schema_version": "3.0",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "prediction_status": "SUCCESS",
+  "deployment_status": "EXPERIMENTAL_NOT_APPROVED",
+  "explanation": {
+    "method": "SHAP_TREE",
+    "base_value": -2.65,
+    "top_features": [
+      {
+        "feature": "estimated_delivery_days",
+        "value": 14.0,
+        "contribution": -0.42,
+        "impact": "DECREASES_RISK"
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "thresholds_version": "delivery-gates-v3",
+  "absolute_gates": {
+    "min_test_samples": 5000,
+    "min_test_positives": 200,
+    "min_roc_auc": 0.60,
+    "min_pr_auc_lift_over_prevalence": 1.50,
+    "min_precision": 0.15,
+    "min_recall": 0.50
+  },
+  "relative_gates": {
+    "compare_against": "best_logistic_candidate",
+    "required_pr_auc_margin": 0.0
+  }
+}

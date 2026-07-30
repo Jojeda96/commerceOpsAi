@@ -41,18 +41,22 @@ export function buildPredictionSummary(
   scenario: DeliveryScenario,
   prediction: any,
 ): string {
-  if (!prediction || prediction.status === 'UNAVAILABLE') {
-    return `Escenario ${scenario.sellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}): Servicio ML no disponible para inferencia (${prediction?.reason || 'UNAVAILABLE'}).`;
+  if (
+    !prediction ||
+    prediction.prediction_status !== 'SUCCESS' ||
+    prediction.status === 'UNAVAILABLE'
+  ) {
+    return `Escenario ${scenario.primarySellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}): Servicio ML no disponible para inferencia (${prediction?.reason || prediction?.detail?.message || 'UNAVAILABLE'}).`;
   }
 
   const probPct = (prediction.probability * 100).toFixed(1);
   const threshPct = (prediction.threshold * 100).toFixed(1);
   return [
-    `Escenario ${scenario.sellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}).`,
-    `Muestra histórica: ${scenario.sampleSize} pedidos.`,
+    `Escenario ${scenario.primarySellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}).`,
     `Probabilidad estimada de atraso: ${probPct}%.`,
     `Threshold operativo: ${threshPct}%.`,
     `Nivel de riesgo: ${prediction.riskLevel || prediction.risk_level}.`,
+    `Modelo: ${prediction.model_name || prediction.modelName}.`,
     `Estado del modelo: ${prediction.deploymentStatus || prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED'}.`,
     prediction.warning ? `Advertencia: ${prediction.warning}` : '',
   ]
@@ -190,6 +194,25 @@ export function createDataScienceNode(
             tool: 'predict_delivery_delay',
           });
 
+          let parsedPred: any = {};
+          try {
+            parsedPred = JSON.parse(predRaw);
+          } catch (e) {
+            console.warn('[DSNode] Error parseando predicción JSON:', e);
+          }
+
+          // If prediction failed or status is not SUCCESS, do NOT call explain and do NOT add to modelPredictions
+          if (
+            parsedPred.prediction_status !== 'SUCCESS' &&
+            parsedPred.status !== 'SUCCESS'
+          ) {
+            console.warn(
+              '[DSNode] Prediction failed or status unavailable:',
+              parsedPred,
+            );
+            continue;
+          }
+
           const { result: explainRaw, trace: explainTrace } =
             await executeToolWithTrace({
               localAgentRunId: localRunId,
@@ -201,16 +224,11 @@ export function createDataScienceNode(
             });
           toolTraces.push(explainTrace);
 
-          let parsedPred: any = {};
           let parsedExplain: any = {};
           try {
-            parsedPred = JSON.parse(predRaw);
             parsedExplain = JSON.parse(explainRaw);
           } catch (e) {
-            console.warn(
-              '[DSNode] Error parseando predicción/explicación JSON:',
-              e,
-            );
+            console.warn('[DSNode] Error parseando explicación JSON:', e);
           }
 
           predictions.push({
@@ -230,11 +248,38 @@ export function createDataScienceNode(
             toolName: 'predict_delivery_delay',
             parameters: {
               scenarioId: scenario.scenarioId,
-              modelVersion: parsedPred.model_version || 'delivery-risk-v2.0.0',
+              modelVersion: parsedPred.model_version || parsedPred.modelVersion,
             },
             resultSummary: buildPredictionSummary(scenario, parsedPred),
             generatedAt: new Date().toISOString(),
           });
+        }
+
+        // Handle case where all predictions failed
+        if (predictions.length === 0) {
+          const mlUnavailableFinding: Finding = {
+            id: `finding-ds-ml-unavailable-${Date.now()}`,
+            investigationId,
+            localAgentRunId: localRunId,
+            agent: 'DATA_SCIENCE',
+            title: 'Servicio ML No Disponible para Inferencia',
+            description:
+              'El servicio de inferencia de modelos ML no retornó respuestas válidas para los escenarios evaluados.',
+            findingType: 'ML_UNAVAILABLE',
+            confidence: 1.0,
+            evidenceIds: [],
+            operationalStatus: 'BLOCKED',
+            createdAt: new Date().toISOString(),
+          };
+
+          return {
+            result: {
+              finding: mlUnavailableFinding,
+              evidence: [],
+              toolTraces,
+              modelPredictions: [],
+            },
+          };
         }
 
         const firstPred = predictions[0]?.prediction || {};
@@ -328,11 +373,12 @@ Genera un hallazgo técnico explicable en formato JSON:
           evidenceIds: evidenceItems.map((e) => e.id),
           operationalStatus,
           modelGovernance: {
-            modelName: firstPred.model_name || 'xgboost',
-            modelVersion: firstPred.model_version || 'delivery-risk-v2.0.0',
+            modelName: firstPred.model_name || firstPred.modelName,
+            modelVersion: firstPred.model_version || firstPred.modelVersion,
             deploymentStatus,
             operationallyActionable: isApproved,
-            reasons: firstPred.deployment_reasons || [],
+            reasons:
+              firstPred.deployment_reasons || firstPred.deploymentReasons || [],
           },
           createdAt: new Date().toISOString(),
         };
@@ -341,14 +387,18 @@ Genera un hallazgo técnico explicable en formato JSON:
           investigationId,
           findingId,
           scenarioId: p.scenario.scenarioId,
-          modelName: p.prediction.model_name || 'xgboost',
-          modelVersion: p.prediction.model_version || 'delivery-risk-v2.0.0',
+          modelName: p.prediction.model_name || p.prediction.modelName,
+          modelVersion: p.prediction.model_version || p.prediction.modelVersion,
           deploymentStatus:
-            p.prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED',
+            p.prediction.deployment_status ||
+            p.prediction.deploymentStatus ||
+            'EXPERIMENTAL_NOT_APPROVED',
           probability: Number(p.prediction.probability || 0),
           threshold: Number(p.prediction.threshold || 0.5),
-          predictedDelayed: Boolean(p.prediction.predicted_delayed),
-          riskLevel: p.prediction.risk_level || 'LOW',
+          predictedDelayed: Boolean(
+            p.prediction.predicted_delayed || p.prediction.predictedDelayed,
+          ),
+          riskLevel: p.prediction.risk_level || p.prediction.riskLevel || 'LOW',
           operationallyActionable: isApproved,
           featuresJson: p.scenario,
           explanationJson: p.explanation,

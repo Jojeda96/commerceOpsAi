@@ -1,0 +1,231 @@
+{
+  "schema_version": "3.0",
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42,
+  "drift": {
+    "total_price": {
+      "psi": 0.0087,
+      "ks_statistic": 0.0124,
+      "ks_pvalue": 0.049852,
+      "mean_diff": -0.6312,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "total_freight": {
+      "psi": 0.3069,
+      "ks_statistic": 0.1814,
+      "ks_pvalue": 0.0,
+      "mean_diff": 2.4129,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "freight_ratio": {
+      "psi": 0.0092,
+      "ks_statistic": 0.0454,
+      "ks_pvalue": 0.0,
+      "mean_diff": 0.0089,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "estimated_delivery_days": {
+      "psi": 0.4554,
+      "ks_statistic": 0.3375,
+      "ks_pvalue": 0.0,
+      "mean_diff": -6.1117,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "shipping_window_days": {
+      "psi": 0.29,
+      "ks_statistic": 0.368,
+      "ks_pvalue": 0.0,
+      "mean_diff": -1.6117,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "avg_item_price": {
+      "psi": 0.0048,
+      "ks_statistic": 0.0162,
+      "ks_pvalue": 0.003866,
+      "mean_diff": 0.2274,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "avg_item_weight_g": {
+      "psi": 0.0278,
+      "ks_statistic": 0.067,
+      "ks_pvalue": 0.0,
+      "mean_diff": -385.025,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "avg_item_volume_cm3": {
+      "psi": 0.0316,
+      "ks_statistic": 0.0661,
+      "ks_pvalue": 0.0,
+      "mean_diff": -2976.5984,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "route_distance_km": {
+      "psi": 0.025,
+      "ks_statistic": 0.063,
+      "ks_pvalue": 0.0,
+      "mean_diff": -49.9669,
+      "missing_rate_train": 0.0051,
+      "missing_rate_test": 0.0041,
+      "drift_level": "LOW"
+    },
+    "purchase_dow": {
+      "psi": 0.0019,
+      "ks_statistic": 0.0171,
+      "ks_pvalue": 0.001797,
+      "mean_diff": -0.0408,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "purchase_hour": {
+      "psi": 0.002,
+      "ks_statistic": 0.0097,
+      "ks_pvalue": 0.212417,
+      "mean_diff": 0.0068,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "purchase_month": {
+      "psi": 14.513,
+      "ks_statistic": 0.5129,
+      "ks_pvalue": 0.0,
+      "mean_diff": 1.3318,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "purchase_week": {
+      "psi": 14.5211,
+      "ks_statistic": 0.5421,
+      "ks_pvalue": 0.0,
+      "mean_diff": 5.9087,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "item_count": {
+      "psi": 0.0008,
+      "ks_statistic": 0.0083,
+      "ks_pvalue": 0.381477,
+      "mean_diff": -0.0118,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "seller_count": {
+      "psi": 0.0,
+      "ks_statistic": 0.0053,
+      "ks_pvalue": 0.889383,
+      "mean_diff": 0.0057,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "seller_prior_orders": {
+      "psi": 0.0425,
+      "ks_statistic": 0.1043,
+      "ks_pvalue": 0.0,
+      "mean_diff": 111.7124,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "LOW"
+    },
+    "seller_prior_late_rate_smoothed": {
+      "psi": 2.8914,
+      "ks_statistic": 0.5099,
+      "ks_pvalue": 0.0,
+      "mean_diff": 0.0357,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "route_prior_orders": {
+      "psi": 2.029,
+      "ks_statistic": 0.3584,
+      "ks_pvalue": 0.0,
+      "mean_diff": 7854.6868,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "route_prior_late_rate_smoothed": {
+      "psi": 1.6656,
+      "ks_statistic": 0.6101,
+      "ks_pvalue": 0.0,
+      "mean_diff": 0.0321,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "category_prior_orders": {
+      "psi": 0.8443,
+      "ks_statistic": 0.5239,
+      "ks_pvalue": 0.0,
+      "mean_diff": 2800.7755,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    },
+    "category_prior_late_rate_smoothed": {
+      "psi": 9.2107,
+      "ks_statistic": 0.7763,
+      "ks_pvalue": 0.0,
+      "mean_diff": 0.0362,
+      "missing_rate_train": 0.0,
+      "missing_rate_test": 0.0,
+      "drift_level": "HIGH"
+    }
+  },
+  "categorical_drift": {
+    "primary_seller_state": {
+      "cardinality_train": 22,
+      "cardinality_test": 19,
+      "unseen_rate": 0.0,
+      "drift_level": "LOW"
+    },
+    "customer_state": {
+      "cardinality_train": 27,
+      "cardinality_test": 27,
+      "unseen_rate": 0.0,
+      "drift_level": "LOW"
+    },
+    "route_pair": {
+      "cardinality_train": 381,
+      "cardinality_test": 286,
+      "unseen_rate": 0.002,
+      "drift_level": "LOW"
+    },
+    "primary_category": {
+      "cardinality_train": 72,
+      "cardinality_test": 68,
+      "unseen_rate": 0.0008,
+      "drift_level": "LOW"
+    },
+    "is_interstate": {
+      "cardinality_train": 2,
+      "cardinality_test": 2,
+      "unseen_rate": 0.0,
+      "drift_level": "LOW"
+    }
+  }
+}

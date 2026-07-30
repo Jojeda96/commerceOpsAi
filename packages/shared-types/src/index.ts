@@ -35,6 +35,29 @@ export interface FilterState {
   customerStates?: string[];
 }
 
+export interface EvidenceMetric {
+  key: string;
+  value: number;
+  unit?: string;
+  sampleSize?: number;
+  sourcePath?: string;
+}
+
+export interface NumericClaim {
+  metricKey: string;
+  value: number;
+  unit?: string;
+  evidenceId: string;
+  tolerance?: number;
+}
+
+export interface RequiredAction {
+  agentName: AgentName;
+  actionCode: string;
+  description: string;
+  findingIds: string[];
+}
+
 export interface InvestigationTask {
   id: string;
   investigationId: string;
@@ -107,6 +130,7 @@ export interface Finding {
   status?: 'ACTIVE' | 'SUPERSEDED';
   operationalStatus?: FindingOperationalStatus;
   modelGovernance?: ModelGovernanceMetadata;
+  numericClaims?: NumericClaim[];
   createdAt: string;
 }
 
@@ -122,9 +146,10 @@ export interface Evidence {
   queryHash?: string;
   parameters: Record<string, unknown>;
   resultSummary: string;
-  rawResultReference?: string;
+  rawReference?: string;
   rowCount?: number;
   sampleSize?: number;
+  metrics?: EvidenceMetric[];
   generatedAt: string;
 }
 
@@ -143,6 +168,8 @@ export interface CriticFeedback {
   severity: Priority;
   message: string;
   requiredAction?: string;
+  requestedAgents?: AgentName[];
+  requiredActions?: RequiredAction[];
   status: 'PENDING' | 'RESOLVED';
   createdAt: string;
 }
@@ -154,6 +181,7 @@ export interface Recommendation {
   description: string;
   priority: Priority;
   expectedImpact?: string;
+  expectedImpactClaims?: NumericClaim[];
   supportingFindingIds: string[];
   assumptions: string[];
   createdAt?: string;
@@ -189,6 +217,7 @@ export interface CommerceOpsState {
   criticDecision: string;
   criticScore: number;
   requestedAgents: AgentName[];
+  requiredActions?: RequiredAction[];
 }
 
 export type InvestigationEventType =

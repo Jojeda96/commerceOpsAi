@@ -6,6 +6,7 @@ import { InvestigationsModule } from './investigations/investigations.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SimulationModule } from './simulation/simulation.module';
 import { AuthModule } from './auth/auth.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -16,6 +17,7 @@ import { AppController } from './app.controller';
     }),
     DatabaseModule,
     StreamingModule,
+    ObservabilityModule,
     InvestigationsModule,
     AnalyticsModule,
     SimulationModule,

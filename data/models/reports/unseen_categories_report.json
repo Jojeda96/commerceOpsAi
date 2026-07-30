@@ -1,0 +1,48 @@
+{
+  "schema_version": "3.0",
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42,
+  "unseen_categories": {
+    "primary_seller_state": {
+      "unseen_count": 0,
+      "unseen_rate": 0.0,
+      "unseen_samples": []
+    },
+    "customer_state": {
+      "unseen_count": 0,
+      "unseen_rate": 0.0,
+      "unseen_samples": []
+    },
+    "route_pair": {
+      "unseen_count": 20,
+      "unseen_rate": 0.002,
+      "unseen_samples": [
+        "MA->PA",
+        "MA->SE",
+        "PB->SE",
+        "SE->ES",
+        "ES->MA",
+        "PE->RN",
+        "MA->TO",
+        "CE->SE",
+        "MA->AC",
+        "CE->DF"
+      ]
+    },
+    "primary_category": {
+      "unseen_count": 1,
+      "unseen_rate": 0.0008,
+      "unseen_samples": [
+        "portateis_cozinha_e_preparadores_de_alimentos"
+      ]
+    },
+    "is_interstate": {
+      "unseen_count": 0,
+      "unseen_rate": 0.0,
+      "unseen_samples": []
+    }
+  }
+}

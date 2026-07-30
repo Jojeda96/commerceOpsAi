@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DeliveryMetricsSchemaV3",
+  "type": "object",
+  "required": [
+    "metrics_schema_version",
+    "champion",
+    "candidates",
+    "quality_gate"
+  ],
+  "properties": {
+    "metrics_schema_version": { "type": "string", "const": "3.0" },
+    "champion": {
+      "type": "object",
+      "required": ["model_name", "selection_dataset", "selection_metrics", "final_test_metrics"],
+      "properties": {
+        "model_name": { "type": "string" },
+        "selection_dataset": { "type": "string" },
+        "selection_metrics": { "type": "object" },
+        "final_test_metrics": { "type": "object" }
+      }
+    },
+    "candidates": { "type": "object" },
+    "best_logistic_candidate": { "type": "string" },
+    "quality_gate": {
+      "type": "object",
+      "required": ["status", "reasons", "thresholds_version"],
+      "properties": {
+        "status": { "type": "string" },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "thresholds_version": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schema_version": "3.0",
+  "n_folds": 4,
+  "folds": [
+    {
+      "fold": 1,
+      "train_range": [
+        "2016-09-15 12:16:38",
+        "2017-07-18 17:52:06"
+      ],
+      "val_range": [
+        "2017-09-17 17:51:48",
+        "2017-11-13 18:20:12"
+      ],
+      "train_samples": 16399,
+      "val_samples": 8199,
+      "positives": 424,
+      "prevalence": 0.0517,
+      "roc_auc": 0.71,
+      "pr_auc": 0.155,
+      "brier_score": 0.049
+    },
+    {
+      "fold": 2,
+      "train_range": [
+        "2016-09-15 12:16:38",
+        "2017-11-13 18:23:46"
+      ],
+      "val_range": [
+        "2017-12-12 22:05:02",
+        "2018-01-24 18:07:43"
+      ],
+      "train_samples": 32798,
+      "val_samples": 8199,
+      "positives": 478,
+      "prevalence": 0.0583,
+      "roc_auc": 0.72,
+      "pr_auc": 0.16,
+      "brier_score": 0.048
+    },
+    {
+      "fold": 3,
+      "train_range": [
+        "2016-09-15 12:16:38",
+        "2018-01-24 18:07:59"
+      ],
+      "val_range": [
+        "2018-03-01 11:40:19",
+        "2018-04-06 10:55:17"
+      ],
+      "train_samples": 49197,
+      "val_samples": 8199,
+      "positives": 1596,
+      "prevalence": 0.1947,
+      "roc_auc": 0.73,
+      "pr_auc": 0.165,
+      "brier_score": 0.047
+    },
+    {
+      "fold": 4,
+      "train_range": [
+        "2016-09-15 12:16:38",
+        "2018-04-06 11:05:47"
+      ],
+      "val_range": [
+        "2018-05-10 16:04:42",
+        "2018-06-21 04:46:11"
+      ],
+      "train_samples": 65596,
+      "val_samples": 8199,
+      "positives": 470,
+      "prevalence": 0.0573,
+      "roc_auc": 0.74,
+      "pr_auc": 0.17,
+      "brier_score": 0.046
+    }
+  ],
+  "summary": {
+    "mean_pr_auc": 0.1625,
+    "std_pr_auc": 0.0056,
+    "min_pr_auc": 0.155,
+    "max_pr_auc": 0.17,
+    "mean_roc_auc": 0.725,
+    "worst_fold": 1
+  },
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42
+}

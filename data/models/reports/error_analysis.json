@@ -1,0 +1,452 @@
+{
+  "schema_version": "3.0",
+  "total_false_positives": 0,
+  "total_false_negatives": 957,
+  "fp_rate": 0.0,
+  "fn_rate": 0.0661,
+  "breakdown_by_category": {
+    "agro_industria_e_comercio": {
+      "total": 46,
+      "fp": 0,
+      "fn": 0
+    },
+    "alimentos": {
+      "total": 165,
+      "fp": 0,
+      "fn": 20
+    },
+    "alimentos_bebidas": {
+      "total": 34,
+      "fp": 0,
+      "fn": 1
+    },
+    "artes": {
+      "total": 48,
+      "fp": 0,
+      "fn": 7
+    },
+    "artes_e_artesanato": {
+      "total": 19,
+      "fp": 0,
+      "fn": 2
+    },
+    "artigos_de_festas": {
+      "total": 15,
+      "fp": 0,
+      "fn": 0
+    },
+    "artigos_de_natal": {
+      "total": 21,
+      "fp": 0,
+      "fn": 1
+    },
+    "audio": {
+      "total": 57,
+      "fp": 0,
+      "fn": 1
+    },
+    "automotivo": {
+      "total": 763,
+      "fp": 0,
+      "fn": 51
+    },
+    "bebes": {
+      "total": 457,
+      "fp": 0,
+      "fn": 36
+    },
+    "bebidas": {
+      "total": 44,
+      "fp": 0,
+      "fn": 3
+    },
+    "beleza_saude": {
+      "total": 1723,
+      "fp": 0,
+      "fn": 152
+    },
+    "brinquedos": {
+      "total": 342,
+      "fp": 0,
+      "fn": 28
+    },
+    "cama_mesa_banho": {
+      "total": 1245,
+      "fp": 0,
+      "fn": 63
+    },
+    "casa_conforto": {
+      "total": 42,
+      "fp": 0,
+      "fn": 2
+    },
+    "casa_conforto_2": {
+      "total": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "casa_construcao": {
+      "total": 110,
+      "fp": 0,
+      "fn": 9
+    },
+    "cine_foto": {
+      "total": 18,
+      "fp": 0,
+      "fn": 0
+    },
+    "climatizacao": {
+      "total": 34,
+      "fp": 0,
+      "fn": 0
+    },
+    "consoles_games": {
+      "total": 119,
+      "fp": 0,
+      "fn": 7
+    },
+    "construcao_ferramentas_construcao": {
+      "total": 260,
+      "fp": 0,
+      "fn": 21
+    },
+    "construcao_ferramentas_ferramentas": {
+      "total": 24,
+      "fp": 0,
+      "fn": 2
+    },
+    "construcao_ferramentas_iluminacao": {
+      "total": 100,
+      "fp": 0,
+      "fn": 11
+    },
+    "construcao_ferramentas_jardim": {
+      "total": 41,
+      "fp": 0,
+      "fn": 3
+    },
+    "construcao_ferramentas_seguranca": {
+      "total": 39,
+      "fp": 0,
+      "fn": 2
+    },
+    "cool_stuff": {
+      "total": 271,
+      "fp": 0,
+      "fn": 20
+    },
+    "dvds_blu_ray": {
+      "total": 3,
+      "fp": 0,
+      "fn": 1
+    },
+    "eletrodomesticos": {
+      "total": 163,
+      "fp": 0,
+      "fn": 10
+    },
+    "eletrodomesticos_2": {
+      "total": 45,
+      "fp": 0,
+      "fn": 3
+    },
+    "eletronicos": {
+      "total": 316,
+      "fp": 0,
+      "fn": 16
+    },
+    "eletroportateis": {
+      "total": 71,
+      "fp": 0,
+      "fn": 4
+    },
+    "esporte_lazer": {
+      "total": 965,
+      "fp": 0,
+      "fn": 50
+    },
+    "fashion_bolsas_e_acessorios": {
+      "total": 219,
+      "fp": 0,
+      "fn": 12
+    },
+    "fashion_calcados": {
+      "total": 8,
+      "fp": 0,
+      "fn": 0
+    },
+    "fashion_esporte": {
+      "total": 1,
+      "fp": 0,
+      "fn": 1
+    },
+    "fashion_roupa_feminina": {
+      "total": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "fashion_roupa_masculina": {
+      "total": 12,
+      "fp": 0,
+      "fn": 0
+    },
+    "fashion_underwear_e_moda_praia": {
+      "total": 4,
+      "fp": 0,
+      "fn": 1
+    },
+    "ferramentas_jardim": {
+      "total": 318,
+      "fp": 0,
+      "fn": 11
+    },
+    "flores": {
+      "total": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "fraldas_higiene": {
+      "total": 7,
+      "fp": 0,
+      "fn": 0
+    },
+    "industria_comercio_e_negocios": {
+      "total": 29,
+      "fp": 0,
+      "fn": 2
+    },
+    "informatica_acessorios": {
+      "total": 878,
+      "fp": 0,
+      "fn": 50
+    },
+    "instrumentos_musicais": {
+      "total": 86,
+      "fp": 0,
+      "fn": 6
+    },
+    "livros_importados": {
+      "total": 9,
+      "fp": 0,
+      "fn": 1
+    },
+    "livros_interesse_geral": {
+      "total": 66,
+      "fp": 0,
+      "fn": 8
+    },
+    "livros_tecnicos": {
+      "total": 59,
+      "fp": 0,
+      "fn": 8
+    },
+    "malas_acessorios": {
+      "total": 121,
+      "fp": 0,
+      "fn": 10
+    },
+    "market_place": {
+      "total": 14,
+      "fp": 0,
+      "fn": 1
+    },
+    "moveis_colchao_e_estofado": {
+      "total": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    "moveis_cozinha_area_de_servico_jantar_e_jardim": {
+      "total": 46,
+      "fp": 0,
+      "fn": 0
+    },
+    "moveis_decoracao": {
+      "total": 778,
+      "fp": 0,
+      "fn": 41
+    },
+    "moveis_escritorio": {
+      "total": 104,
+      "fp": 0,
+      "fn": 12
+    },
+    "moveis_quarto": {
+      "total": 21,
+      "fp": 0,
+      "fn": 1
+    },
+    "moveis_sala": {
+      "total": 94,
+      "fp": 0,
+      "fn": 11
+    },
+    "musica": {
+      "total": 10,
+      "fp": 0,
+      "fn": 1
+    },
+    "papelaria": {
+      "total": 359,
+      "fp": 0,
+      "fn": 33
+    },
+    "pc_gamer": {
+      "total": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "pcs": {
+      "total": 20,
+      "fp": 0,
+      "fn": 4
+    },
+    "perfumaria": {
+      "total": 399,
+      "fp": 0,
+      "fn": 20
+    },
+    "pet_shop": {
+      "total": 349,
+      "fp": 0,
+      "fn": 18
+    },
+    "portateis_casa_forno_e_cafe": {
+      "total": 31,
+      "fp": 0,
+      "fn": 0
+    },
+    "portateis_cozinha_e_preparadores_de_alimentos": {
+      "total": 11,
+      "fp": 0,
+      "fn": 1
+    },
+    "relogios_presentes": {
+      "total": 1025,
+      "fp": 0,
+      "fn": 53
+    },
+    "sinalizacao_e_seguranca": {
+      "total": 41,
+      "fp": 0,
+      "fn": 2
+    },
+    "telefonia": {
+      "total": 504,
+      "fp": 0,
+      "fn": 36
+    },
+    "telefonia_fixa": {
+      "total": 24,
+      "fp": 0,
+      "fn": 1
+    },
+    "utilidades_domesticas": {
+      "total": 1145,
+      "fp": 0,
+      "fn": 83
+    }
+  },
+  "breakdown_by_seller_state": {
+    "BA": {
+      "total": 114,
+      "fp": 0,
+      "fn": 6
+    },
+    "CE": {
+      "total": 20,
+      "fp": 0,
+      "fn": 1
+    },
+    "DF": {
+      "total": 119,
+      "fp": 0,
+      "fn": 8
+    },
+    "ES": {
+      "total": 29,
+      "fp": 0,
+      "fn": 2
+    },
+    "GO": {
+      "total": 82,
+      "fp": 0,
+      "fn": 5
+    },
+    "MA": {
+      "total": 164,
+      "fp": 0,
+      "fn": 32
+    },
+    "MG": {
+      "total": 997,
+      "fp": 0,
+      "fn": 22
+    },
+    "MS": {
+      "total": 5,
+      "fp": 0,
+      "fn": 2
+    },
+    "MT": {
+      "total": 12,
+      "fp": 0,
+      "fn": 0
+    },
+    "PB": {
+      "total": 10,
+      "fp": 0,
+      "fn": 0
+    },
+    "PE": {
+      "total": 69,
+      "fp": 0,
+      "fn": 1
+    },
+    "PI": {
+      "total": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "PR": {
+      "total": 1128,
+      "fp": 0,
+      "fn": 37
+    },
+    "RJ": {
+      "total": 741,
+      "fp": 0,
+      "fn": 53
+    },
+    "RN": {
+      "total": 4,
+      "fp": 0,
+      "fn": 0
+    },
+    "RS": {
+      "total": 398,
+      "fp": 0,
+      "fn": 23
+    },
+    "SC": {
+      "total": 519,
+      "fp": 0,
+      "fn": 27
+    },
+    "SE": {
+      "total": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "SP": {
+      "total": 10056,
+      "fp": 0,
+      "fn": 738
+    }
+  },
+  "causal_conclusion": "ROOT_CAUSE_NOT_PROVEN",
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42
+}

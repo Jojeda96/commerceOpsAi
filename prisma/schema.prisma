@@ -194,10 +194,12 @@ model InvestigationTask {
 
 model AgentRun {
   id              String          @id @default(uuid())
+  localRunId      String          @unique @map("local_run_id")
   investigationId String          @map("investigation_id")
   agentName       String          @map("agent_name")
   iteration       Int             @default(1)
   model           String?
+  executionKind   String          @default("LLM") @map("execution_kind")
   promptVersion   String?         @map("prompt_version")
   status          String          @default("RUNNING")
   inputTokens     Int?            @map("input_tokens")
@@ -215,20 +217,21 @@ model AgentRun {
 }
 
 model ToolExecution {
-  id             String     @id @default(uuid())
-  agentRunId     String     @map("agent_run_id")
-  toolName       String     @map("tool_name")
-  parametersJson Json       @map("parameters_json")
-  resultSummary  String?    @map("result_summary")
-  rawResultPath  String?    @map("raw_result_path")
-  status         String     @default("RUNNING")
-  durationMs     Int?       @map("duration_ms")
-  errorMessage   String?    @map("error_message")
-  startedAt      DateTime   @default(now()) @map("started_at")
-  completedAt    DateTime?  @map("completed_at")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  agentRun       AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
-  evidence       Evidence[]
+  id               String     @id @default(uuid())
+  localExecutionId String     @unique @map("local_execution_id")
+  agentRunId       String     @map("agent_run_id")
+  toolName         String     @map("tool_name")
+  parametersJson   Json       @map("parameters_json")
+  resultSummary    String?    @map("result_summary")
+  rawResultPath    String?    @map("raw_result_path")
+  status           String     @default("RUNNING")
+  durationMs       Int?       @map("duration_ms")
+  errorMessage     String?    @map("error_message")
+  startedAt        DateTime   @default(now()) @map("started_at")
+  completedAt      DateTime?  @map("completed_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  agentRun         AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  evidence         Evidence[]
 
   @@map("tool_executions")
 }
@@ -245,6 +248,9 @@ model Finding {
   iteration           Int               @default(1)
   supersedesFindingId String?           @map("supersedes_finding_id")
   status              String            @default("ACTIVE")
+  operationalStatus   String            @default("ACTIONABLE") @map("operational_status")
+  modelGovernanceJson Json?             @map("model_governance_json")
+  numericClaimsJson   Json?             @map("numeric_claims_json")
   createdAt           DateTime          @default(now()) @map("created_at")
   investigation       Investigation     @relation(fields: [investigationId], references: [id], onDelete: Cascade)
   agentRun            AgentRun?         @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
@@ -266,6 +272,7 @@ model Evidence {
   sampleSize      Int?              @map("sample_size")
   queryHash       String?           @map("query_hash")
   rawReference    String?           @map("raw_reference")
+  metricsJson     Json?             @map("metrics_json")
   createdAt       DateTime          @default(now()) @map("created_at")
   toolExecution   ToolExecution?    @relation(fields: [toolExecutionId], references: [id], onDelete: SetNull)
   findings        FindingEvidence[]
@@ -299,15 +306,16 @@ model CriticFeedback {
 }
 
 model Recommendation {
-  id              String        @id @default(uuid())
-  investigationId String        @map("investigation_id")
-  title           String
-  description     String
-  priority        String
-  expectedImpact  String?       @map("expected_impact")
-  assumptionsJson Json?         @map("assumptions_json")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  id                       String        @id @default(uuid())
+  investigationId          String        @map("investigation_id")
+  title                    String
+  description              String
+  priority                 String
+  expectedImpact           String?       @map("expected_impact")
+  expectedImpactClaimsJson Json?         @map("expected_impact_claims_json")
+  assumptionsJson          Json?         @map("assumptions_json")
+  createdAt                DateTime      @default(now()) @map("created_at")
+  investigation            Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
 
   @@map("recommendations")
 }
@@ -351,3 +359,39 @@ model ModelPrediction {
   @@map("model_predictions")
 }
 
+model DeliveryFeatureSnapshot {
+  id                               String   @id @default(uuid())
+  orderId                          String   @unique @map("order_id")
+  featureContractVersion           String   @map("feature_contract_version")
+  predictionMoment                 String   @default("ORDER_PURCHASE") @map("prediction_moment")
+  purchaseDate                     DateTime @map("purchase_date")
+  primarySellerState               String   @map("primary_seller_state")
+  customerState                    String   @map("customer_state")
+  primaryCategory                  String   @map("primary_category")
+  totalPrice                       Float    @map("total_price")
+  totalFreight                     Float    @map("total_freight")
+  totalWeightG                     Float    @map("total_weight_g")
+  totalVolumeCm3                   Float    @map("total_volume_cm3")
+  itemCount                        Int      @map("item_count")
+  sellerCount                      Int      @map("seller_count")
+  estimatedDeliveryDays            Float    @map("estimated_delivery_days")
+  shippingWindowDays               Float    @map("shipping_window_days")
+  routeDistanceKm                  Float?   @map("route_distance_km")
+  purchaseDow                      Int      @map("purchase_dow")
+  purchaseHour                     Int      @map("purchase_hour")
+  purchaseMonth                    Int      @map("purchase_month")
+  purchaseWeek                     Int      @map("purchase_week")
+  sellerPriorOrders                Int      @map("seller_prior_orders")
+  sellerPriorLateRateSmoothed      Float    @map("seller_prior_late_rate_smoothed")
+  routePriorOrders                 Int      @map("route_prior_orders")
+  routePriorLateRateSmoothed       Float    @map("route_prior_late_rate_smoothed")
+  categoryPriorOrders              Int      @map("category_prior_orders")
+  categoryPriorLateRateSmoothed    Float    @map("category_prior_late_rate_smoothed")
+  isDelayed                        Boolean  @map("is_delayed")
+  createdAt                        DateTime @default(now()) @map("created_at")
+
+  @@index([purchaseDate])
+  @@index([primarySellerState, customerState])
+  @@index([primaryCategory])
+  @@map("delivery_feature_snapshots")
+}

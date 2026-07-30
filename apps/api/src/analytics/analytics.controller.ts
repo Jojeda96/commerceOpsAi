@@ -50,4 +50,29 @@ export class AnalyticsController {
   getMlRuntime() {
     return this.analyticsService.getMlRuntime();
   }
+
+  @Get('ml-validation')
+  @ApiOperation({
+    summary: 'Walk-forward CV y validación temporal del champion',
+  })
+  getMlValidation() {
+    return this.analyticsService.getMlValidation();
+  }
+
+  @Get('ml-drift')
+  @ApiOperation({
+    summary: 'Reporte de drift de features entre entrenamiento y test',
+  })
+  getMlDrift() {
+    return this.analyticsService.getMlDrift();
+  }
+
+  @Get('ml-defense')
+  @ApiOperation({
+    summary:
+      'Preguntas y respuestas de defensa Data Scientist con snapshot de métricas',
+  })
+  getMlDefense() {
+    return this.analyticsService.getMlDefense();
+  }
 }

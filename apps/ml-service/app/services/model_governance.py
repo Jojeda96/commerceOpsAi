@@ -1,5 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List
+import json
+import os
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+GATES_CONFIG_PATH = PROJECT_ROOT / "data" / "contracts" / "delivery_quality_gates.v3.json"
 
 
 @dataclass(frozen=True)
@@ -27,11 +33,7 @@ def evaluate_delivery_model(metrics: Dict[str, Any]) -> ModelGateResult:
     recall = float(metrics.get("recall", 0.0))
     precision = float(metrics.get("precision", 0.0))
 
-    logistic = metrics.get("baselines", {}).get("logistic_regression", {})
-    logistic_roc = float(logistic.get("roc_auc", 0.0))
-    logistic_pr = float(logistic.get("pr_auc", 0.0))
-
-    # Quality Gates para aprobación del modelo
+    # 1. Absolute Gates
     if test_samples < 5_000:
         reasons.append("TEST_SAMPLE_TOO_SMALL")
 
@@ -44,17 +46,46 @@ def evaluate_delivery_model(metrics: Dict[str, Any]) -> ModelGateResult:
     if prevalence <= 0 or pr_auc < prevalence * 1.50:
         reasons.append("PR_AUC_INSUFFICIENT_LIFT_OVER_PREVALENCE")
 
-    if roc_auc <= logistic_roc:
-        reasons.append("DOES_NOT_BEAT_LOGISTIC_ROC_AUC")
-
-    if pr_auc <= logistic_pr:
-        reasons.append("DOES_NOT_BEAT_LOGISTIC_PR_AUC")
-
     if recall < 0.50:
         reasons.append("RECALL_BELOW_0_50")
 
     if precision < 0.15:
         reasons.append("PRECISION_BELOW_0_15")
+
+    # 2. Relative Gate: Champion CV vs Best Logistic CV
+    cand_summary = metrics.get("candidates_val_summary") or metrics.get("candidates", {})
+    best_log_key = metrics.get("best_logistic_candidate")
+
+    logistic_candidates = {}
+    if isinstance(cand_summary, dict):
+        for k, v in cand_summary.items():
+            if k.startswith("logistic") or (isinstance(v, dict) and v.get("family") == "LOGISTIC_REGRESSION"):
+                logistic_candidates[k] = v
+
+    if logistic_candidates:
+        if best_log_key and best_log_key in logistic_candidates:
+            best_log_metrics = logistic_candidates[best_log_key]
+        else:
+            best_log_metrics = max(
+                logistic_candidates.values(),
+                key=lambda m: m.get("pr_auc", 0.0) if isinstance(m, dict) else 0.0,
+            )
+
+        if isinstance(best_log_metrics, dict):
+            best_log_pr = float(best_log_metrics.get("pr_auc", 0.0))
+            best_log_roc = float(best_log_metrics.get("roc_auc", 0.0))
+
+            # Champion validation metrics
+            champion_name = metrics.get("champion_model_name", metrics.get("model_name", ""))
+            champion_val = cand_summary.get(champion_name, {})
+            if isinstance(champion_val, dict):
+                champ_val_pr = float(champion_val.get("pr_auc", pr_auc))
+                champ_val_roc = float(champion_val.get("roc_auc", roc_auc))
+
+                if champ_val_pr < best_log_pr:
+                    reasons.append("DOES_NOT_BEAT_BEST_LOGISTIC_PR_AUC")
+                if champ_val_roc < best_log_roc:
+                    reasons.append("DOES_NOT_BEAT_BEST_LOGISTIC_ROC_AUC")
 
     if reasons:
         return ModelGateResult(

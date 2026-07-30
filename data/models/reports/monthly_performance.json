@@ -1,0 +1,240 @@
+{
+  "schema_version": "3.0",
+  "generated_at": "2026-07-30T19:43:30.146425+00:00",
+  "dataset_manifest_sha256": "b0c76b4c375e4f337848b43ed664779e68128414ff88277d9c575ab44ec2e582",
+  "feature_contract_version": "delivery-features-v3.0.0",
+  "code_commit_sha": "3d6f541b7b92d1221f6be5bdd9c6c76e5ca02606",
+  "random_seed": 42,
+  "monthly_performance": [
+    {
+      "month": "2016-09",
+      "samples": 1,
+      "positives": 1,
+      "prevalence": 1.0,
+      "metric_status": "NOT_COMPUTABLE",
+      "roc_auc": null,
+      "pr_auc": null,
+      "brier": 0.8464
+    },
+    {
+      "month": "2016-10",
+      "samples": 265,
+      "positives": 3,
+      "prevalence": 0.0113,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0113,
+      "brier": 0.0159
+    },
+    {
+      "month": "2016-12",
+      "samples": 1,
+      "positives": 0,
+      "prevalence": 0.0,
+      "metric_status": "NOT_COMPUTABLE",
+      "roc_auc": null,
+      "pr_auc": null,
+      "brier": 0.0064
+    },
+    {
+      "month": "2017-01",
+      "samples": 750,
+      "positives": 23,
+      "prevalence": 0.0307,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0307,
+      "brier": 0.0322
+    },
+    {
+      "month": "2017-02",
+      "samples": 1653,
+      "positives": 53,
+      "prevalence": 0.0321,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0321,
+      "brier": 0.0333
+    },
+    {
+      "month": "2017-03",
+      "samples": 2546,
+      "positives": 142,
+      "prevalence": 0.0558,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0558,
+      "brier": 0.0532
+    },
+    {
+      "month": "2017-04",
+      "samples": 2303,
+      "positives": 181,
+      "prevalence": 0.0786,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0786,
+      "brier": 0.0724
+    },
+    {
+      "month": "2017-05",
+      "samples": 3545,
+      "positives": 128,
+      "prevalence": 0.0361,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0361,
+      "brier": 0.0367
+    },
+    {
+      "month": "2017-06",
+      "samples": 3135,
+      "positives": 121,
+      "prevalence": 0.0386,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0386,
+      "brier": 0.0388
+    },
+    {
+      "month": "2017-07",
+      "samples": 3872,
+      "positives": 133,
+      "prevalence": 0.0343,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0343,
+      "brier": 0.0353
+    },
+    {
+      "month": "2017-08",
+      "samples": 4193,
+      "positives": 139,
+      "prevalence": 0.0332,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0332,
+      "brier": 0.0342
+    },
+    {
+      "month": "2017-09",
+      "samples": 4150,
+      "positives": 216,
+      "prevalence": 0.052,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.052,
+      "brier": 0.0501
+    },
+    {
+      "month": "2017-10",
+      "samples": 4478,
+      "positives": 237,
+      "prevalence": 0.0529,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0529,
+      "brier": 0.0509
+    },
+    {
+      "month": "2017-11",
+      "samples": 7288,
+      "positives": 1043,
+      "prevalence": 0.1431,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.1431,
+      "brier": 0.1266
+    },
+    {
+      "month": "2017-12",
+      "samples": 5513,
+      "positives": 462,
+      "prevalence": 0.0838,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0838,
+      "brier": 0.0768
+    },
+    {
+      "month": "2018-01",
+      "samples": 7069,
+      "positives": 464,
+      "prevalence": 0.0656,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0656,
+      "brier": 0.0615
+    },
+    {
+      "month": "2018-02",
+      "samples": 6555,
+      "positives": 1048,
+      "prevalence": 0.1599,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.1599,
+      "brier": 0.1407
+    },
+    {
+      "month": "2018-03",
+      "samples": 7003,
+      "positives": 1496,
+      "prevalence": 0.2136,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.2136,
+      "brier": 0.1858
+    },
+    {
+      "month": "2018-04",
+      "samples": 6798,
+      "positives": 361,
+      "prevalence": 0.0531,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0531,
+      "brier": 0.051
+    },
+    {
+      "month": "2018-05",
+      "samples": 6749,
+      "positives": 556,
+      "prevalence": 0.0824,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0824,
+      "brier": 0.0756
+    },
+    {
+      "month": "2018-06",
+      "samples": 6096,
+      "positives": 83,
+      "prevalence": 0.0136,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0136,
+      "brier": 0.0178
+    },
+    {
+      "month": "2018-07",
+      "samples": 6156,
+      "positives": 276,
+      "prevalence": 0.0448,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.0448,
+      "brier": 0.0441
+    },
+    {
+      "month": "2018-08",
+      "samples": 6351,
+      "positives": 660,
+      "prevalence": 0.1039,
+      "metric_status": "COMPUTABLE",
+      "roc_auc": 0.5,
+      "pr_auc": 0.1039,
+      "brier": 0.0937
+    }
+  ]
+}
