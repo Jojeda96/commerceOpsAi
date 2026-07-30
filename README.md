@@ -5,6 +5,20 @@
 
 CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logística, experiencia de cliente, rendimiento de vendedores, detección de anomalías, machine learning y estrategia empresarial. Un **Evidence Critic** audita y evalúa la evidencia numérica antes de generar el informe final.
 
+### 📋 Matriz de Capacidades y Estado del Sistema (V3 Hardening)
+
+| Capacidad | Estado | Implementación |
+|---|---|---|
+| **Orquestación Multiagente** | ✅ Implementada | LangGraph JS + NestJS con fan-out paralelo `Send()` |
+| **Quality Gates ML** | ✅ Implementados | Evaluación determinista sobre splits temporales estrictos |
+| **XGBoost Classifier** | 🧪 Experimental | Estado `EXPERIMENTAL_NOT_APPROVED` (Quality Gate activo) |
+| **Logistic Regression** | 🟢 Baseline / Champion | Candidato champion ajustado |
+| **Escenarios ML** | ✅ Reales PostgreSQL | Consultas `$queryRaw` sin escenarios hardcodeados |
+| **Trazabilidad Runtime** | ✅ Real End-to-End | AgentRun & ToolExecution vinculados en DB sin fallbacks |
+| **Evidence Critic** | ✅ Estructurado Zod | Validación estructurada Zod, score 0-100 y reiteración |
+| **NLP Búsqueda Semántica** | ✅ Evidencia Real | Índice sobre Olist real con TF-IDF persistido y metadatos |
+| **CI Full-Stack** | ✅ GitHub Actions | Lint, Jest, Pytest, Docker build & predict endpoint |
+
 ---
 
 ## 📌 Estado del Proyecto (MVP)

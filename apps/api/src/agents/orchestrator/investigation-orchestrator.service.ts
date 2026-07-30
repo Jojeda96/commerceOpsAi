@@ -12,24 +12,27 @@ export class InvestigationOrchestratorService {
     private readonly streaming: StreamingService,
   ) {}
 
-  async runInvestigation(investigationId: string): Promise<void> {
+  async executeInvestigation(investigationId: string): Promise<void> {
+    this.logger.log(`Iniciando investigación ${investigationId}...`);
+
     const investigation = await this.prisma.investigation.findUnique({
       where: { id: investigationId },
     });
 
     if (!investigation) {
-      this.logger.error(`Investigación ${investigationId} no existe`);
-      return;
+      throw new Error(`Investigación ${investigationId} no encontrada.`);
+    }
+
+    if (investigation.status === 'RUNNING' || investigation.status === 'COMPLETED') {
+      throw new Error(
+        `Investigación ${investigationId} ya está en estado ${investigation.status}. Rechazando doble ejecución.`,
+      );
     }
 
     await this.prisma.investigation.update({
       where: { id: investigationId },
-      data: { status: 'EXECUTING' },
+      data: { status: 'RUNNING' },
     });
-
-    this.logger.log(
-      `🚀 Ejecutando workflow multiagente para la investigación: ${investigationId}`,
-    );
 
     const graph = buildInvestigationGraph(this.prisma, this.streaming);
 
@@ -37,60 +40,46 @@ export class InvestigationOrchestratorService {
       investigationId,
       userQuestion: investigation.question,
       filters: {
-        dateFrom: investigation.dateFrom?.toISOString(),
-        dateTo: investigation.dateTo?.toISOString(),
         sellerIds: (investigation.sellerIdsJson as string[]) || undefined,
         categories: (investigation.categoriesJson as string[]) || undefined,
-        customerStates:
-          (investigation.customerStatesJson as string[]) || undefined,
+        customerStates: (investigation.customerStatesJson as string[]) || undefined,
+        dateFrom: investigation.dateFrom
+          ? investigation.dateFrom.toISOString()
+          : undefined,
+        dateTo: investigation.dateTo
+          ? investigation.dateTo.toISOString()
+          : undefined,
       },
-      investigationPlan: [],
-      activeAgents: [],
       completedAgents: [],
+      activeAgents: [],
+      agentRunTraces: [],
+      toolExecutionTraces: [],
       findings: [],
       evidence: [],
-      contradictions: [],
       criticFeedback: [],
       recommendations: [],
+      modelPredictions: [],
       iteration: 0,
-      maxIterations: parseInt(process.env.MAX_AGENT_ITERATIONS || '3', 10),
-      requiresHumanReview: false,
+      maxIterations: 3,
+      criticDecision: 'PENDING',
+      criticScore: 0,
     };
 
     try {
-      const finalState = await graph.invoke(initialState);
+      this.streaming.emit(investigationId, 'investigation.started', {
+        investigationId,
+        question: investigation.question,
+      });
 
+      const finalState = await graph.invoke(initialState);
       let finalStatus = 'COMPLETED';
 
-      // Persistir todo en una transacción atómica
+      // Transacción unificada de persistencia en PostgreSQL
       await this.prisma.$transaction(async (tx) => {
-        // P1-3: Persistir tareas del plan de investigación
-        for (const task of finalState.investigationPlan || []) {
-          await tx.investigationTask.create({
-            data: {
-              investigationId,
-              agentName: task.agentName,
-              objective: task.objective,
-              status: 'COMPLETED',
-              startedAt: new Date(),
-              completedAt: new Date(),
-            },
-          });
-        }
-
-        // Persistir ejecuciones de agentes (AgentRuns) y ejecuciones de tools (ToolExecutions)
         const agentRunDbMap = new Map<string, string>(); // localRunId -> DB id
-        const agentNameDbMap = new Map<string, string>(); // agentName -> DB id
         const toolExecutionDbMap = new Map<string, string>(); // localExecutionId -> DB id
 
         const tracesToPersist = finalState.agentRunTraces ?? [];
-
-        if (tracesToPersist.length === 0) {
-          this.logger.warn(
-            `Investigation ${investigationId} completed without runtime traces.`,
-          );
-        }
-
 
         for (const trace of tracesToPersist) {
           const agentRun = await tx.agentRun.create({
@@ -115,40 +104,38 @@ export class InvestigationOrchestratorService {
             },
           });
           agentRunDbMap.set(trace.localRunId, agentRun.id);
-          agentNameDbMap.set(trace.agentName, agentRun.id);
         }
 
-        // Persistir ToolExecutions reales
+        // Persistir ToolExecutions vinculadas estrictamente a su AgentRun por localRunId
         for (const toolTrace of finalState.toolExecutionTraces || []) {
-          const parentAgentRunId =
-            agentRunDbMap.get(toolTrace.localAgentRunId) ||
-            agentNameDbMap.get(toolTrace.agentName);
-          if (parentAgentRunId) {
-            const toolExec = await tx.toolExecution.create({
-              data: {
-                agentRunId: parentAgentRunId,
-                toolName: toolTrace.toolName,
-                parametersJson: (toolTrace.parameters as any) || {},
-                resultSummary:
-                  typeof toolTrace.resultSummary === 'string'
-                    ? toolTrace.resultSummary.substring(0, 1000)
-                    : JSON.stringify(toolTrace.resultSummary).substring(
-                        0,
-                        1000,
-                      ),
-                status: toolTrace.status || 'COMPLETED',
-                durationMs: toolTrace.durationMs,
-                errorMessage: toolTrace.errorMessage,
-                startedAt: toolTrace.startedAt
-                  ? new Date(toolTrace.startedAt)
-                  : new Date(),
-                completedAt: toolTrace.completedAt
-                  ? new Date(toolTrace.completedAt)
-                  : new Date(),
-              },
-            });
-            toolExecutionDbMap.set(toolTrace.localExecutionId, toolExec.id);
+          const parentAgentRunId = agentRunDbMap.get(toolTrace.localAgentRunId);
+          if (!parentAgentRunId) {
+            throw new Error(
+              `Tool execution ${toolTrace.toolName} (${toolTrace.localExecutionId}) no tiene AgentRun trace correspondiente (${toolTrace.localAgentRunId}).`,
+            );
           }
+
+          const toolExec = await tx.toolExecution.create({
+            data: {
+              agentRunId: parentAgentRunId,
+              toolName: toolTrace.toolName,
+              parametersJson: (toolTrace.parameters as any) || {},
+              resultSummary:
+                typeof toolTrace.resultSummary === 'string'
+                  ? toolTrace.resultSummary.substring(0, 1000)
+                  : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+              status: toolTrace.status || 'COMPLETED',
+              durationMs: toolTrace.durationMs,
+              errorMessage: toolTrace.errorMessage,
+              startedAt: toolTrace.startedAt
+                ? new Date(toolTrace.startedAt)
+                : new Date(),
+              completedAt: toolTrace.completedAt
+                ? new Date(toolTrace.completedAt)
+                : new Date(),
+            },
+          });
+          toolExecutionDbMap.set(toolTrace.localExecutionId, toolExec.id);
         }
 
         // Deduplicar findings por agente y título
@@ -161,14 +148,16 @@ export class InvestigationOrchestratorService {
 
         // Persistir findings en DB vinculados a su AgentRun real
         for (const finding of uniqueFindings) {
-          const agentName = finding.agent || finding.agentName;
-          const agentRunId = agentNameDbMap.get(agentName);
+          const agentRunId = finding.localAgentRunId
+            ? agentRunDbMap.get(finding.localAgentRunId)
+            : null;
+
           const createdFinding = await tx.finding.create({
             data: {
               id: finding.id,
               investigationId,
               agentRunId: agentRunId || null,
-              agentName: agentName || 'UNKNOWN',
+              agentName: finding.agent || finding.agentName || 'UNKNOWN',
               title: finding.title,
               description: finding.description,
               findingType: finding.findingType || 'INSIGHT',
@@ -179,19 +168,25 @@ export class InvestigationOrchestratorService {
             },
           });
 
-          // Persistir evidencias asociadas explícitamente a su ToolExecution
+          // Persistir evidencias asociadas a su ToolExecution real
           for (const evId of finding.evidenceIds || []) {
-            const ev = (finalState.evidence || []).find((e) => e.id === evId);
+            const ev = (finalState.evidence || []).find((e: any) => e.id === evId);
             if (ev) {
               const toolExecDbId = ev.localToolExecutionId
                 ? toolExecutionDbMap.get(ev.localToolExecutionId)
                 : ev.toolExecutionId || null;
 
+              if (ev.sourceType === 'TOOL_EXECUTION' && !toolExecDbId) {
+                throw new Error(
+                  `Evidence ${ev.id} de tool ${ev.toolName} no está vinculada a una ToolExecution real.`,
+                );
+              }
+
               const createdEv = await tx.evidence.create({
                 data: {
                   id: ev.id,
                   toolExecutionId: toolExecDbId,
-                  agentName: ev.agentName || agentName,
+                  agentName: ev.agentName || finding.agent,
                   iteration: ev.iteration || 1,
                   evidenceType: ev.toolName || 'tool_result',
                   summary:
@@ -210,6 +205,27 @@ export class InvestigationOrchestratorService {
               });
             }
           }
+        }
+
+        // Persistir predicciones de modelos ML (ModelPrediction) de manera transaccional
+        for (const mp of finalState.modelPredictions || []) {
+          await tx.modelPrediction.create({
+            data: {
+              investigationId,
+              findingId: mp.findingId || null,
+              scenarioId: mp.scenarioId,
+              modelName: mp.modelName || 'xgboost',
+              modelVersion: mp.modelVersion || 'delivery-risk-v2.0.0',
+              deploymentStatus: mp.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+              probability: mp.probability,
+              threshold: mp.threshold,
+              predictedDelayed: mp.predictedDelayed,
+              riskLevel: mp.riskLevel || 'LOW',
+              operationallyActionable: Boolean(mp.operationallyActionable),
+              featuresJson: mp.featuresJson,
+              explanationJson: mp.explanationJson,
+            },
+          });
         }
 
         // Persistir recomendaciones en DB

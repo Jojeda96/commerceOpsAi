@@ -173,6 +173,7 @@ model Investigation {
   findings          Finding[]
   criticFeedback    CriticFeedback[]
   recommendations   Recommendation[]
+  modelPredictions  ModelPrediction[]
 
   @@map("investigations")
 }
@@ -249,6 +250,7 @@ model Finding {
   agentRun            AgentRun?         @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   evidence            FindingEvidence[]
   criticFeedback      CriticFeedback[]
+  modelPredictions    ModelPrediction[]
 
   @@map("findings")
 }
@@ -324,20 +326,28 @@ model BusinessAlert {
 }
 
 model ModelPrediction {
-  id               String   @id @default(uuid())
-  investigationId  String   @map("investigation_id")
-  findingId        String?  @map("finding_id")
-  scenarioId       String   @map("scenario_id")
-  modelVersion     String   @map("model_version")
-  deploymentStatus String   @map("deployment_status")
-  probability      Float
-  threshold        Float
-  predictedDelayed Boolean  @map("predicted_delayed")
-  riskLevel        String   @map("risk_level")
-  featuresJson     Json     @map("features_json")
-  explanationJson  Json?    @map("explanation_json")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id                      String        @id @default(uuid())
+  investigationId         String        @map("investigation_id")
+  findingId               String?       @map("finding_id")
+  scenarioId              String        @map("scenario_id")
+  modelName               String        @default("xgboost") @map("model_name")
+  modelVersion            String        @map("model_version")
+  deploymentStatus        String        @map("deployment_status")
+  probability             Float
+  threshold               Float
+  predictedDelayed        Boolean       @map("predicted_delayed")
+  riskLevel               String        @map("risk_level")
+  operationallyActionable Boolean       @default(false) @map("operationally_actionable")
+  featuresJson            Json          @map("features_json")
+  explanationJson         Json?         @map("explanation_json")
+  createdAt               DateTime      @default(now()) @map("created_at")
 
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  finding       Finding?      @relation(fields: [findingId], references: [id], onDelete: SetNull)
+
+  @@index([investigationId])
+  @@index([findingId])
+  @@index([modelVersion])
   @@map("model_predictions")
 }
 

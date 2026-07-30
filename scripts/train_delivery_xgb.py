@@ -12,6 +12,8 @@ import json
 import joblib
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from xgboost import XGBClassifier
 
@@ -33,7 +35,8 @@ from scripts.ml.evaluate import (
     ranking_metrics,
     bootstrap_metric_ci,
 )
-from scripts.ml.calibrate_and_threshold import PlattCalibrator, select_threshold_for_min_precision
+from app.services.calibration import PlattCalibrator
+from scripts.ml.calibrate_and_threshold import select_threshold_for_min_precision
 from app.services.model_governance import evaluate_delivery_model
 
 
@@ -70,6 +73,18 @@ CATEGORICAL_FEATURES = [
 ]
 
 
+@dataclass
+class ModelCandidate:
+    name: str
+    model: Any
+    preprocessor: Any
+    validation_metrics: Dict[str, Any]
+    calibrator: Any
+    threshold: float
+    raw_val_probs: np.ndarray
+    calibrated_val_probs: np.ndarray
+
+
 def train_pipeline():
     dataset_path = os.path.join(root_dir, "data", "processed", "delivery_model_dataset.parquet")
     manifest_path = os.path.join(root_dir, "data", "processed", "delivery_model_manifest.json")
@@ -92,14 +107,12 @@ def train_pipeline():
     df = add_direct_features(df)
     df = add_all_temporal_features(df)
 
-    # Filtrar columnas disponibles
     num_cols = [c for c in NUMERIC_FEATURES if c in df.columns]
     cat_cols = [c for c in CATEGORICAL_FEATURES if c in df.columns]
     all_feature_cols = num_cols + cat_cols
 
     print(f"[Train] Total de variables activas: {len(all_feature_cols)} (Num: {len(num_cols)}, Cat: {len(cat_cols)})")
 
-    # Split temporal estricto: Train (70%), Validation (15%), Test (15%)
     train, val, test = temporal_train_validation_test_split(df, 0.70, 0.15)
     print(f"[Train] Split cronológico: Train={len(train)}, Validation={len(val)}, Test={len(test)}")
 
@@ -107,35 +120,53 @@ def train_pipeline():
     y_val = val["is_delayed"].to_numpy()
     y_test = test["is_delayed"].to_numpy()
 
-    # 1. Ajustar Preprocesador
     preprocessor = build_preprocessor(num_cols, cat_cols)
     X_train_t = preprocessor.fit_transform(train[all_feature_cols])
     X_val_t = preprocessor.transform(val[all_feature_cols])
     X_test_t = preprocessor.transform(test[all_feature_cols])
 
-    # Extraer nombres de características transformadas
     try:
         feature_names = preprocessor.get_feature_names_out().tolist()
     except Exception:
         feature_names = [f"f_{i}" for i in range(X_train_t.shape[1])]
 
-    # 2. Entrenar Baselines en Validation
-    print("[Train] Entrenando Baselines (Dummy & Logistic Regression)...")
-    dummy = build_dummy_baseline()
-    dummy.fit(X_train_t, y_train)
-    dummy_val_probs = dummy.predict_proba(X_val_t)[:, 1]
-    dummy_val_eval = evaluate_binary_classifier(y_val, dummy_val_probs, 0.5)
+    candidates: List[ModelCandidate] = []
 
-    logistic_pipe = build_logistic_baseline(num_cols, cat_cols)
-    logistic_pipe.fit(train[all_feature_cols], y_train)
-    logistic_val_probs = logistic_pipe.predict_proba(val[all_feature_cols])[:, 1]
-    logistic_val_eval = evaluate_binary_classifier(y_val, logistic_val_probs, 0.5)
+    # Candidate 1: Logistic Regression Unweighted
+    print("[Train] Evaluando candidato: Logistic Regression Unweighted...")
+    lr_unweighted_pipe = build_logistic_baseline(num_cols, cat_cols, class_weight=None)
+    lr_unweighted_pipe.fit(train[all_feature_cols], y_train)
+    lr_unw_raw = lr_unweighted_pipe.predict_proba(val[all_feature_cols])[:, 1]
+    cal_lr_unw = PlattCalibrator().fit(lr_unw_raw, y_val)
+    cal_lr_unw_probs = cal_lr_unw.predict(lr_unw_raw)
+    thresh_lr_unw = select_threshold_for_min_precision(y_val, cal_lr_unw_probs, 0.15)
+    eval_lr_unw = evaluate_binary_classifier(y_val, cal_lr_unw_probs, thresh_lr_unw)
+    candidates.append(ModelCandidate("logistic_unweighted", lr_unweighted_pipe.named_steps["model"], preprocessor, eval_lr_unw, cal_lr_unw, thresh_lr_unw, lr_unw_raw, cal_lr_unw_probs))
 
-    print(f"  [Baseline Dummy] Val ROC-AUC: {dummy_val_eval['roc_auc']:.4f} | PR-AUC: {dummy_val_eval['pr_auc']:.4f}")
-    print(f"  [Baseline Logistic] Val ROC-AUC: {logistic_val_eval['roc_auc']:.4f} | PR-AUC: {logistic_val_eval['pr_auc']:.4f}")
+    # Candidate 2: Logistic Regression Balanced
+    print("[Train] Evaluando candidato: Logistic Regression Balanced...")
+    lr_balanced_pipe = build_logistic_baseline(num_cols, cat_cols, class_weight="balanced")
+    lr_balanced_pipe.fit(train[all_feature_cols], y_train)
+    lr_bal_raw = lr_balanced_pipe.predict_proba(val[all_feature_cols])[:, 1]
+    cal_lr_bal = PlattCalibrator().fit(lr_bal_raw, y_val)
+    cal_lr_bal_probs = cal_lr_bal.predict(lr_bal_raw)
+    thresh_lr_bal = select_threshold_for_min_precision(y_val, cal_lr_bal_probs, 0.15)
+    eval_lr_bal = evaluate_binary_classifier(y_val, cal_lr_bal_probs, thresh_lr_bal)
+    candidates.append(ModelCandidate("logistic_balanced", lr_balanced_pipe.named_steps["model"], preprocessor, eval_lr_bal, cal_lr_bal, thresh_lr_bal, lr_bal_raw, cal_lr_bal_probs))
 
-    # 3. Entrenar XGBoost Classifier
-    print("[Train] Entrenando XGBoost Classifier...")
+    # Candidate 3: Logistic Regression Class Weight 1:3
+    print("[Train] Evaluando candidato: Logistic Regression Weight 1:3...")
+    lr_cw3_pipe = build_logistic_baseline(num_cols, cat_cols, class_weight={0: 1, 1: 3})
+    lr_cw3_pipe.fit(train[all_feature_cols], y_train)
+    lr_cw3_raw = lr_cw3_pipe.predict_proba(val[all_feature_cols])[:, 1]
+    cal_lr_cw3 = PlattCalibrator().fit(lr_cw3_raw, y_val)
+    cal_lr_cw3_probs = cal_lr_cw3.predict(lr_cw3_raw)
+    thresh_lr_cw3 = select_threshold_for_min_precision(y_val, cal_lr_cw3_probs, 0.15)
+    eval_lr_cw3 = evaluate_binary_classifier(y_val, cal_lr_cw3_probs, thresh_lr_cw3)
+    candidates.append(ModelCandidate("logistic_cw_1_3", lr_cw3_pipe.named_steps["model"], preprocessor, eval_lr_cw3, cal_lr_cw3, thresh_lr_cw3, lr_cw3_raw, cal_lr_cw3_probs))
+
+    # Candidate 4: XGBoost Baseline
+    print("[Train] Evaluando candidato: XGBoost Baseline...")
     pos_count = int(y_train.sum())
     neg_count = len(y_train) - pos_count
     scale_pos_weight = float(neg_count / max(pos_count, 1))
@@ -154,39 +185,59 @@ def train_pipeline():
         random_state=42,
         n_jobs=-1,
     )
+    xgb_model.fit(X_train_t, y_train, eval_set=[(X_val_t, y_val)], verbose=False)
+    xgb_raw = xgb_model.predict_proba(X_val_t)[:, 1]
+    cal_xgb = PlattCalibrator().fit(xgb_raw, y_val)
+    cal_xgb_probs = cal_xgb.predict(xgb_raw)
+    thresh_xgb = select_threshold_for_min_precision(y_val, cal_xgb_probs, 0.15)
+    eval_xgb = evaluate_binary_classifier(y_val, cal_xgb_probs, thresh_xgb)
+    candidates.append(ModelCandidate("xgboost", xgb_model, preprocessor, eval_xgb, cal_xgb, thresh_xgb, xgb_raw, cal_xgb_probs))
 
-    xgb_model.fit(
-        X_train_t,
-        y_train,
-        eval_set=[(X_val_t, y_val)],
-        verbose=False,
-    )
+    # Champion Selection strictly on Validation Set
+    print("\n[Train] --- RESUMEN DE CANDIDATOS EN VALIDACIÓN ---")
+    for c in candidates:
+        print(f"  [{c.name}] ROC-AUC: {c.validation_metrics['roc_auc']:.4f} | PR-AUC: {c.validation_metrics['pr_auc']:.4f} | Brier: {c.validation_metrics['brier_score']:.4f}")
 
-    xgb_val_probs = xgb_model.predict_proba(X_val_t)[:, 1]
-    xgb_val_eval = evaluate_binary_classifier(y_val, xgb_val_probs, 0.5)
+    eligible = [
+        candidate for candidate in candidates
+        if candidate.validation_metrics["roc_auc"] >= 0.55
+        and candidate.validation_metrics["pr_auc_lift_over_prevalence"] >= 1.25
+    ]
 
-    print(f"  [XGBoost] Val ROC-AUC: {xgb_val_eval['roc_auc']:.4f} | PR-AUC: {xgb_val_eval['pr_auc']:.4f} (Lift: {xgb_val_eval['pr_auc_lift_over_prevalence']:.2f}x)")
+    if eligible:
+        champion = max(
+            eligible,
+            key=lambda c: (
+                c.validation_metrics["pr_auc"],
+                c.validation_metrics["roc_auc"],
+                -c.validation_metrics["brier_score"],
+            ),
+        )
+    else:
+        print("[Train] ⚠️ Ningún candidato superó el umbral estricto de elegibilidad. Seleccionando el de mejor PR-AUC en validación.")
+        champion = max(
+            candidates,
+            key=lambda c: (
+                c.validation_metrics["pr_auc"],
+                c.validation_metrics["roc_auc"],
+            ),
+        )
 
-    # 4. Calibración en Validation (Platt Scaling)
-    print("[Train] Calibrando probabilidades en Validation con Platt Scaling...")
-    calibrator = PlattCalibrator()
-    calibrator.fit(xgb_val_probs, y_val)
-    calibrated_val_probs = calibrator.predict(xgb_val_probs)
+    print(f"\n🏆 CHAMPION SELECCIONADO: {champion.name}")
 
-    # 5. Selección del Threshold óptimo en Validation
-    selected_threshold = select_threshold_for_min_precision(y_val, calibrated_val_probs, min_precision=0.15)
-    print(f"[Train] Threshold operativo seleccionado en Validation: {selected_threshold:.4f}")
+    # EVALUACIÓN ÚNICA DEL CHAMPION EN TEST SET
+    print("[Train] Evaluando modelo CHAMPION en TEST SET inalterado...")
+    if champion.name.startswith("logistic"):
+        raw_test_probs = champion.model.predict_proba(champion.preprocessor.transform(test[all_feature_cols]))[:, 1]
+    else:
+        raw_test_probs = champion.model.predict_proba(X_test_t)[:, 1]
 
-    # 6. EVALUACIÓN FINAL EN TEST SET (UNA SOLA VEZ)
-    print("[Train] Evaluando modelo en TEST SET inalterado...")
-    raw_test_probs = xgb_model.predict_proba(X_test_t)[:, 1]
-    test_probs = calibrator.predict(raw_test_probs)
+    test_probs = champion.calibrator.predict(raw_test_probs)
 
-    test_metrics = evaluate_binary_classifier(y_test, test_probs, threshold=selected_threshold)
+    test_metrics = evaluate_binary_classifier(y_test, test_probs, threshold=champion.threshold)
     test_ranking_5 = ranking_metrics(y_test, test_probs, fraction=0.05)
     test_ranking_10 = ranking_metrics(y_test, test_probs, fraction=0.10)
 
-    # Calcular intervalos de confianza 95% Bootstrap para ROC-AUC y PR-AUC
     from sklearn.metrics import roc_auc_score, average_precision_score
     roc_ci_low, roc_ci_high = bootstrap_metric_ci(y_test, test_probs, lambda y, p: float(roc_auc_score(y, p)))
     pr_ci_low, pr_ci_high = bootstrap_metric_ci(y_test, test_probs, lambda y, p: float(average_precision_score(y, p)))
@@ -198,14 +249,19 @@ def train_pipeline():
     test_metrics["test_positive_count"] = int(y_test.sum())
     test_metrics["test_samples"] = len(y_test)
     test_metrics["test_positive_ratio"] = round(float(y_test.mean()), 4)
+    test_metrics["champion_model_name"] = champion.name
 
-    test_metrics["baselines"] = {
-        "dummy_classifier": evaluate_binary_classifier(y_test, dummy.predict_proba(X_test_t)[:, 1], 0.5),
-        "logistic_regression": evaluate_binary_classifier(y_test, logistic_pipe.predict_proba(test[all_feature_cols])[:, 1], 0.5),
+    test_metrics["candidates_val_summary"] = {
+        c.name: {
+            "roc_auc": c.validation_metrics["roc_auc"],
+            "pr_auc": c.validation_metrics["pr_auc"],
+            "brier_score": c.validation_metrics["brier_score"],
+        }
+        for c in candidates
     }
 
-    # 7. Evaluación de Quality Gates
-    print("[Train] Evaluando Quality Gates del Modelo...")
+    # Quality Gate Check
+    print("[Train] Evaluando Quality Gates del Modelo Champion...")
     gate = evaluate_delivery_model(test_metrics)
     print(f"[Train] Estado del Quality Gate: {gate.status} (Aprobado: {gate.approved})")
     if gate.reasons:
@@ -217,81 +273,41 @@ def train_pipeline():
     test_metrics["trained_at"] = datetime.now(timezone.utc).isoformat()
     test_metrics["features"] = all_feature_cols
 
-    # 8. Guardar Artefactos (Bundle unificado y Metrics JSON)
+    import sklearn
+
     bundle = {
-        "model": xgb_model,
-        "preprocessor": preprocessor,
-        "calibrator": calibrator,
-        "feature_names": feature_names,
-        "raw_features": all_feature_cols,
-        "categorical_features": cat_cols,
-        "numeric_features": num_cols,
-        "threshold": selected_threshold,
+        "bundle_schema_version": "2.1",
+        "model": champion.model,
+        "model_name": champion.name,
+        "preprocessor": champion.preprocessor,
+        "calibrator": champion.calibrator,
+        "threshold": champion.threshold,
         "metrics": test_metrics,
-        "manifest": manifest,
         "deployment_status": gate.status,
         "model_version": "delivery-risk-v2.0.0",
+        "raw_features": all_feature_cols,
+        "feature_names": feature_names,
+        "categorical_features": cat_cols,
+        "numeric_features": num_cols,
+        "manifest": manifest,
+        "library_versions": {
+            "sklearn": sklearn.__version__,
+            "joblib": joblib.__version__,
+            "numpy": np.__version__,
+        },
     }
 
     model_path = os.path.join(models_dir, "delivery_delay_xgb.joblib")
+    champion_gen_path = os.path.join(models_dir, "delivery_delay_champion.joblib")
     metrics_path = os.path.join(models_dir, "delivery_delay_metrics.json")
 
     joblib.dump(bundle, model_path)
-    print(f"[Train] [OK] Bundle del modelo guardado en: {model_path}")
+    joblib.dump(bundle, champion_gen_path)
+    print(f"[Train] [OK] Bundle del modelo guardado en: {model_path} y {champion_gen_path}")
 
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(test_metrics, f, indent=2)
     print(f"[Train] [OK] Métricas guardadas en: {metrics_path}")
-
-    # 9. Actualizar Model Card
-    card_path = os.path.join(root_dir, "docs", "ml", "delivery-delay-model-card.md")
-    status_icon = "🟢" if gate.approved else "🔴"
-    card_content = f"""# Model Card — Delivery Delay Predictor (`delivery-risk-v2.0.0`)
-
-## 📌 Resumen General
-- **Modelo:** `XGBClassifier` (Hist Gradient Boosted Trees).
-- **Tarea:** Clasificación binaria (`is_delayed = 1` si fecha real > fecha estimada de entrega).
-- **Despliegue:** FastAPI Service (`apps/ml-service`).
-- **Versión de Modelo:** `v2.0.0`.
-- **Estado de Despliegue:** {status_icon} `{gate.status}`
-- **Razones del Quality Gate:** {json.dumps(gate.reasons)}
-
----
-
-## 📐 Dataset & Procesamiento (Olist Completo)
-- **Muestras Totales:** {manifest.get('row_count', len(df))} pedidos.
-- **División Temporal Estricta:** Train (70%: {len(train)}), Validation (15%: {len(val)}), Test (15%: {len(test)}).
-- **Prevalencia en Test:** {test_metrics['positive_ratio']:.4%} ({test_metrics['test_positive_count']} atrasos reales).
-- **Momento de Predicción:** `ORDER_PURCHASE` (sin leakage temporal de entrega o reseñas).
-
----
-
-## 📊 Métricas Definitivas Evaluadas en Test Set
-
-| Métrica | XGBoost Tuned (`v2.0.0`) | Baseline Logistic Regression | Baseline Dummy (Prior) |
-|---|---|---|---|
-| **Optimal Threshold** | `{selected_threshold:.4f}` | 0.50 | - |
-| **ROC-AUC** | `{test_metrics['roc_auc']:.4f}` (CI 95%: {test_metrics['roc_auc_ci_95']}) | `{test_metrics['baselines']['logistic_regression']['roc_auc']:.4f}` | 0.5000 |
-| **PR-AUC** | `{test_metrics['pr_auc']:.4f}` (CI 95%: {test_metrics['pr_auc_ci_95']}) | `{test_metrics['baselines']['logistic_regression']['pr_auc']:.4f}` | `{test_metrics['positive_ratio']:.4f}` |
-| **PR-AUC Lift** | `{test_metrics['pr_auc_lift_over_prevalence']}x` | - | 1.0x |
-| **Precision** | `{test_metrics['precision']:.4f}` | `{test_metrics['baselines']['logistic_regression']['precision']:.4f}` | 0.0000 |
-| **Recall** | `{test_metrics['recall']:.4f}` | `{test_metrics['baselines']['logistic_regression']['recall']:.4f}` | 0.0000 |
-| **F1 Score** | `{test_metrics['f1']:.4f}` | `{test_metrics['baselines']['logistic_regression']['f1']:.4f}` | 0.0000 |
-| **Brier Score** | `{test_metrics['brier_score']:.4f}` | N/A | N/A |
-| **Precision@5% Top** | `{test_ranking_5['precision_at_k']:.4f}` | N/A | - |
-| **Recall@5% Top** | `{test_ranking_5['recall_at_k']:.4f}` | N/A | - |
-| **Lift@5% Top** | `{test_ranking_5['lift_at_k']}x` | N/A | - |
-
----
-
-## ⚠️ Gobernanza y Bloqueo Operativo
-
-1. **Gate Automático:** Estado actual `{gate.status}`.
-2. **Inferencia Operativa:** Servido a través del bundle versionado `.joblib`.
-"""
-    with open(card_path, "w", encoding="utf-8") as f:
-        f.write(card_content)
-    print(f"[Train] [OK] Model Card actualizado en: {card_path}")
 
     return test_metrics
 

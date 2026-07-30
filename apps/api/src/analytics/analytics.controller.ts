@@ -38,4 +38,16 @@ export class AnalyticsController {
   getSellersSummary(@Query() query: AnalyticsQueryDto) {
     return this.analyticsService.getSellersSummary(query);
   }
+
+  @Get('ml-metrics')
+  @ApiOperation({ summary: 'Proxy de métricas de gobernanza ML' })
+  getMlMetrics() {
+    return this.analyticsService.getMlMetrics();
+  }
+
+  @Get('ml-runtime')
+  @ApiOperation({ summary: 'Proxy del estado de runtime del servicio ML' })
+  getMlRuntime() {
+    return this.analyticsService.getMlRuntime();
+  }
 }

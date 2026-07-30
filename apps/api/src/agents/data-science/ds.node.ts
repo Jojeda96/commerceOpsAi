@@ -2,7 +2,11 @@ import { ChatOpenAI } from '@langchain/openai';
 import { PrismaClient } from '@prisma/client';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
+import { Finding } from '@commerce-ops/shared-types';
 import { createDataScienceTools, DeliveryScenario } from './ds.tools';
+import { runAgentWithTrace, executeToolWithTrace } from '../../observability/agent-runner';
+import { extractModelUsage } from '../../observability/usage';
+import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 
 export type ModelReliability =
   | 'UNAVAILABLE'
@@ -37,6 +41,10 @@ export function buildPredictionSummary(
   scenario: DeliveryScenario,
   prediction: any,
 ): string {
+  if (!prediction || prediction.status === 'UNAVAILABLE') {
+    return `Escenario ${scenario.sellerState}→${scenario.customerState} (${scenario.primaryCategory || 'general'}): Servicio ML no disponible para inferencia (${prediction?.reason || 'UNAVAILABLE'}).`;
+  }
+
   const probPct = (prediction.probability * 100).toFixed(1);
   const threshPct = (prediction.threshold * 100).toFixed(1);
   return [
@@ -50,9 +58,11 @@ export function buildPredictionSummary(
   ].filter(Boolean).join(' ');
 }
 
-export function createDataScienceNode(streaming: StreamingService, prisma?: PrismaClient) {
+export function createDataScienceNode(streaming: StreamingService, prisma: PrismaClient) {
   return async (state: CommerceOpsStateType) => {
     const { investigationId, userQuestion } = state;
+    const iteration = state.iteration || 1;
+    const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
     streaming.emit(investigationId, 'agent.started', { agent: 'DATA_SCIENCE' });
 
@@ -61,133 +71,149 @@ export function createDataScienceNode(streaming: StreamingService, prisma?: Pris
     const predictTool = tools.find((t) => t.name === 'predict_delivery_delay')!;
     const explainTool = tools.find((t) => t.name === 'explain_delivery_delay')!;
 
-    streaming.emit(investigationId, 'tool.started', {
-      agent: 'DATA_SCIENCE',
-      tool: 'get_delivery_prediction_scenarios',
-    });
+    const { result, trace: agentTrace } = await runAgentWithTrace({
+      agentName: 'DATA_SCIENCE',
+      iteration,
+      modelName,
+      execute: async ({ localRunId }) => {
+        const toolTraces: ToolExecutionTrace[] = [];
+        const scenarioParams = {
+          limit: 3,
+          customerStates: state.filters?.customerStates,
+          categories: state.filters?.categories,
+        };
 
-    const scenarioRaw = await scenarioTool.invoke({
-      limit: 3,
-      customerStates: state.filters?.customerStates,
-      categories: state.filters?.categories,
-    });
+        streaming.emit(investigationId, 'tool.started', { agent: 'DATA_SCIENCE', tool: 'get_delivery_prediction_scenarios' });
 
-    streaming.emit(investigationId, 'tool.completed', {
-      agent: 'DATA_SCIENCE',
-      tool: 'get_delivery_prediction_scenarios',
-    });
+        const { result: scenarioRaw, trace: scenarioTrace } = await executeToolWithTrace({
+          localAgentRunId: localRunId,
+          agentName: 'DATA_SCIENCE',
+          iteration,
+          toolName: 'get_delivery_prediction_scenarios',
+          parameters: scenarioParams,
+          execute: () => scenarioTool.invoke(scenarioParams),
+        });
+        toolTraces.push(scenarioTrace);
+        streaming.emit(investigationId, 'tool.completed', { agent: 'DATA_SCIENCE', tool: 'get_delivery_prediction_scenarios' });
 
-    let scenarios: DeliveryScenario[] = [];
-    try {
-      const parsedScenarios = JSON.parse(scenarioRaw);
-      scenarios = parsedScenarios.scenarios || [];
-    } catch (e) {
-      console.warn('[DSNode] Error parseando escenarios:', e);
-    }
-
-    if (scenarios.length === 0) {
-      scenarios = [{
-        scenarioId: 'scen-default-sp-rj',
-        sellerState: 'SP',
-        customerState: 'RJ',
-        totalFreight: 30.0,
-        totalPrice: 100.0,
-        totalWeightG: 500.0,
-        totalVolumeCm3: 4500.0,
-        itemCount: 1,
-        sellerCount: 1,
-        estimatedDeliveryDays: 10.0,
-        shippingWindowDays: 4.0,
-        routeDistanceKm: 360.0,
-        purchaseDow: 2,
-        purchaseHour: 14,
-        purchaseMonth: 6,
-        primaryCategory: 'perfumaria',
-        sellerPriorOrders: 100,
-        sellerPriorLateRate: 0.08,
-        sampleSize: 1000,
-      }];
-    }
-
-    const predictions: Array<{ scenario: DeliveryScenario; prediction: any; explanation: any }> = [];
-    const evidenceItems: any[] = [];
-
-    for (const scenario of scenarios) {
-      streaming.emit(investigationId, 'tool.started', {
-        agent: 'DATA_SCIENCE',
-        tool: 'predict_delivery_delay',
-      });
-
-      const predRaw = await predictTool.invoke(scenario);
-
-      streaming.emit(investigationId, 'tool.completed', {
-        agent: 'DATA_SCIENCE',
-        tool: 'predict_delivery_delay',
-      });
-
-      const explainRaw = await explainTool.invoke(scenario);
-
-      let parsedPred: any = {};
-      let parsedExplain: any = {};
-      try {
-        parsedPred = JSON.parse(predRaw);
-        parsedExplain = JSON.parse(explainRaw);
-      } catch (e) {
-        console.warn('[DSNode] Error parseando predicción/explicación JSON:', e);
-      }
-
-      predictions.push({
-        scenario,
-        prediction: parsedPred,
-        explanation: parsedExplain,
-      });
-
-      const evId = `ev-ds-${scenario.scenarioId}-${Date.now()}`;
-      evidenceItems.push({
-        id: evId,
-        toolName: 'predict_delivery_delay',
-        parameters: { scenarioId: scenario.scenarioId, modelVersion: parsedPred.model_version || 'delivery-risk-v2.0.0' },
-        resultSummary: buildPredictionSummary(scenario, parsedPred),
-        generatedAt: new Date().toISOString(),
-      });
-
-      // Persistir ModelPrediction en BD Prisma si está disponible
-      if (prisma) {
+        let scenarioPayload: { status: string; scenarios?: DeliveryScenario[]; reason?: string } = {
+          status: 'UNAVAILABLE',
+        };
         try {
-          await prisma.modelPrediction.create({
-            data: {
-              investigationId,
-              scenarioId: scenario.scenarioId,
-              modelVersion: parsedPred.model_version || parsedPred.modelVersion || 'delivery-risk-v2.0.0',
-              deploymentStatus: parsedPred.deployment_status || parsedPred.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
-              probability: floatOrZero(parsedPred.probability),
-              threshold: floatOrZero(parsedPred.threshold),
-              predictedDelayed: Boolean(parsedPred.predicted_delayed ?? parsedPred.predictedDelayed),
-              riskLevel: parsedPred.risk_level || parsedPred.riskLevel || 'LOW',
-              featuresJson: scenario as any,
-              explanationJson: parsedExplain as any,
-            },
-          });
-        } catch (dbErr) {
-          console.warn('[DSNode] No se pudo persistir ModelPrediction en DB:', dbErr);
+          scenarioPayload = JSON.parse(scenarioRaw);
+        } catch (e) {
+          console.warn('[DSNode] Error parseando JSON de escenarios:', e);
         }
-      }
-    }
 
-    const firstPred = predictions[0]?.prediction || {};
-    const deploymentStatus = firstPred.deployment_status || firstPred.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED';
-    const reliability = deriveModelReliability(deploymentStatus, predictions[0]?.scenario?.sampleSize || 500);
-    const confidence = reliabilityToConfidence(reliability);
+        if (scenarioPayload.status !== 'AVAILABLE' || !scenarioPayload.scenarios || scenarioPayload.scenarios.length === 0) {
+          const unavailableFinding: Finding = {
+            id: `finding-ds-unavailable-${Date.now()}`,
+            investigationId,
+            localAgentRunId: localRunId,
+            agent: 'DATA_SCIENCE',
+            title: 'No fue posible construir escenarios ML con los filtros aplicados',
+            description: `Los filtros aplicados no devolvieron escenarios con el mínimo de observaciones requerido en PostgreSQL (${scenarioPayload.reason || 'NO_SCENARIOS'}). No se ejecutaron predicciones ML.`,
+            findingType: 'ML_UNAVAILABLE',
+            confidence: 1.0,
+            evidenceIds: [],
+            operationalStatus: 'BLOCKED',
+            createdAt: new Date().toISOString(),
+          };
 
-    const predictionSummariesText = predictions.map((p) => buildPredictionSummary(p.scenario, p.prediction)).join('\n');
+          streaming.emit(investigationId, 'finding.created', { agent: 'DATA_SCIENCE', finding: unavailableFinding });
+          streaming.emit(investigationId, 'agent.completed', { agent: 'DATA_SCIENCE' });
 
-    const model = new ChatOpenAI({
-      modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      temperature: 0.2,
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+          return {
+            result: {
+              finding: unavailableFinding,
+              evidence: [] as any[],
+              toolTraces,
+              modelPredictions: [] as any[],
+            },
+          };
+        }
 
-    const prompt = `Eres el Data Science Agent de CommerceOps AI.
+        const scenarios = scenarioPayload.scenarios;
+        const predictions: Array<{ scenario: DeliveryScenario; prediction: any; explanation: any }> = [];
+        const evidenceItems: any[] = [];
+
+        for (const scenario of scenarios) {
+          streaming.emit(investigationId, 'tool.started', { agent: 'DATA_SCIENCE', tool: 'predict_delivery_delay' });
+
+          const { result: predRaw, trace: predictTrace } = await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'DATA_SCIENCE',
+            iteration,
+            toolName: 'predict_delivery_delay',
+            parameters: scenario,
+            execute: () => predictTool.invoke(scenario),
+          });
+          toolTraces.push(predictTrace);
+          streaming.emit(investigationId, 'tool.completed', { agent: 'DATA_SCIENCE', tool: 'predict_delivery_delay' });
+
+          const { result: explainRaw, trace: explainTrace } = await executeToolWithTrace({
+            localAgentRunId: localRunId,
+            agentName: 'DATA_SCIENCE',
+            iteration,
+            toolName: 'explain_delivery_delay',
+            parameters: scenario,
+            execute: () => explainTool.invoke(scenario),
+          });
+          toolTraces.push(explainTrace);
+
+          let parsedPred: any = {};
+          let parsedExplain: any = {};
+          try {
+            parsedPred = JSON.parse(predRaw);
+            parsedExplain = JSON.parse(explainRaw);
+          } catch (e) {
+            console.warn('[DSNode] Error parseando predicción/explicación JSON:', e);
+          }
+
+          predictions.push({
+            scenario,
+            prediction: parsedPred,
+            explanation: parsedExplain,
+          });
+
+          const evId = `ev-ds-${scenario.scenarioId}-${Date.now()}`;
+          evidenceItems.push({
+            id: evId,
+            localAgentRunId: localRunId,
+            localToolExecutionId: predictTrace.localExecutionId,
+            sourceType: 'TOOL_EXECUTION' as const,
+            agentName: 'DATA_SCIENCE' as const,
+            iteration,
+            toolName: 'predict_delivery_delay',
+            parameters: { scenarioId: scenario.scenarioId, modelVersion: parsedPred.model_version || 'delivery-risk-v2.0.0' },
+            resultSummary: buildPredictionSummary(scenario, parsedPred),
+            generatedAt: new Date().toISOString(),
+          });
+        }
+
+        const firstPred = predictions[0]?.prediction || {};
+        const deploymentStatus = firstPred.deployment_status || firstPred.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED';
+        const reliability = deriveModelReliability(deploymentStatus, predictions[0]?.scenario?.sampleSize || 500);
+        const confidence = reliabilityToConfidence(reliability);
+
+        const isApproved = deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
+        const allowExperimental = process.env.ENABLE_EXPERIMENTAL_ML_IN_WORKFLOW === 'true';
+
+        const operationalStatus = isApproved
+          ? ('ACTIONABLE' as const)
+          : allowExperimental
+          ? ('EXPERIMENTAL_CONTEXT' as const)
+          : ('BLOCKED' as const);
+
+        const predictionSummariesText = predictions.map((p) => buildPredictionSummary(p.scenario, p.prediction)).join('\n');
+
+        const model = new ChatOpenAI({
+          modelName,
+          temperature: 0.2,
+          apiKey: process.env.OPENAI_API_KEY,
+        });
+
+        const prompt = `Eres el Data Science Agent de CommerceOps AI.
 Pregunta del usuario: "${userQuestion}"
 
 Escenarios evaluados cuantitativamente:
@@ -201,59 +227,97 @@ REGLAS DE RIGOR METODOLÓGICO Y CERO ALUCINACIÓN:
 
 Genera un hallazgo técnico explicable en formato JSON:
 {
-  "title": "Evaluación de Escenarios de Entrega (${deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE' ? 'Modelo Aprobado' : 'Modelo Experimental No Aprobado'})",
-  "description": "Se analizaron ${predictions.length} escenarios representativos. ${predictionSummariesText.slice(0, 300)}...",
+  "title": "Evaluación de Escenarios de Entrega (${isApproved ? 'Modelo Aprobado' : 'Modelo Experimental No Aprobado'})",
+  "description": "Se analizaron ${predictions.length} escenarios representativos reales. ${predictionSummariesText.slice(0, 300)}...",
   "confidence": ${confidence},
   "findingType": "ML_PREDICTION"
 }`;
 
-    let title = deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE'
-      ? 'Evaluación de Escenarios de Entrega ML'
-      : 'Evaluación de Escenarios (Modelo Experimental No Aprobado)';
-    let description = `Se analizaron ${predictions.length} escenarios representativos. Estado: ${deploymentStatus}.`;
+        let title = isApproved
+          ? 'Evaluación de Escenarios de Entrega ML'
+          : 'Evaluación de Escenarios (Modelo Experimental No Aprobado)';
+        let description = `Se analizaron ${predictions.length} escenarios representativos. Estado: ${deploymentStatus}.`;
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
 
-    try {
-      const response = await model.invoke(prompt);
-      const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        if (parsed.title) title = parsed.title;
-        if (parsed.description) description = parsed.description;
-      }
-    } catch (err) {
-      console.warn('[DSNode] Error in LLM call:', err);
-    }
+        try {
+          const response = await model.invoke(prompt);
+          const usage = extractModelUsage(response);
+          inputTokens = usage.inputTokens;
+          outputTokens = usage.outputTokens;
 
-    const findingItem = {
-      id: `finding-ds-${Date.now()}`,
-      investigationId,
-      agent: 'DATA_SCIENCE' as const,
-      title,
-      description,
-      findingType: 'ML_PREDICTION',
-      confidence,
-      evidenceIds: evidenceItems.map((e) => e.id),
-      createdAt: new Date().toISOString(),
-    };
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const match = content.match(/\{[\s\S]*\}/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            if (parsed.title) title = parsed.title;
+            if (parsed.description) description = parsed.description;
+          }
+        } catch (err) {
+          console.warn('[DSNode] Error in LLM call:', err);
+        }
 
-    streaming.emit(investigationId, 'finding.created', {
-      agent: 'DATA_SCIENCE',
-      finding: findingItem,
-    });
-    streaming.emit(investigationId, 'agent.completed', {
-      agent: 'DATA_SCIENCE',
+        const findingId = `finding-ds-${Date.now()}`;
+        const findingItem: Finding = {
+          id: findingId,
+          investigationId,
+          localAgentRunId: localRunId,
+          agent: 'DATA_SCIENCE',
+          title,
+          description,
+          findingType: 'ML_PREDICTION',
+          confidence,
+          evidenceIds: evidenceItems.map((e) => e.id),
+          operationalStatus,
+          modelGovernance: {
+            modelName: firstPred.model_name || 'xgboost',
+            modelVersion: firstPred.model_version || 'delivery-risk-v2.0.0',
+            deploymentStatus,
+            operationallyActionable: isApproved,
+            reasons: firstPred.deployment_reasons || [],
+          },
+          createdAt: new Date().toISOString(),
+        };
+
+        const modelPredictionTraces = predictions.map((p) => ({
+          investigationId,
+          findingId,
+          scenarioId: p.scenario.scenarioId,
+          modelName: p.prediction.model_name || 'xgboost',
+          modelVersion: p.prediction.model_version || 'delivery-risk-v2.0.0',
+          deploymentStatus: p.prediction.deployment_status || 'EXPERIMENTAL_NOT_APPROVED',
+          probability: Number(p.prediction.probability || 0),
+          threshold: Number(p.prediction.threshold || 0.5),
+          predictedDelayed: Boolean(p.prediction.predicted_delayed),
+          riskLevel: p.prediction.risk_level || 'LOW',
+          operationallyActionable: isApproved,
+          featuresJson: p.scenario,
+          explanationJson: p.explanation,
+        }));
+
+        streaming.emit(investigationId, 'finding.created', { agent: 'DATA_SCIENCE', finding: findingItem });
+        streaming.emit(investigationId, 'agent.completed', { agent: 'DATA_SCIENCE' });
+
+        return {
+          result: {
+            finding: findingItem,
+            evidence: evidenceItems,
+            toolTraces,
+            modelPredictions: modelPredictionTraces,
+          },
+          inputTokens,
+          outputTokens,
+        };
+      },
     });
 
     return {
       completedAgents: [...state.completedAgents, 'DATA_SCIENCE' as const],
-      findings: [findingItem],
-      evidence: evidenceItems,
+      agentRunTraces: [agentTrace],
+      toolExecutionTraces: result.toolTraces,
+      findings: [result.finding],
+      evidence: result.evidence,
+      modelPredictions: result.modelPredictions,
     };
   };
-}
-
-function floatOrZero(val: any): number {
-  const n = parseFloat(val);
-  return isNaN(n) ? 0.0 : n;
 }

@@ -4,10 +4,20 @@ import joblib
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional
+
+from app.services.model_bundle import validate_bundle
 from app.services.model_governance import evaluate_delivery_model, ModelGateResult
 
 
 class ModelNotApprovedError(RuntimeError):
+    pass
+
+
+class ModelUnavailableError(RuntimeError):
+    pass
+
+
+class ModelBundleLoadError(RuntimeError):
     pass
 
 
@@ -33,6 +43,8 @@ class MLEngine:
         self.metrics: Dict[str, Any] = {}
         self.threshold: float = 0.5
         self.explainer = None
+        self.load_error: Optional[str] = None
+        self.model_name: Optional[str] = None
 
         self.load_bundle()
 
@@ -47,33 +59,40 @@ class MLEngine:
         if self.root_dir not in sys.path:
             sys.path.insert(0, self.root_dir)
 
-        if os.path.exists(self.bundle_path):
+        if not os.path.exists(self.bundle_path):
+            self.load_error = "MODEL_BUNDLE_NOT_FOUND"
+            return
+
+        try:
+            loaded = joblib.load(self.bundle_path)
+
+            if not isinstance(loaded, dict):
+                raise ModelBundleLoadError("El artefacto cargado no es un diccionario bundle.")
+
+            validate_bundle(loaded)
+
+            self.bundle = loaded
+            self.model = loaded["model"]
+            self.preprocessor = loaded["preprocessor"]
+            self.calibrator = loaded.get("calibrator")
+            self.threshold = float(loaded["threshold"])
+            self.metrics = loaded.get("metrics", {})
+            self.model_name = loaded.get("model_name", "xgboost")
+            self.load_error = None
+            print(f"[MLEngine] [OK] Bundle v2.1 cargado desde: {self.bundle_path}")
+
             try:
-                loaded = joblib.load(self.bundle_path)
-
-                if isinstance(loaded, dict):
-                    required_keys = {"model", "preprocessor", "threshold", "metrics", "deployment_status", "model_version"}
-                    missing = required_keys - loaded.keys()
-                    if missing:
-                        print(f"[MLEngine] ⚠️ Bundle incompleto. Faltan claves: {sorted(missing)}")
-                    else:
-                        self.bundle = loaded
-                        self.model = loaded["model"]
-                        self.preprocessor = loaded["preprocessor"]
-                        self.calibrator = loaded.get("calibrator")
-                        self.threshold = float(loaded.get("threshold", 0.5))
-                        self.metrics = loaded.get("metrics", {})
-                        print(f"[MLEngine] ✅ Bundle unificado v2 cargado desde: {self.bundle_path}")
-
-                        try:
-                            import shap
-                            self.explainer = shap.TreeExplainer(self.model)
-                        except Exception as e:
-                            print(f"[MLEngine] SHAP Explainer no inicializado: {e}")
-                else:
-                    self.model = loaded
+                import shap
+                self.explainer = shap.TreeExplainer(self.model)
             except Exception as e:
-                print(f"[MLEngine] ⚠️ Error al cargar el bundle de modelo ({e}).")
+                print(f"[MLEngine] SHAP Explainer no inicializado: {e}")
+        except Exception as exc:
+            self.bundle = {}
+            self.model = None
+            self.preprocessor = None
+            self.calibrator = None
+            self.load_error = f"{type(exc).__name__}: {exc}"
+            print(f"[MLEngine] [WARNING] Error al cargar bundle ML: {self.load_error}")
 
         if not self.metrics and os.path.exists(self.metrics_path):
             try:
@@ -81,6 +100,20 @@ class MLEngine:
                     self.metrics = json.load(f)
             except Exception:
                 pass
+
+    def get_runtime_status(self) -> dict:
+        return {
+            "runtime_ready": (
+                self.model is not None
+                and self.preprocessor is not None
+            ),
+            "bundle_path": self.bundle_path,
+            "bundle_schema_version": self.bundle.get("bundle_schema_version"),
+            "model_name": self.bundle.get("model_name"),
+            "model_version": self.bundle.get("model_version"),
+            "deployment_status": self.bundle.get("deployment_status", "UNAVAILABLE"),
+            "load_error": self.load_error,
+        }
 
     def _assert_model_is_approved(self, allow_experimental: bool = False) -> ModelGateResult:
         gate = evaluate_delivery_model(self.metrics)
@@ -91,6 +124,11 @@ class MLEngine:
         return gate
 
     def predict_delay(self, request_dict: Dict[str, Any], allow_experimental: bool = False) -> Dict[str, Any]:
+        if self.model is None or self.preprocessor is None:
+            raise ModelUnavailableError(
+                self.load_error or "MODEL_RUNTIME_UNAVAILABLE"
+            )
+
         gate = self._assert_model_is_approved(allow_experimental=allow_experimental)
 
         scenario_id = str(request_dict.get("scenario_id", "scenario-default"))
@@ -142,86 +180,55 @@ class MLEngine:
         input_df = pd.DataFrame([row_dict])
         warning_msg = None if gate.approved else f"⚠ Modelo experimental no aprobado ({', '.join(gate.reasons)}) — no utilizar para decisiones operativas."
 
-        if self.model is not None and self.preprocessor is not None:
-            try:
-                X_trans = self.preprocessor.transform(input_df)
-                raw_prob = float(self.model.predict_proba(X_trans)[0][1])
+        X_trans = self.preprocessor.transform(input_df)
+        raw_prob = float(self.model.predict_proba(X_trans)[0][1])
 
-                if self.calibrator is not None:
-                    prob = float(self.calibrator.predict(np.array([raw_prob]))[0])
-                else:
-                    prob = raw_prob
+        if self.calibrator is not None:
+            prob = float(self.calibrator.predict(np.array([raw_prob]))[0])
+        else:
+            prob = raw_prob
 
-                # Sin clipping artificial (respetar precisión de probabilidad)
-                prob = round(prob, 6)
+        prob = round(prob, 6)
 
-                opt_thresh = self.threshold
-                is_delayed = prob >= opt_thresh
+        opt_thresh = self.threshold
+        is_delayed = prob >= opt_thresh
 
-                if prob >= opt_thresh:
-                    risk_level = "HIGH"
-                elif prob >= 0.5 * opt_thresh:
-                    risk_level = "MEDIUM"
-                else:
-                    risk_level = "LOW"
+        if prob >= opt_thresh:
+            risk_level = "HIGH"
+        elif prob >= 0.5 * opt_thresh:
+            risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
 
-                contributions = []
-                if self.explainer is not None:
-                    shap_vals = self.explainer.shap_values(X_trans)[0]
-                    feature_names = self.bundle.get("feature_names", [f"f_{i}" for i in range(len(shap_vals))])
-                    for feat, val in zip(feature_names, shap_vals):
-                        contributions.append({
-                            "feature": feat,
-                            "raw_margin_contribution": round(float(val), 6),
-                            "direction": "INCREASES_MODEL_SCORE" if val > 0 else "DECREASES_MODEL_SCORE",
-                        })
+        contributions = []
+        if self.explainer is not None:
+            shap_vals = self.explainer.shap_values(X_trans)[0]
+            feature_names = self.bundle.get("feature_names", [f"f_{i}" for i in range(len(shap_vals))])
+            for feat, val in zip(feature_names, shap_vals):
+                contributions.append({
+                    "feature": feat,
+                    "raw_margin_contribution": round(float(val), 6),
+                    "direction": "INCREASES_MODEL_SCORE" if val > 0 else "DECREASES_MODEL_SCORE",
+                })
 
-                    # Ordenar por magnitud absoluta de impacto
-                    contributions = sorted(contributions, key=lambda x: abs(x["raw_margin_contribution"]), reverse=True)[:10]
-
-                return {
-                    "scenario_id": scenario_id,
-                    "probability": prob,
-                    "threshold": round(opt_thresh, 4),
-                    "predicted_delayed": is_delayed,
-                    "risk_level": risk_level,
-                    "model_version": self.bundle.get("model_version", "delivery-risk-v2.0.0"),
-                    "deployment_status": gate.status,
-                    "model_reliability": "EXPERIMENTAL_NOT_APPROVED" if not gate.approved else "APPROVED_FOR_DEMO",
-                    "warning": warning_msg,
-                    "features": request_dict,
-                    "explanation": {
-                        "explanation_scale": "XGBOOST_RAW_MARGIN",
-                        "causal_interpretation": False,
-                        "base_value": round(float(getattr(self.explainer, "expected_value", 0.15)), 4) if self.explainer else 0.15,
-                        "contributions": contributions,
-                    }
-                }
-            except Exception as e:
-                print(f"[MLEngine] Error en inferencia con bundle v2: {e}")
-
-        # Fallback si bundle no está disponible
-        prob = 0.15
-        if row_dict["is_interstate"]: prob += 0.25
-        if freight_value > 50: prob += 0.15
-        prob = round(prob, 4)
+            contributions = sorted(contributions, key=lambda x: abs(x["raw_margin_contribution"]), reverse=True)[:10]
 
         return {
             "scenario_id": scenario_id,
             "probability": prob,
-            "threshold": round(self.threshold, 4),
-            "predicted_delayed": prob >= self.threshold,
-            "risk_level": "HIGH" if prob >= self.threshold else "MEDIUM",
-            "model_version": "delivery-delay-heuristic-v1",
-            "deployment_status": "EXPERIMENTAL_NOT_APPROVED",
-            "model_reliability": "LOW",
+            "threshold": round(opt_thresh, 4),
+            "predicted_delayed": is_delayed,
+            "risk_level": risk_level,
+            "model_version": self.bundle.get("model_version", "delivery-risk-v2.0.0"),
+            "deployment_status": gate.status,
+            "model_reliability": "EXPERIMENTAL_NOT_APPROVED" if not gate.approved else "APPROVED_FOR_DEMO",
             "warning": warning_msg,
             "features": request_dict,
             "explanation": {
-                "explanation_scale": "HEURISTIC_RULE_MARGIN",
+                "explanation_scale": "XGBOOST_RAW_MARGIN",
                 "causal_interpretation": False,
-                "base_value": 0.15,
-                "contributions": []
+                "base_value": round(float(getattr(self.explainer, "expected_value", 0.15)), 4) if self.explainer else 0.15,
+                "contributions": contributions,
             }
         }
 

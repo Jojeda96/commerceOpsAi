@@ -88,6 +88,10 @@ export const CommerceOpsAnnotation = Annotation.Root({
     value: (_, next) => next ?? [],
     default: () => [],
   }),
+  modelPredictions: Annotation<any[]>({
+    value: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
 });
 
 export type CommerceOpsStateType = typeof CommerceOpsAnnotation.State;

@@ -77,10 +77,24 @@ export interface ToolExecutionTrace {
   errorMessage?: string;
 }
 
+export type FindingOperationalStatus =
+  | 'ACTIONABLE'
+  | 'EXPERIMENTAL_CONTEXT'
+  | 'BLOCKED';
+
+export interface ModelGovernanceMetadata {
+  modelName: string;
+  modelVersion: string;
+  deploymentStatus: string;
+  operationallyActionable: boolean;
+  reasons: string[];
+}
+
 export interface Finding {
   id: string;
   investigationId: string;
   agentRunId?: string;
+  localAgentRunId?: string;
   agentName?: AgentName;
   agent: AgentName;
   title: string;
@@ -91,6 +105,8 @@ export interface Finding {
   iteration?: number;
   supersedesFindingId?: string;
   status?: 'ACTIVE' | 'SUPERSEDED';
+  operationalStatus?: FindingOperationalStatus;
+  modelGovernance?: ModelGovernanceMetadata;
   createdAt: string;
 }
 
@@ -99,6 +115,7 @@ export interface Evidence {
   toolExecutionId?: string;
   localAgentRunId?: string;
   localToolExecutionId?: string;
+  sourceType?: 'TOOL_EXECUTION' | 'MODEL_PREDICTION' | 'MANUAL_CONTEXT';
   agentName?: AgentName;
   iteration?: number;
   toolName: string;

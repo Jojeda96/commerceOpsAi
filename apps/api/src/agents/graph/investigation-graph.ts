@@ -26,7 +26,7 @@ export function buildInvestigationGraph(
   const cxNode = createCustomerExperienceNode(prisma, streaming);
   const sellerNode = createSellerPerformanceNode(prisma, streaming);
   const anomalyNode = createAnomalyNode(prisma, streaming);
-  const dsNode = createDataScienceNode(streaming);
+  const dsNode = createDataScienceNode(streaming, prisma);
   const criticNode = createCriticNode(streaming);
   const strategyNode = createStrategyNode(streaming);
   const reportNode = createReportNode(streaming);

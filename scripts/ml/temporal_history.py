@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scripts.ml.available_history import add_available_outcome_history
 
 
 def add_prior_group_stats(
@@ -9,41 +10,32 @@ def add_prior_group_stats(
     strength: float = 20.0,
 ) -> pd.DataFrame:
     """
-    Calcula estadísticas históricas acumuladas estrictamente anteriores al pedido actual
-    para evitar el temporal leakage del target.
+    Wrapper de compatibilidad que delega en add_available_outcome_history
+    para evitar el temporal leakage de labels aún no entregados.
     """
-    out = df.sort_values("purchase_date").copy()
-    
-    # Manejo de nulos en la columna de agrupación
-    group_series = out[group_col].fillna("UNK")
-    grouped = out.assign(_group_temp=group_series).groupby("_group_temp", sort=False)["is_delayed"]
-
-    prior_orders = grouped.cumcount()
-    out[f"{prefix}_prior_orders"] = prior_orders
-    
-    prior_late_sum = grouped.cumsum() - out["is_delayed"]
-
-    out[f"{prefix}_prior_late_rate"] = np.where(
-        prior_orders > 0,
-        prior_late_sum / np.maximum(prior_orders, 1),
-        np.nan,
+    return add_available_outcome_history(
+        df=df,
+        group_col=group_col,
+        prefix=prefix,
+        strength=strength,
     )
-
-    # Suavizado Bayesiano con tasa global previa
-    global_prior = out["is_delayed"].expanding().mean().shift(1).fillna(0.08)
-
-    out[f"{prefix}_prior_late_rate_smoothed"] = (
-        prior_late_sum + strength * global_prior
-    ) / (prior_orders + strength)
-
-    if "_group_temp" in out.columns:
-        out.drop(columns=["_group_temp"], inplace=True)
-
-    return out
 
 
 def add_all_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+
+    # Asegurar columnas requeridas para available_history
+    if "internal_order_id" not in out.columns:
+        if "order_id" in out.columns:
+            out["internal_order_id"] = out["order_id"]
+        else:
+            out["internal_order_id"] = [f"ord_{i}" for i in range(len(out))]
+
+    if "delivered_date" not in out.columns and "order_delivered_customer_date" in out.columns:
+        out["delivered_date"] = out["order_delivered_customer_date"]
+
+    if "purchase_date" not in out.columns and "order_purchase_timestamp" in out.columns:
+        out["purchase_date"] = out["order_purchase_timestamp"]
 
     # Asegurar route_pair
     if "route_pair" not in out.columns:

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { fetchApi } from '@/lib/api-client';
 
 export default function AnalyticsPage() {
   const [revenueData, setRevenueData] = useState<any>(null);
@@ -9,13 +10,14 @@ export default function AnalyticsPage() {
   const [reviewData, setReviewData] = useState<any>(null);
   const [sellersData, setSellersData] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:3001/api/analytics/revenue').then((r) => r.json()),
-      fetch('http://localhost:3001/api/analytics/deliveries').then((r) => r.json()),
-      fetch('http://localhost:3001/api/analytics/reviews').then((r) => r.json()),
-      fetch('http://localhost:3001/api/analytics/sellers?limit=10').then((r) => r.json()),
+      fetchApi<any>('/analytics/revenue'),
+      fetchApi<any>('/analytics/deliveries'),
+      fetchApi<any>('/analytics/reviews'),
+      fetchApi<any[]>('/analytics/sellers?limit=10'),
     ])
       .then(([rev, del, revw, sel]) => {
         setRevenueData(rev);
@@ -23,12 +25,24 @@ export default function AnalyticsPage() {
         setReviewData(revw);
         setSellersData(Array.isArray(sel) ? sel : []);
       })
-      .catch((err) => console.error('Error fetching analytics:', err))
+      .catch((err) => {
+        console.error('Error fetching analytics:', err);
+        setError('No se pudieron cargar las analíticas SQL deterministas.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
     return <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem', padding: '24px' }}>Cargando analíticas SQL deterministas...</p>;
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <h2 style={{ color: 'var(--color-accent-error)' }}>Analíticas No Disponibles</h2>
+        <p style={{ color: 'var(--color-text-muted)', marginTop: '8px' }}>{error}</p>
+      </div>
+    );
   }
 
   return (
@@ -45,7 +59,6 @@ export default function AnalyticsPage() {
         </Link>
       </div>
 
-      {/* Explicación de Arquitectura Determinista (Agrandado para mejor legibilidad) */}
       <div
         style={{
           marginTop: '20px',
@@ -62,7 +75,7 @@ export default function AnalyticsPage() {
         <strong style={{ color: 'var(--color-text-main)', display: 'block', fontSize: '1.1rem', marginBottom: '6px' }}>
           ℹ️ Principio Arquitectónico — Consultas Deterministas vs. Generación por LLM
         </strong>
-        A diferencia de las respuestas generativas de un LLM, todas las cifras de este panel se calculan mediante consultas SQL directas sobre PostgreSQL utilizando funciones de agregación (<code>SUM</code>, <code>AVG</code>, <code>COUNT</code>, <code>GROUP BY</code>). Los agentes de CommerceOps AI ejecutan exactamente estas mismas herramientas deterministas para garantizar cifras 100% precisas e imposibles de alucinar.
+        A diferencia de las respuestas generativas de un LLM, todas las cifras de este panel se calculan mediante consultas SQL directas sobre PostgreSQL utilizando funciones de agregación (<code>SUM</code>, <code>AVG</code>, <code>COUNT</code>, <code>GROUP BY</code>). La exactitud de las cifras depende de la calidad del dataset, los filtros y la implementación de cada consulta.
       </div>
 
       {/* KPI Cards */}
@@ -119,7 +132,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Distribución de Calificaciones (Agrandado) */}
+        {/* Distribución de Calificaciones */}
         <div className="glass-card" style={{ padding: '24px' }}>
           <h2 style={{ fontSize: '1.3rem', marginBottom: '20px', color: 'var(--color-accent-success)' }}>
             ⭐ Distribución de Reseñas por Estrellas
@@ -159,7 +172,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Top Vendedores (Agrandado) */}
+      {/* Top Vendedores */}
       <div className="glass-card" style={{ marginTop: '24px', padding: '24px' }}>
         <h2 style={{ fontSize: '1.3rem', marginBottom: '20px' }}>🏆 Top 10 Vendedores con Mayor Facturación</h2>
         <div style={{ overflowX: 'auto' }}>

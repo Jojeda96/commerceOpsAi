@@ -3,7 +3,8 @@ import { AgentName } from '@commerce-ops/shared-types';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
-
+import { runAgentWithTrace } from '../../observability/agent-runner';
+import { extractModelUsage } from '../../observability/usage';
 import { z } from 'zod';
 
 const supervisorOutputSchema = z.object({
@@ -40,30 +41,41 @@ export function createSupervisorNode(
 ) {
   return async (state: CommerceOpsStateType) => {
     const { userQuestion, investigationId, filters, criticFeedback, iteration } = state;
+    const currentIteration = iteration || 1;
+    const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
     streaming.emit(investigationId, 'agent.started', {
       agent: 'SUPERVISOR',
       question: userQuestion,
-      iteration: iteration || 1,
+      iteration: currentIteration,
     });
 
-    const isReiteration = (iteration || 0) > 0 && criticFeedback && criticFeedback.length > 0;
+    const isReiteration = currentIteration > 0 && criticFeedback && criticFeedback.length > 0;
     const latestFeedback = isReiteration ? criticFeedback[criticFeedback.length - 1] : null;
 
-    const model = new ChatOpenAI({
-      modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      temperature: 0.1,
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const { result, trace: agentTrace } = await runAgentWithTrace({
+      agentName: 'SUPERVISOR',
+      iteration: currentIteration,
+      modelName,
+      execute: async () => {
+        const model = new ChatOpenAI({
+          modelName,
+          temperature: 0.1,
+          apiKey: process.env.OPENAI_API_KEY,
+        });
 
-    const prompt = `Eres el Operations Supervisor de CommerceOps AI (Iteración ${iteration || 1}).
+        const prompt = `Eres el Operations Supervisor de CommerceOps AI (Iteración ${currentIteration}).
 Tu tarea es analizar la pregunta del usuario, seleccionar los agentes especialistas necesarios y definir el plan operacional.
 
 Pregunta del usuario: "${userQuestion}"
 
-${isReiteration ? `⚠️ ATENCIÓN - FEEDBACK DE ITERACIÓN PREVIA DEL EVIDENCE CRITIC:
+${
+  isReiteration
+    ? `⚠️ ATENCIÓN - FEEDBACK DE ITERACIÓN PREVIA DEL EVIDENCE CRITIC:
 ${latestFeedback?.message}
-Acción requerida: ${latestFeedback?.requiredAction || 'Revisar y profundizar el análisis'}` : ''}
+Acción requerida: ${latestFeedback?.requiredAction || 'Revisar y profundizar el análisis'}`
+    : ''
+}
 
 Filtros previos existentes:
 ${JSON.stringify(filters || {}, null, 2)}
@@ -91,71 +103,85 @@ Responde estrictamente en formato JSON:
   ]
 }`;
 
-    let selectedAgents: AgentName[] = [
-      'SALES',
-      'LOGISTICS',
-      'CUSTOMER_EXPERIENCE',
-    ];
-    let planTasks: any[] = [];
-    let extractedFilters: any = {};
+        let selectedAgents: AgentName[] = ['SALES', 'LOGISTICS', 'CUSTOMER_EXPERIENCE'];
+        let planTasks: any[] = [];
+        let extractedFilters: any = {};
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
 
-    try {
-      const response = await model.invoke(prompt);
-      const content =
-        typeof response.content === 'string'
-          ? response.content
-          : JSON.stringify(response.content);
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const validation = supervisorOutputSchema.safeParse(parsed);
-        if (validation.success) {
-          if (validation.data.selectedAgents.length > 0) {
-            selectedAgents = validation.data.selectedAgents;
+        try {
+          const response = await model.invoke(prompt);
+          const usage = extractModelUsage(response);
+          inputTokens = usage.inputTokens;
+          outputTokens = usage.outputTokens;
+
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            const validation = supervisorOutputSchema.safeParse(parsed);
+            if (validation.success) {
+              if (validation.data.selectedAgents.length > 0) {
+                selectedAgents = validation.data.selectedAgents;
+              }
+              if (validation.data.plan) {
+                planTasks = validation.data.plan;
+              }
+              if (validation.data.resolvedFilters) {
+                extractedFilters = validation.data.resolvedFilters;
+              }
+            }
           }
-          if (validation.data.plan) {
-            planTasks = validation.data.plan;
-          }
-          if (validation.data.resolvedFilters) {
-            extractedFilters = validation.data.resolvedFilters;
-          }
+        } catch (err) {
+          console.warn('[SupervisorNode] Error parsing LLM response, using default plan:', err);
         }
-      }
-    } catch (err) {
-      console.warn(
-        '[SupervisorNode] Error parsing LLM response, using default plan:',
-        err,
-      );
-    }
 
-    const mergedFilters = {
-      ...filters,
-      ...extractedFilters,
-    };
+        // Reiteración dirigida: si el Critic solicitó agentes específicos, forzarlos obligatoriamente
+        if (state.iteration > 0 && state.requestedAgents && state.requestedAgents.length > 0) {
+          selectedAgents = Array.from(new Set([...selectedAgents, ...state.requestedAgents]));
+        }
 
-    const tasks = planTasks.map((t, idx) => ({
-      id: `task-${idx + 1}`,
-      investigationId,
-      agentName: t.agentName as AgentName,
-      objective: t.objective || 'Analizar métricas correspondientes',
-      status: 'PENDING' as const,
-    }));
+        const mergedFilters = {
+          ...filters,
+          ...extractedFilters,
+        };
 
-    streaming.emit(investigationId, 'plan.created', {
-      selectedAgents,
-      resolvedFilters: mergedFilters,
-      tasksCount: tasks.length,
-    });
+        const tasks = planTasks.map((t, idx) => ({
+          id: `task-${idx + 1}`,
+          investigationId,
+          agentName: t.agentName as AgentName,
+          objective: t.objective || 'Analizar métricas correspondientes',
+          status: 'PENDING' as const,
+        }));
 
-    streaming.emit(investigationId, 'agent.completed', {
-      agent: 'SUPERVISOR',
-      selectedAgents,
+        streaming.emit(investigationId, 'plan.created', {
+          selectedAgents,
+          resolvedFilters: mergedFilters,
+          tasksCount: tasks.length,
+        });
+
+        streaming.emit(investigationId, 'agent.completed', {
+          agent: 'SUPERVISOR',
+          selectedAgents,
+        });
+
+        return {
+          result: {
+            selectedAgents,
+            tasks,
+            mergedFilters,
+          },
+          inputTokens,
+          outputTokens,
+        };
+      },
     });
 
     return {
-      activeAgents: selectedAgents,
-      investigationPlan: tasks,
-      filters: mergedFilters,
+      activeAgents: result.selectedAgents,
+      investigationPlan: result.tasks,
+      filters: result.mergedFilters,
+      agentRunTraces: [agentTrace],
     };
   };
 }

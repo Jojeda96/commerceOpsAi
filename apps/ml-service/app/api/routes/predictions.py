@@ -1,9 +1,15 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, Dict, Any
-from app.services.ml_engine import MLEngine, ModelNotApprovedError
+from app.services.ml_engine import MLEngine, ModelNotApprovedError, ModelUnavailableError
 from app.models.delivery_contracts import PredictionRequest, PredictionResponse
 
 router = APIRouter(prefix="/models/delivery-delay", tags=["Predictions"])
+
+
+@router.get("/runtime")
+async def get_runtime():
+    return MLEngine.get_instance().get_runtime_status()
+
 
 @router.post("/predict", response_model=PredictionResponse)
 async def predict_delay(
@@ -26,6 +32,14 @@ async def predict_delay(
             features=res["features"],
             explanation=res.get("explanation"),
         )
+    except ModelUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "MODEL_RUNTIME_UNAVAILABLE",
+                "message": str(exc),
+            },
+        ) from exc
     except ModelNotApprovedError as exc:
         raise HTTPException(
             status_code=503,
@@ -36,6 +50,7 @@ async def predict_delay(
             },
         ) from exc
 
+
 @router.post("/explain")
 async def explain_prediction(
     request: PredictionRequest,
@@ -45,6 +60,14 @@ async def explain_prediction(
     try:
         res = engine.predict_delay(request.model_dump(), allow_experimental=allow_experimental)
         return res.get("explanation", {})
+    except ModelUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "MODEL_RUNTIME_UNAVAILABLE",
+                "message": str(exc),
+            },
+        ) from exc
     except ModelNotApprovedError as exc:
         raise HTTPException(
             status_code=503,
@@ -54,6 +77,7 @@ async def explain_prediction(
                 "metrics_url": "/models/delivery-delay/metrics",
             },
         ) from exc
+
 
 @router.get("/metrics")
 async def get_metrics():

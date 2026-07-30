@@ -1,5 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { Recommendation } from '@commerce-ops/shared-types';
+import { Recommendation, Finding } from '@commerce-ops/shared-types';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
 
@@ -9,6 +9,27 @@ export function createStrategyNode(streaming: StreamingService) {
 
     streaming.emit(investigationId, 'agent.started', { agent: 'STRATEGY' });
 
+    const actionableFindings = findings.filter(
+      (f: Finding) =>
+        f.operationalStatus !== 'BLOCKED' &&
+        f.operationalStatus !== 'EXPERIMENTAL_CONTEXT',
+    );
+
+    const experimentalFindings = findings.filter(
+      (f: Finding) => f.operationalStatus === 'EXPERIMENTAL_CONTEXT',
+    );
+
+    const recs: Recommendation[] = [];
+
+    if (actionableFindings.length === 0) {
+      console.warn('[StrategyNode] No existen hallazgos accionables para respaldar recomendaciones operativas.');
+      streaming.emit(investigationId, 'agent.completed', { agent: 'STRATEGY' });
+      return {
+        completedAgents: [...state.completedAgents, 'STRATEGY' as const],
+        recommendations: [],
+      };
+    }
+
     const model = new ChatOpenAI({
       modelName: process.env.OPENAI_MODEL || 'gpt-4o-mini',
       temperature: 0.3,
@@ -16,31 +37,37 @@ export function createStrategyNode(streaming: StreamingService) {
     });
 
     const prompt = `Eres el Business Strategy Agent de CommerceOps AI.
-Tu tarea es convertir los hallazgos técnicos en recomendaciones empresariales accionables, priorizadas y cuantitativamente justificadas.
+Tu tarea es convertir hallazgos técnicos ACCIONABLES en recomendaciones empresariales priorizadas.
 
 Pregunta del usuario: "${userQuestion}"
-Hallazgos aprobados de los agentes:
-${JSON.stringify(findings, null, 2)}
+Hallazgos ACCIONABLES (Modelos/Operaciones Aprobados):
+${JSON.stringify(actionableFindings, null, 2)}
 
-Instrucciones para "expectedImpact":
-- IMPORTANTE: NO inventes cifras ni proyectes reducciones porcentuales arbitrarias. Solo cita datos numéricos que aparezcan explícitamente en los hallazgos.
-- PROHIBIDO inventar o mencionar variables no registradas en los hallazgos (como clima, condiciones climáticas, tráfico, huelgas o camiones).
-- Formato sugerido: "Área de impacto: [métrica o volumen citado en hallazgos]. Acción: [descripción de la mejora]." Si se requieren estimaciones cuantitativas proyectadas, indica "Se requiere simulación cuantitativa."
+${
+  experimentalFindings.length > 0
+    ? `NOTA DE GOBERNANZA: Existen ${experimentalFindings.length} hallazgos experimentales no aprobados que NO deben ser utilizados para recomendaciones operativas.`
+    : ''
+}
+
+REGLAS STRICTAS PARA "expectedImpact":
+1. NO inventes cifras, reducciones porcentuales ni cálculos no presentes en los hallazgos.
+2. NO menciones factores externos no registrados en la base de datos (clima, tráfico, huelgas).
+3. Ejemplo de formato válido: "Métrica histórica afectada: lateRate. La magnitud futura requiere una simulación cuantitativa separada."
 
 Genera 2 recomendaciones ejecutivas en formato JSON estricto:
 {
   "recommendations": [
     {
-      "title": "Título corto y estratégico de la acción 1",
-      "description": "Descripción detallada de la acción operativa recomendada.",
+      "title": "Título corto y estratégico",
+      "description": "Descripción detallada de la acción recomendada.",
       "priority": "HIGH",
-      "expectedImpact": "Reducción estimada del 15% en la tasa de atrasos (recuperación de ~1,170 pedidos dentro del SLA).",
-      "assumptions": ["Capacidad operativa del transportista se mantiene constante."]
+      "expectedImpact": "Métrica histórica afectada: lateRate. La magnitud futura requiere una simulación cuantitativa separada.",
+      "assumptions": ["Los patrones históricos observados se mantienen."]
     }
   ]
 }`;
 
-    const recs: Recommendation[] = [];
+    const actionableIds = new Set(actionableFindings.map((f) => f.id));
 
     try {
       const response = await model.invoke(prompt);
@@ -53,16 +80,21 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
         const parsed = JSON.parse(match[0]);
         if (Array.isArray(parsed.recommendations)) {
           for (const item of parsed.recommendations) {
+            const rawSupportIds = Array.isArray(item.supportingFindingIds)
+              ? item.supportingFindingIds
+              : Array.from(actionableIds);
+
+            // Filtrar estricto: no citar hallazgos experimentales o inexistentes
+            const validSupportIds = rawSupportIds.filter((id: string) => actionableIds.has(id));
+
             const rec: Recommendation = {
               id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               investigationId,
               title: item.title || 'Recomendación operacional',
-              description:
-                item.description || 'Implementar monitoreo continuo.',
+              description: item.description || 'Implementar monitoreo continuo.',
               priority: item.priority || 'MEDIUM',
-              expectedImpact:
-                item.expectedImpact || 'Impacto positivo en la operación.',
-              supportingFindingIds: findings.map((f) => f.id),
+              expectedImpact: item.expectedImpact || 'Métrica afectada según hallazgos accionables.',
+              supportingFindingIds: validSupportIds.length > 0 ? validSupportIds : Array.from(actionableIds),
               assumptions: item.assumptions || [],
               createdAt: new Date().toISOString(),
             };
@@ -78,16 +110,15 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
       console.warn('[StrategyNode] Error creating recommendations:', err);
     }
 
-    if (recs.length === 0) {
+    if (recs.length === 0 && actionableFindings.length > 0) {
       recs.push({
         id: `rec-default-${Date.now()}`,
         investigationId,
         title: 'Establecer monitoreo de SLA en rutas con mayor retraso',
-        description:
-          'Revisar acuerdos con transportistas y capacidad del vendedor.',
+        description: 'Revisar acuerdos con transportistas y capacidad del vendedor.',
         priority: 'HIGH',
-        expectedImpact: 'Mejora en la satisfacción del cliente.',
-        supportingFindingIds: findings.map((f) => f.id),
+        expectedImpact: 'Métrica histórica afectada: lateRate.',
+        supportingFindingIds: Array.from(actionableIds),
         assumptions: ['Los datos históricos reflejan la tendencia actual.'],
         createdAt: new Date().toISOString(),
       });

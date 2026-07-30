@@ -1,28 +1,60 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { CriticDecision } from '@commerce-ops/shared-types';
+import { CriticDecision, AgentName } from '@commerce-ops/shared-types';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
+import { runAgentWithTrace } from '../../observability/agent-runner';
+import { extractModelUsage } from '../../observability/usage';
+import { z } from 'zod';
 import {
   performDeterministicAudit,
   enforceDeterministicDecision,
 } from './deterministic-audit';
 
+const agentNameSchema = z.enum([
+  'SALES',
+  'LOGISTICS',
+  'CUSTOMER_EXPERIENCE',
+  'SELLER_PERFORMANCE',
+  'ANOMALY',
+  'DATA_SCIENCE',
+]);
+
+const criticOutputSchema = z.object({
+  decision: z.enum([
+    'APPROVED',
+    'APPROVED_WITH_WARNINGS',
+    'REQUIRES_MORE_ANALYSIS',
+    'REJECTED',
+  ]),
+  score: z.number().min(0).max(100),
+  feedback: z.string().min(1),
+  requestedAgents: z.array(agentNameSchema).default([]),
+  requiredActions: z.array(z.string().min(1)).default([]),
+});
+
 export function createCriticNode(streaming: StreamingService) {
   return async (state: CommerceOpsStateType) => {
-    const { investigationId, findings, evidence } = state;
+    const { investigationId, findings, evidence, iteration } = state;
+    const currentIteration = iteration || 1;
+    const modelName = process.env.OPENAI_CRITIC_MODEL || 'gpt-4o';
 
     streaming.emit(investigationId, 'agent.started', { agent: 'CRITIC' });
 
     // Deterministic audit checks (P0/P1)
     const audit = performDeterministicAudit(findings, evidence);
 
-    const model = new ChatOpenAI({
-      modelName: process.env.OPENAI_CRITIC_MODEL || 'gpt-4o',
-      temperature: 0.1,
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const { result, trace: agentTrace } = await runAgentWithTrace({
+      agentName: 'CRITIC',
+      iteration: currentIteration,
+      modelName,
+      execute: async () => {
+        const model = new ChatOpenAI({
+          modelName,
+          temperature: 0.1,
+          apiKey: process.env.OPENAI_API_KEY,
+        });
 
-    const prompt = `Eres el Evidence Critic de CommerceOps AI, el agente encargado de auditar la calidad, consistencia y evidencia de todos los hallazgos producidos por el equipo multiagente.
+        const prompt = `Eres el Evidence Critic de CommerceOps AI, el agente encargado de auditar la calidad, consistencia y evidencia de todos los hallazgos producidos por el equipo multiagente.
 
 Hallazgos a evaluar (${findings.length}):
 ${JSON.stringify(findings, null, 2)}
@@ -40,62 +72,99 @@ Evalúa si la evidencia respalda suficientemente las conclusiones y decide el re
 - REQUIRES_MORE_ANALYSIS: Falta información clave o se requiere una segunda iteración.
 - REJECTED: Los hallazgos carecen de soporte o son contradictorios.
 
-Responde strictly en formato JSON con la siguiente estructura:
+Si la decisión es REQUIRES_MORE_ANALYSIS o REJECTED, especifica en 'requestedAgents' los nombres exactos de los agentes que deben re-ejecutar ("SALES", "LOGISTICS", "CUSTOMER_EXPERIENCE", "SELLER_PERFORMANCE", "ANOMALY", "DATA_SCIENCE") y en 'requiredActions' las acciones correctivas requeridas.
+
+Responde estrictamente en formato JSON con la siguiente estructura:
 {
   "decision": "APPROVED",
   "score": 92,
-  "feedback": "Los hallazgos de ventas y logística cuentan con evidencias numéricas válidas."
+  "feedback": "Los hallazgos de ventas y logística cuentan con evidencias numéricas válidas.",
+  "requestedAgents": [],
+  "requiredActions": []
 }`;
 
-    let rawDecision: CriticDecision =
-      audit.criticalErrors.length > 0 ? 'REQUIRES_MORE_ANALYSIS' : 'APPROVED';
-    let score = audit.criticalErrors.length > 0 ? 55 : 85;
-    let feedback =
-      audit.criticalErrors.length > 0
-        ? `Alertas deterministas críticas detectadas: ${audit.criticalErrors.join(' | ')}`
-        : 'Evidencia preliminarmente verificada.';
+        let rawDecision: CriticDecision =
+          audit.criticalErrors.length > 0 ? 'REQUIRES_MORE_ANALYSIS' : 'APPROVED';
+        let score = audit.criticalErrors.length > 0 ? 55 : 85;
+        let feedback =
+          audit.criticalErrors.length > 0
+            ? `Alertas deterministas críticas detectadas: ${audit.criticalErrors.join(' | ')}`
+            : 'Evidencia preliminarmente verificada.';
+        let requestedAgents: AgentName[] = [];
+        let requiredActions: string[] = [];
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
 
-    try {
-      const response = await model.invoke(prompt);
-      const content =
-        typeof response.content === 'string'
-          ? response.content
-          : JSON.stringify(response.content);
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
-        if (parsed.decision) rawDecision = parsed.decision as CriticDecision;
-        if (typeof parsed.score === 'number') score = parsed.score;
-        if (parsed.feedback) feedback = parsed.feedback;
-      }
-    } catch (err) {
-      console.warn('[CriticNode] Error executing LLM call:', err);
-      rawDecision = 'REQUIRES_MORE_ANALYSIS';
-      score = 50;
-      feedback =
-        'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
-    }
+        try {
+          const response = await model.invoke(prompt);
+          const usage = extractModelUsage(response);
+          inputTokens = usage.inputTokens;
+          outputTokens = usage.outputTokens;
 
-    // Enforcement determinista incorruptible
-    const enforced = enforceDeterministicDecision(rawDecision, audit);
-    const finalDecision = enforced.decision;
-    if (enforced.enforcedReason) {
-      feedback = `${feedback} (${enforced.enforcedReason})`;
-    }
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const match = content.match(/\{[\s\S]*\}/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            const validation = criticOutputSchema.safeParse(parsed);
+            if (validation.success) {
+              rawDecision = validation.data.decision as CriticDecision;
+              score = validation.data.score;
+              feedback = validation.data.feedback;
+              requestedAgents = validation.data.requestedAgents as AgentName[];
+              requiredActions = validation.data.requiredActions;
+            }
+          }
+        } catch (err) {
+          console.warn('[CriticNode] Error executing LLM call:', err);
+          rawDecision = 'REQUIRES_MORE_ANALYSIS';
+          score = 50;
+          feedback = 'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
+        }
+
+        // Enforcement determinista incorruptible
+        const enforced = enforceDeterministicDecision(rawDecision, audit);
+        const finalDecision = enforced.decision;
+        if (enforced.enforcedReason) {
+          feedback = `${feedback} (${enforced.enforcedReason})`;
+        }
+
+        if (finalDecision === 'REQUIRES_MORE_ANALYSIS' && requestedAgents.length === 0) {
+          // Si hubo errores en hallazgos específicos, solicitar re-ejecución de los agentes afectados
+          const affectedAgents = new Set<AgentName>();
+          for (const f of findings) {
+            if (audit.perFinding[f.id]?.criticalErrors?.length > 0) {
+              affectedAgents.add(f.agent || f.agentName || 'LOGISTICS');
+            }
+          }
+          requestedAgents = Array.from(affectedAgents);
+        }
+
+        return {
+          result: {
+            finalDecision,
+            score,
+            feedback,
+            requestedAgents,
+            requiredActions,
+          },
+          inputTokens,
+          outputTokens,
+        };
+      },
+    });
 
     const criticFeedbackItem = {
       id: `critic-${Date.now()}`,
       investigationId,
       severity: (() => {
-        if (finalDecision === 'APPROVED') return 'LOW' as const;
-        if (finalDecision === 'APPROVED_WITH_WARNINGS')
-          return 'MEDIUM' as const;
-        return 'HIGH' as const; // REQUIRES_MORE_ANALYSIS o REJECTED
+        if (result.finalDecision === 'APPROVED') return 'LOW' as const;
+        if (result.finalDecision === 'APPROVED_WITH_WARNINGS') return 'MEDIUM' as const;
+        return 'HIGH' as const;
       })(),
-      message: feedback,
+      message: result.feedback,
+      requiredAction: result.requiredActions.join(' | ') || undefined,
       status:
-        finalDecision === 'APPROVED' ||
-        finalDecision === 'APPROVED_WITH_WARNINGS'
+        result.finalDecision === 'APPROVED' || result.finalDecision === 'APPROVED_WITH_WARNINGS'
           ? ('RESOLVED' as const)
           : ('PENDING' as const),
       createdAt: new Date().toISOString(),
@@ -103,21 +172,23 @@ Responde strictly en formato JSON con la siguiente estructura:
 
     streaming.emit(investigationId, 'critic.feedback', {
       agent: 'CRITIC',
-      decision: finalDecision,
-      score,
-      feedback,
+      decision: result.finalDecision,
+      score: result.score,
+      feedback: result.feedback,
     });
 
     streaming.emit(investigationId, 'agent.completed', {
       agent: 'CRITIC',
-      decision: finalDecision,
+      decision: result.finalDecision,
     });
 
     return {
       completedAgents: [...state.completedAgents, 'CRITIC' as const],
       criticFeedback: [criticFeedbackItem],
-      criticDecision: finalDecision,
-      criticScore: score,
+      criticDecision: result.finalDecision,
+      criticScore: result.score,
+      requestedAgents: result.requestedAgents,
+      agentRunTraces: [agentTrace],
       iteration: state.iteration + 1,
     };
   };

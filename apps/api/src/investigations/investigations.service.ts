@@ -64,7 +64,7 @@ export class InvestigationsService {
 
     // Disparar en segundo plano
     setImmediate(() => {
-      this.orchestrator.runInvestigation(id).catch((err) => {
+      this.orchestrator.executeInvestigation(id).catch((err: any) => {
         console.error(
           `Error en orchestrator para la investigación ${id}:`,
           err,

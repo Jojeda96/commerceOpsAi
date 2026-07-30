@@ -26,16 +26,16 @@ export default function DashboardPage() {
         console.warn('Backend investigations no disponible:', err);
       });
 
-    // Cargar métricas deterministas reales desde backend
+    // Cargar métricas deterministas reales desde backend sin cifras hardcodeadas
     Promise.allSettled([
       fetchApi<any>('/analytics/revenue'),
       fetchApi<any>('/analytics/deliveries'),
       fetchApi<any>('/analytics/reviews'),
     ]).then(([revRes, delRes, revsRes]) => {
-      let revenueStr = 'R$ 13.59M';
-      let totalOrdersStr = '99.4k';
-      let lateRateStr = '8.0%';
-      let avgRatingStr = '4.08 ⭐';
+      let revenueStr = 'R$ --';
+      let totalOrdersStr = '--';
+      let lateRateStr = '--%';
+      let avgRatingStr = '-- ⭐';
 
       if (revRes.status === 'fulfilled' && revRes.value) {
         const val = revRes.value.revenue || revRes.value.totalRevenue || 0;

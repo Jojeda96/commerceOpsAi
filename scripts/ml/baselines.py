@@ -69,7 +69,7 @@ def build_preprocessor(numeric_features=None, categorical_features=None):
     )
 
 
-def build_logistic_baseline(numeric_features=None, categorical_features=None):
+def build_logistic_baseline(numeric_features=None, categorical_features=None, class_weight="balanced", C=1.0):
     preprocessor = build_preprocessor(numeric_features, categorical_features)
     return Pipeline(
         steps=[
@@ -78,7 +78,8 @@ def build_logistic_baseline(numeric_features=None, categorical_features=None):
                 "model",
                 LogisticRegression(
                     max_iter=2_000,
-                    class_weight="balanced",
+                    C=C,
+                    class_weight=class_weight,
                     random_state=42,
                 ),
             ),

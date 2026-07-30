@@ -1,23 +1,14 @@
+import sys
+import os
 import numpy as np
-from scipy.special import logit
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_curve, f1_score
 
+# Ensure apps/ml-service is in sys.path if imported from scripts
+ml_service_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "apps", "ml-service"))
+if ml_service_dir not in sys.path:
+    sys.path.insert(0, ml_service_dir)
 
-class PlattCalibrator:
-    def __init__(self):
-        self.model = LogisticRegression()
-
-    def fit(self, probabilities, labels):
-        clipped = np.clip(probabilities, 1e-6, 1.0 - 1e-6)
-        logits = logit(clipped).reshape(-1, 1)
-        self.model.fit(logits, labels)
-        return self
-
-    def predict(self, probabilities):
-        clipped = np.clip(probabilities, 1e-6, 1.0 - 1e-6)
-        logits = logit(clipped).reshape(-1, 1)
-        return self.model.predict_proba(logits)[:, 1]
+from app.services.calibration import PlattCalibrator
 
 
 def select_threshold_for_best_f1(y_true, probabilities):

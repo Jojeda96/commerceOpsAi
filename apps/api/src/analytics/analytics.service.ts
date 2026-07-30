@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 
@@ -157,5 +157,50 @@ export class AnalyticsService {
       revenue: s._sum.price || 0,
       itemsSold: s._count.orderId,
     }));
+  }
+
+  async getMlMetrics() {
+    const baseUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+    try {
+      const response = await fetch(`${baseUrl}/models/delivery-delay/metrics`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) {
+        throw new ServiceUnavailableException({
+          code: 'ML_METRICS_UNAVAILABLE',
+          status: response.status,
+        });
+      }
+      return await response.json();
+    } catch (err: any) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      throw new ServiceUnavailableException({
+        code: 'ML_METRICS_UNAVAILABLE',
+        message: err?.message || 'ML Service unreachable',
+      });
+    }
+  }
+
+  async getMlRuntime() {
+    const baseUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+    try {
+      const response = await fetch(`${baseUrl}/models/delivery-delay/runtime`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) {
+        return {
+          runtime_ready: false,
+          deployment_status: 'UNAVAILABLE',
+          load_error: `HTTP ${response.status}`,
+        };
+      }
+      return await response.json();
+    } catch (err: any) {
+      return {
+        runtime_ready: false,
+        deployment_status: 'UNAVAILABLE',
+        load_error: err?.message || 'ML Service unreachable',
+      };
+    }
   }
 }
