@@ -87,7 +87,7 @@ jobs:
         run: npm run db:generate
 
       - name: Seed Database Fixtures
-        run: npx ts-node --transpile-only scripts/seed-ci-fixtures.ts
+        run: npm run db:seed:ci
 
       - name: Run Snapshot Readiness Diagnostics
         run: npm run snapshots:verify

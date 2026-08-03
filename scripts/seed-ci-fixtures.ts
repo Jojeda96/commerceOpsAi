@@ -61,8 +61,8 @@ async function seed() {
     create: {
       id: 'prod-1',
       productCategoryName: 'beleza_saude',
-      productNameLenght: 40,
-      productDescriptionLenght: 500,
+      productNameLength: 40,
+      productDescriptionLength: 500,
       productPhotosQty: 2,
       productWeightG: 500,
       productLengthCm: 20,
