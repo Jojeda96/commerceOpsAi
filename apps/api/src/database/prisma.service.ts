@@ -20,7 +20,7 @@ export class PrismaService
     } catch (err) {
       console.warn(
         '[PrismaService] Database connection skipped in test/CI mode:',
-        (err as Error).message
+        (err as Error).message,
       );
     }
   }
@@ -28,7 +28,7 @@ export class PrismaService
   async onModuleDestroy() {
     try {
       await this.$disconnect();
-    } catch (_err) {
+    } catch {
       // ignore
     }
   }
