@@ -40,10 +40,26 @@ jobs:
         run: |
           PYTHONPATH=.:apps/ml-service python -m pytest tests/contracts tests/ml apps/ml-service/tests -v
 
-  typescript-tests:
+  postgres-integration:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: commerce_ops_db
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     env:
       DATABASE_URL: "postgresql://postgres:postgres@localhost:5434/commerce_ops_db?schema=public"
+      SNAPSHOT_VERIFY_STRICT: "true"
+      SNAPSHOT_EXPECTATION: "EMPTY_ALLOWED"
     steps:
       - uses: actions/checkout@v4
 
@@ -56,20 +72,34 @@ jobs:
       - name: Install Node Dependencies
         run: npm ci
 
-      - name: Generate Prisma Client
-        run: npx prisma generate
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5434 -U postgres && exit 0
+            sleep 2
+          done
+          exit 1
 
-      - name: Run Workspace Build
-        run: npm run build
+      - name: Run Database Migrations
+        run: npm run db:migrate:deploy
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Seed Database Fixtures
+        run: npx ts-node --transpile-only scripts/seed-ci-fixtures.ts
 
       - name: Run Snapshot Readiness Diagnostics
         run: npm run snapshots:verify
 
+      - name: Run Workspace Build
+        run: npm run build
+
       - name: Run Linter
         run: npm run lint
 
-      - name: Run TypeScript Unit Tests
+      - name: Run TypeScript Unit & Integration Tests
         run: npm run test
 
-      - name: Run V4.2 E2E Quality Gates
+      - name: Run E2E Quality Gates
         run: npm run test:e2e

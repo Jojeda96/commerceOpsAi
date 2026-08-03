@@ -1,4 +1,5 @@
 import { Finding, Evidence, AnalysisMethod } from '@commerce-ops/shared-types';
+import { parseMethodAssertion } from './method-assertion-parser';
 
 export const TOOL_METHOD_REGISTRY: Record<string, AnalysisMethod[]> = {
   get_delivery_summary: ['DESCRIPTIVE_AGGREGATION'],
@@ -26,11 +27,11 @@ export function auditMethodProvenance(
   );
 
   for (const finding of findings) {
-    const normText = (finding.description || '').toLowerCase();
+    const text = finding.description || '';
 
     // Check for mentions of Z-Score in text
-    const mentionsZScore = /\bz-?score\b|puntuaci[oó]n z/i.test(normText);
-    if (mentionsZScore) {
+    const zAssertion = parseMethodAssertion(text, 'ROBUST_Z_SCORE');
+    if (zAssertion.mentioned && zAssertion.polarity === 'ASSERTED') {
       const hasZScoreEvidence = evidenceList.some(
         (e) =>
           e.toolName === 'detect_metric_anomalies' &&
@@ -42,14 +43,14 @@ export function auditMethodProvenance(
           code: 'UNSUPPORTED_METHOD_CLAIM',
           findingId: finding.id,
           method: 'ROBUST_Z_SCORE',
-          details: `El hallazgo '${finding.title}' de ${finding.agent} menciona Z-Score pero no cuenta con evidencia emitida por detect_metric_anomalies.`,
+          details: `El hallazgo '${finding.title}' de ${finding.agent || (finding as any).agentName} menciona Z-Score de forma afirmativa pero no cuenta con evidencia emitida por detect_metric_anomalies.`,
         });
       }
     }
 
     // Check for SHAP mentions
-    const mentionsShap = /\bshap\b/i.test(normText);
-    if (mentionsShap) {
+    const shapAssertion = parseMethodAssertion(text, 'LOCAL_SHAP');
+    if (shapAssertion.mentioned && shapAssertion.polarity === 'ASSERTED') {
       const hasShapEvidence = evidenceList.some(
         (e) =>
           e.toolName === 'explain_delivery_delay' &&
@@ -61,7 +62,7 @@ export function auditMethodProvenance(
           code: 'UNSUPPORTED_METHOD_CLAIM',
           findingId: finding.id,
           method: 'LOCAL_SHAP',
-          details: `El hallazgo menciona factores SHAP pero no cuenta con evidencia de explain_delivery_delay.`,
+          details: `El hallazgo menciona factores SHAP de forma afirmativa pero no cuenta con evidencia de explain_delivery_delay.`,
         });
       }
     }

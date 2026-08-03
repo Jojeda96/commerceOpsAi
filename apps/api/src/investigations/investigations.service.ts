@@ -143,6 +143,25 @@ export class InvestigationsService {
       evidenceQuality: f.evidenceQualityJson || undefined,
       numericClaims: f.numericClaimsJson || undefined,
       modelGovernance: f.modelGovernanceJson || undefined,
+      evidence: f.evidence
+        ? f.evidence
+            .map((fe: any) => {
+              if (!fe.evidence) return null;
+              return {
+                id: fe.evidence.id,
+                toolName: fe.evidence.evidenceType || fe.evidence.toolName,
+                status: fe.evidence.status || 'AVAILABLE',
+                reasonCode: fe.evidence.reasonCode || undefined,
+                scopeHash: fe.evidence.scopeHash || undefined,
+                appliedScope: fe.evidence.appliedScopeJson || undefined,
+                rowCount: fe.evidence.rowCount || undefined,
+                sampleSize: fe.evidence.sampleSize || undefined,
+                metrics: fe.evidence.metricsJson || [],
+                resultSummary: fe.evidence.summary || '{}',
+              };
+            })
+            .filter(Boolean)
+        : [],
     }));
 
     const formattedRecommendations = investigation.recommendations.map(

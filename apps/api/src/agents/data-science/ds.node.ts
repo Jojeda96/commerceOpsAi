@@ -8,10 +8,10 @@ import {
   runAgentWithTrace,
   executeToolWithTrace,
 } from '../../observability/agent-runner';
-import { extractModelUsage } from '../../observability/usage';
 import { ToolExecutionTrace } from '@commerce-ops/shared-types';
 import { buildToolScope } from '../scope/build-tool-scope';
 import { isPersistablePrediction } from './contracts/prediction-result.schema';
+import { buildGovernanceFinding } from './build-governance-finding';
 
 export function createDataScienceNode(
   streaming: StreamingService,
@@ -141,28 +141,37 @@ export function createDataScienceNode(
           !scenarioPayload.scenarios ||
           scenarioPayload.scenarios.length === 0
         ) {
-          const partialFinding: Finding = {
-            id: `finding-ds-partial-${Date.now()}`,
+          const unavailabilityReason =
+            scenarioPayload.reasonCode || 'SNAPSHOT_TABLE_EMPTY';
+
+          const govMetadata = {
+            modelName:
+              govData.data?.modelName || govData.modelName || 'xgboost',
+            modelVersion:
+              govData.data?.modelVersion ||
+              govData.modelVersion ||
+              'delivery-risk-v2.0.0',
+            deploymentStatus:
+              govData.data?.deploymentStatus ||
+              govData.deploymentStatus ||
+              'EXPERIMENTAL_NOT_APPROVED',
+            operationallyActionable: Boolean(
+              govData.data?.operationallyActionable ??
+              govData.operationallyActionable,
+            ),
+            reasons:
+              govData.data?.qualityGateReasons ||
+              govData.qualityGateReasons ||
+              [],
+          };
+
+          const partialFinding = buildGovernanceFinding({
             investigationId,
             localAgentRunId: localRunId,
-            agent: 'DATA_SCIENCE',
-            title:
-              'Estado de Gobernanza del Modelo (Sin Escenarios Inferibles para Scope)',
-            description: `Se obtuvo el estado de gobernanza del modelo (${govData.modelName || 'delivery_delay_champion'} v${govData.modelVersion || 'v3.0.0'}, deployment: ${govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED'}). No se ejecutó inferencia predictiva ni SHAP debido a que ningún escenario cumplió los criterios de filtrado y muestra mínima.`,
-            findingType: 'MODEL_GOVERNANCE',
-            confidence: 0.85,
-            evidenceIds: [govEvId, scenEvId],
-            operationalStatus: 'EXPERIMENTAL_CONTEXT',
-            modelGovernance: {
-              modelName: govData.modelName || 'delivery_delay_champion',
-              modelVersion: govData.modelVersion || 'v3.0.0',
-              deploymentStatus:
-                govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
-              operationallyActionable: Boolean(govData.operationallyActionable),
-              reasons: govData.qualityGateReasons || [],
-            },
-            createdAt: new Date().toISOString(),
-          };
+            governance: govMetadata,
+            unavailabilityReason,
+            evidence: evidenceItems,
+          });
 
           streaming.emit(investigationId, 'finding.created', {
             agent: 'DATA_SCIENCE',

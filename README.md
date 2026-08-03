@@ -5,24 +5,21 @@
 
 CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logística, experiencia de cliente, rendimiento de vendedores, detección de anomalías, machine learning y estrategia empresarial. Un **Evidence Critic** audita y evalúa la evidencia numérica antes de generar el informe final.
 
-### 📋 Estado verificado del sistema
+### 📋 Estado del Proyecto (V4.3 Final Closure)
 
-> Última verificación: V4. Las capacidades marcadas como experimentales o parciales no deben interpretarse como producción.
-> El dataset Olist cubre principalmente 2016–2018. Las conclusiones son demostrativas y no representan condiciones logísticas actuales.
+> **Feature-Complete Portfolio MVP — Maintenance-Only Mode.**  
+> El repositorio se encuentra verificado, auditado y congelado para demostraciones técnicas y entrevistas. No se agregarán nuevas capacidades.
 
 | Capacidad | Estado verificado | Evidencia |
 |---|---|---|
-| Orquestación multiagente | ✅ Implementada para demo | LangGraph + pruebas E2E |
+| Orquestación multiagente | ✅ Completado | LangGraph + pruebas E2E |
 | AnalysisScope Inmutable | ✅ Determinista | Resolution, hash y audit en Critic |
 | Analytics SQL | ✅ Implementada | PostgreSQL + endpoints deterministas |
-| Predictor de atrasos | 🧪 Experimental y bloqueado | Quality gate y Model Card |
-| Respuestas parciales ML | ✅ Trazable | Gobernanza independiente de inferencia |
-| Selección de champion | ✅ Implementada | Walk-forward CV; Logistic/XGBoost |
-| Escenarios Data Science | ✅ Point-in-time snapshots | Contrato V3 y tests de parity |
-| Trazabilidad | ✅ Durable | AgentRun/ToolExecution incluso en fallos |
-| Evidence Critic | ✅ Scope-aware | Auditoría de scope, claims y coverage |
-| NLP de reseñas | ✅/⚠️ Según artefacto cargado | Manifest y método mostrado |
-| CI full-stack | ✅ Verificada | Badge y workflow |
+| Robust Z-Score Anomaly | ✅ Determinista | `buildAnomalyFinding` sin bypass LLM |
+| Frontend Data-Driven | ✅ 100% Evidencia | Cero constantes o literales analíticos hardcodeados |
+| Predictor de atrasos | 🧪 Gobernanza Aprobada | Quality gate + Snapshots parciales honestos |
+| Evidence Critic | ✅ Semánticamente Fiel | Distingue negaciones, sanitiza versiones/fechas |
+| CI Full-Stack | ✅ PostgreSQL Real | Container Postgres 16, migraciones y E2E |
 
 ---
 

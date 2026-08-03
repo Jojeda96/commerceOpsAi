@@ -31,6 +31,74 @@ export function buildAnomalyFinding(
       ? JSON.parse(evidence.resultSummary)
       : evidence.resultSummary;
 
+  const status = parsed?.status || 'AVAILABLE';
+
+  if (status === 'NO_DATA') {
+    return {
+      id: `finding-anomaly-${Date.now()}`,
+      investigationId,
+      localAgentRunId,
+      agent: 'ANOMALY',
+      title: 'Análisis de anomalías — Sin datos',
+      description: 'No se encontraron entregas dentro del alcance solicitado.',
+      findingType: 'ANOMALY_DETECTION',
+      evidenceIds: [evidence.id],
+      numericClaims: [],
+      methodClaims,
+      operationalStatus: 'UNAVAILABLE',
+      auditStatus: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  if (status === 'INSUFFICIENT_DATA') {
+    const reasonCode = parsed?.reasonCode;
+    let description =
+      'No fue posible calcular Robust Z-Score por muestra insuficiente.';
+    if (reasonCode === 'ZERO_MAD_NO_VARIABILITY') {
+      description =
+        'No fue posible calcular Robust Z-Score porque la desviación mediana absoluta (MAD) es cero (sin variabilidad en la serie temporal).';
+    } else if (reasonCode === 'MINIMUM_THREE_MONTHS_REQUIRED') {
+      description =
+        'No fue posible calcular Robust Z-Score porque se requieren al menos tres meses con muestra válida.';
+    }
+
+    return {
+      id: `finding-anomaly-${Date.now()}`,
+      investigationId,
+      localAgentRunId,
+      agent: 'ANOMALY',
+      title: 'Análisis de anomalías — Datos insuficientes',
+      description,
+      findingType: 'ANOMALY_DETECTION',
+      evidenceIds: [evidence.id],
+      numericClaims: [],
+      methodClaims,
+      operationalStatus: 'UNAVAILABLE',
+      auditStatus: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  if (status === 'ERROR') {
+    return {
+      id: `finding-anomaly-${Date.now()}`,
+      investigationId,
+      localAgentRunId,
+      agent: 'ANOMALY',
+      title: 'Análisis de anomalías — Error de ejecución',
+      description:
+        'El análisis de anomalías no estuvo disponible por un error de ejecución.',
+      findingType: 'ANOMALY_DETECTION',
+      evidenceIds: [evidence.id],
+      numericClaims: [],
+      methodClaims,
+      operationalStatus: 'BLOCKED',
+      auditStatus: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+  }
+
   const data = parsed?.data || {};
   const monthsEvaluated = data.monthsEvaluated || 0;
   const threshold = data.threshold || 3.0;
@@ -81,6 +149,16 @@ export function buildAnomalyFinding(
   let description = `Se evaluaron ${renderedMonths.renderedText} meses mediante Robust Z-Score, usando un umbral absoluto de ${renderedThreshold.renderedText}. La mediana mensual fue ${renderedMedian.renderedText} y el MAD fue ${renderedMad.renderedText}.`;
 
   if (anomalies.length > 0) {
+    const renderedAnomalyCount = renderNumberWithClaim({
+      metricKey: 'anomaly.series.anomaly_count',
+      value: anomalies.length,
+      unit: 'COUNT',
+      evidenceId: evidence.id,
+      sourcePath: '$.data.anomalyCount',
+      sampleSize: monthsEvaluated,
+    });
+    numericClaims.push(renderedAnomalyCount.claim);
+
     const anomalyParts = anomalies.map((anom: any, idx: number) => {
       const renderedRate = renderNumberWithClaim({
         metricKey: `anomaly.point.${anom.month}.late_rate_pct`,
@@ -116,7 +194,7 @@ export function buildAnomalyFinding(
       return `${anom.month} presentó una tasa de ${renderedRate.renderedText} (${renderedSample.renderedText} pedidos, Z robusto = ${renderedZ.renderedText})`;
     });
 
-    description += ` Se detectaron los siguientes picos anómalos: ${anomalyParts.join('; ')}.`;
+    description += ` Se detectaron ${renderedAnomalyCount.renderedText} picos anómalos: ${anomalyParts.join('; ')}.`;
   } else {
     description +=
       ' No se detectaron picos anómalos que superaran el umbral de Z-Score robusto.';
@@ -134,7 +212,7 @@ export function buildAnomalyFinding(
     numericClaims,
     methodClaims,
     operationalStatus: 'ACTIONABLE',
-    auditStatus: 'APPROVED',
+    auditStatus: 'PENDING',
     createdAt: new Date().toISOString(),
   };
 }

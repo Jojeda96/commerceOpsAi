@@ -1,4 +1,3 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
@@ -7,16 +6,17 @@ import {
   runAgentWithTrace,
   executeToolWithTrace,
 } from '../../observability/agent-runner';
-import { extractModelUsage } from '../../observability/usage';
-import { ToolExecutionTrace } from '@commerce-ops/shared-types';
+import { ToolExecutionTrace, Evidence } from '@commerce-ops/shared-types';
 import { buildToolScope } from '../scope/build-tool-scope';
+import { buildAnomalyFinding } from './build-anomaly-finding';
+import { AnomalyResultSchema } from './anomaly-result.schema';
 
 export function createAnomalyNode(
   prisma: PrismaService,
   streaming: StreamingService,
 ) {
   return async (state: CommerceOpsStateType) => {
-    const { investigationId, userQuestion } = state;
+    const { investigationId } = state;
     const iteration = state.iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
@@ -61,7 +61,28 @@ export function createAnomalyNode(
           tool: 'detect_metric_anomalies',
         });
 
-        const evidenceItem = {
+        let parsedResult: any = {};
+        try {
+          const jsonParsed =
+            typeof anomalyResult === 'string'
+              ? JSON.parse(anomalyResult)
+              : anomalyResult;
+          parsedResult = AnomalyResultSchema.parse(jsonParsed);
+        } catch (err) {
+          console.warn(
+            '[AnomalyNode] Error or fallback parsing anomaly tool result:',
+            err,
+          );
+          if (typeof anomalyResult === 'string') {
+            try {
+              parsedResult = JSON.parse(anomalyResult);
+            } catch (e) {
+              parsedResult = {};
+            }
+          }
+        }
+
+        const evidenceItem: Evidence = {
           id: `ev-anomaly-${Date.now()}`,
           localAgentRunId: localRunId,
           localToolExecutionId: anomalyTrace.localExecutionId,
@@ -70,71 +91,25 @@ export function createAnomalyNode(
           iteration,
           toolName: 'detect_metric_anomalies',
           parameters: anomalyParams,
-          resultSummary: anomalyResult,
+          resultSummary:
+            typeof anomalyResult === 'string'
+              ? anomalyResult
+              : JSON.stringify(anomalyResult),
+          status: parsedResult.status || 'AVAILABLE',
+          reasonCode: parsedResult.reasonCode,
+          scopeHash: parsedResult.scopeHash || state.analysisScope?.scopeHash,
+          appliedScope: parsedResult.appliedScope || state.analysisScope,
+          rowCount: parsedResult.rowCount,
+          sampleSize: parsedResult.sampleSize,
+          metrics: parsedResult.metrics || [],
           generatedAt: new Date().toISOString(),
         };
 
-        const model = new ChatOpenAI({
-          modelName,
-          temperature: 0.2,
-          apiKey: process.env.OPENAI_API_KEY,
-        });
-
-        const prompt = `Eres el Anomaly Detection Agent de CommerceOps AI.
-Pregunta del usuario: "${userQuestion}"
-
-Resultado del análisis de detección de anomalías:
-${anomalyResult}
-
-Genera un hallazgo técnico sobre anomalías en JSON:
-{
-  "title": "Detección de anomalías en tasa de retraso",
-  "description": "Análisis mediante Z-Score robusto comparando valor observado vs rango esperado.",
-  "confidence": 0.93,
-  "findingType": "METRIC_ANOMALY"
-}`;
-
-        let title = 'Análisis de anomalías operacionales completado';
-        let description =
-          'Se evaluó la presencia de valores atípicos en la operación.';
-        let confidence = 0.93;
-        let inputTokens: number | undefined;
-        let outputTokens: number | undefined;
-
-        try {
-          const response = await model.invoke(prompt);
-          const usage = extractModelUsage(response);
-          inputTokens = usage.inputTokens;
-          outputTokens = usage.outputTokens;
-
-          const content =
-            typeof response.content === 'string'
-              ? response.content
-              : JSON.stringify(response.content);
-          const match = content.match(/\{[\s\S]*\}/);
-          if (match) {
-            const parsed = JSON.parse(match[0]);
-            if (parsed.title) title = parsed.title;
-            if (parsed.description) description = parsed.description;
-            if (parsed.confidence) confidence = parsed.confidence;
-          }
-        } catch (err) {
-          console.warn('[AnomalyNode] Error in LLM call:', err);
-        }
-
-        const findingItem = {
-          id: `finding-anomaly-${Date.now()}`,
+        const findingItem = buildAnomalyFinding({
           investigationId,
           localAgentRunId: localRunId,
-          agent: 'ANOMALY' as const,
-          title,
-          description,
-          findingType: 'METRIC_ANOMALY',
-          confidence,
-          evidenceIds: [evidenceItem.id],
-          operationalStatus: 'ACTIONABLE' as const,
-          createdAt: new Date().toISOString(),
-        };
+          evidence: evidenceItem,
+        });
 
         streaming.emit(investigationId, 'finding.created', {
           agent: 'ANOMALY',
@@ -150,8 +125,6 @@ Genera un hallazgo técnico sobre anomalías en JSON:
             evidence: [evidenceItem],
             toolTraces,
           },
-          inputTokens,
-          outputTokens,
         };
       },
     });

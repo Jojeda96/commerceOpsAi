@@ -1,4 +1,5 @@
 import { Finding, NumericClaim } from '@commerce-ops/shared-types';
+import { sanitizeAnalyticalText } from './analytical-text-sanitizer';
 
 export interface UncoveredNumberResult {
   rawText: string;
@@ -9,12 +10,13 @@ export interface UncoveredNumberResult {
 export function extractNumbersFromText(
   text: string,
 ): { rawText: string; value: number; index: number }[] {
+  const sanitizedText = sanitizeAnalyticalText(text);
   // Matches integer and floating-point numbers, including formatted numbers like 61,779 or 61.779 or 9.3%
   const regex = /(?<![vV\w-])\b\d+(?:[.,]\d+)*%?\b/g;
   const results: { rawText: string; value: number; index: number }[] = [];
 
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(sanitizedText)) !== null) {
     const rawText = match[0];
     const isYear = /^(?:201[6-9]|202[0-9])$/.test(rawText);
     if (isYear) continue;

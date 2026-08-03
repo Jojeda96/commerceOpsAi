@@ -14,6 +14,9 @@ import { RouteDistributionPanel } from '@/components/investigations/RouteDistrib
 import { StageBreakdownPanel } from '@/components/investigations/StageBreakdownPanel';
 import { AnomalyEvidencePanel } from '@/components/investigations/AnomalyEvidencePanel';
 import { UnavailabilityReasonPanel } from '@/components/investigations/UnavailabilityReasonPanel';
+import { PanelDataUnavailable } from '@/components/investigations/PanelDataUnavailable';
+import { findEvidenceByTool } from '@/lib/investigation-evidence';
+import { parseToolResult } from '@/lib/tool-result-parser';
 
 export default function InvestigationDetailPage() {
   const params = useParams();
@@ -21,7 +24,6 @@ export default function InvestigationDetailPage() {
 
   const [investigation, setInvestigation] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
-  const [showStatusWarningInfo, setShowStatusWarningInfo] = useState(false);
 
   const loadData = useCallback(() => {
     fetchApi<any>(`/investigations/${id}`)
@@ -139,6 +141,22 @@ export default function InvestigationDetailPage() {
                   const isAnomaly = finding.agent === 'ANOMALY' || finding.agentName === 'ANOMALY';
                   const isDS = finding.agent === 'DATA_SCIENCE' || finding.agentName === 'DATA_SCIENCE';
 
+                  // Evidence extractions
+                  const summaryEvidence = findEvidenceByTool(finding, 'get_delivery_summary');
+                  const summaryResult = parseToolResult<any>(summaryEvidence);
+
+                  const routeEvidence = findEvidenceByTool(finding, 'get_delivery_performance_by_route');
+                  const routeResult = parseToolResult<any>(routeEvidence);
+
+                  const stageEvidence = findEvidenceByTool(finding, 'get_delivery_stage_breakdown');
+                  const stageResult = parseToolResult<any>(stageEvidence);
+
+                  const anomalyEvidence = findEvidenceByTool(finding, 'detect_metric_anomalies');
+                  const anomalyResult = parseToolResult<any>(anomalyEvidence);
+
+                  const scenarioEvidence = findEvidenceByTool(finding, 'get_delivery_prediction_scenarios');
+                  const scenarioResult = parseToolResult<any>(scenarioEvidence);
+
                   return (
                     <div key={finding.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-3">
                       <div className="flex justify-between items-start">
@@ -161,21 +179,37 @@ export default function InvestigationDetailPage() {
                       {/* Specialized Logistics Panels */}
                       {isLogistics && (
                         <div className="flex flex-col gap-3 mt-2">
-                          <HistoricalAggregatePanel
-                            deliveredOrders={scope?.interstateOnly ? 61779 : 96478}
-                            lateOrders={scope?.interstateOnly ? 5722 : 7826}
-                            aggregateLateRatePct={scope?.interstateOnly ? 9.3 : 8.1}
-                            avgDeliveryDays={12.5}
-                            avgDelayDays={9.4}
-                            interstateOnly={Boolean(scope?.interstateOnly)}
-                          />
-                          {scope?.interstateOnly && (
+                          {summaryResult?.status === 'AVAILABLE' && summaryResult?.data ? (
+                            <HistoricalAggregatePanel
+                              deliveredOrders={summaryResult.data.deliveredOrders}
+                              lateOrders={summaryResult.data.lateOrders}
+                              aggregateLateRatePct={summaryResult.data.aggregateLateRatePct}
+                              avgDeliveryDays={summaryResult.data.averageDeliveryDays}
+                              avgDelayDays={summaryResult.data.averageDelayDays}
+                              interstateOnly={Boolean(summaryResult.appliedScope?.interstateOnly || scope?.interstateOnly)}
+                            />
+                          ) : (
+                            <PanelDataUnavailable
+                              message="La evidencia del resumen de entregas no está disponible."
+                              reasonCode={summaryEvidence?.reasonCode}
+                            />
+                          )}
+
+                          {routeResult?.status === 'AVAILABLE' && routeResult?.data && (
                             <RouteDistributionPanel
-                              eligibleRouteCount={42}
-                              weightedRouteLateRatePct={9.3}
-                              unweightedMeanRouteLateRatePct={26.3}
-                              medianRouteLateRatePct={18.2}
-                              routes={[]}
+                              eligibleRouteCount={routeResult.data.eligibleRouteCount}
+                              weightedRouteLateRatePct={routeResult.data.weightedRouteLateRatePct}
+                              unweightedMeanRouteLateRatePct={routeResult.data.unweightedMeanRouteLateRatePct}
+                              medianRouteLateRatePct={routeResult.data.medianRouteLateRatePct}
+                              routes={routeResult.data.routes || []}
+                              minOrdersPerRoute={routeResult.data.minOrdersPerRoute || 10}
+                            />
+                          )}
+
+                          {stageResult?.status === 'AVAILABLE' && stageResult?.data && (
+                            <StageBreakdownPanel
+                              data={stageResult.data}
+                              interstateOnly={Boolean(stageResult.appliedScope?.interstateOnly || scope?.interstateOnly)}
                             />
                           )}
                         </div>
@@ -184,17 +218,25 @@ export default function InvestigationDetailPage() {
                       {/* Specialized Anomaly Panel */}
                       {isAnomaly && (
                         <div className="mt-2">
-                          <AnomalyEvidencePanel
-                            method="Robust Z-Score"
-                            threshold={3.0}
-                            monthsEvaluated={24}
-                            medianMonthlyLateRatePct={7.8}
-                            mad={1.2}
-                            anomalies={[
-                              { month: '2018-02', lateRatePct: 14.5, sampleSize: 3200, robustZScore: 3.46 },
-                              { month: '2018-03', lateRatePct: 18.2, sampleSize: 3500, robustZScore: 5.24 },
-                            ]}
-                          />
+                          {anomalyResult?.status === 'AVAILABLE' && anomalyResult?.data ? (
+                            <AnomalyEvidencePanel
+                              method={anomalyResult.data.method || 'Robust Z-Score'}
+                              threshold={anomalyResult.data.threshold}
+                              monthsEvaluated={anomalyResult.data.monthsEvaluated}
+                              medianMonthlyLateRatePct={anomalyResult.data.medianMonthlyLateRatePct}
+                              mad={anomalyResult.data.mad}
+                              anomalies={anomalyResult.data.anomalies || []}
+                            />
+                          ) : (
+                            <PanelDataUnavailable
+                              message={
+                                anomalyEvidence?.reasonCode === 'MINIMUM_THREE_MONTHS_REQUIRED'
+                                  ? 'No fue posible calcular Robust Z-Score porque se requieren al menos tres meses con muestra válida.'
+                                  : 'La evidencia del análisis de anomalías no está disponible.'
+                              }
+                              reasonCode={anomalyEvidence?.reasonCode || anomalyResult?.reasonCode}
+                            />
+                          )}
                         </div>
                       )}
 
@@ -202,10 +244,10 @@ export default function InvestigationDetailPage() {
                       {isDS && (
                         <div className="flex flex-col gap-3 mt-2">
                           <ModelGovernancePanel governance={finding.modelGovernance} />
-                          {finding.operationalStatus === 'EXPERIMENTAL_CONTEXT' && (
+                          {(scenarioEvidence?.reasonCode || scenarioResult?.status === 'UNAVAILABLE' || finding.operationalStatus === 'EXPERIMENTAL_CONTEXT') && (
                             <UnavailabilityReasonPanel
-                              reasonCode="SNAPSHOT_TABLE_EMPTY"
-                              diagnostics={{ tableExists: true, totalSnapshotRows: 0 }}
+                              reasonCode={scenarioEvidence?.reasonCode || scenarioResult?.reasonCode}
+                              diagnostics={scenarioResult?.diagnostics}
                             />
                           )}
                           <MlPredictionPanel modelPredictions={investigation.modelPredictions} />

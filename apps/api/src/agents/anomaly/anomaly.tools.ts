@@ -61,14 +61,27 @@ export function createAnomalyTools(prisma: PrismaService) {
         if (o.isLate) monthlyData[month].late++;
       }
 
-      const monthlyRates = Object.entries(monthlyData)
-        .filter(([_, d]) => d.total >= 3)
+      const MIN_MONTHLY_SAMPLE = 30;
+      const allMonths = Object.entries(monthlyData);
+      const excludedLowSampleMonths = allMonths.filter(
+        ([_, d]) => d.total < MIN_MONTHLY_SAMPLE,
+      ).length;
+
+      const monthlyRates = allMonths
+        .filter(([_, d]) => d.total >= MIN_MONTHLY_SAMPLE)
         .map(([month, d]) => ({
           month,
           lateRatePct: Math.round((d.late / d.total) * 1000) / 10,
           sampleSize: d.total,
         }))
         .sort((a, b) => a.month.localeCompare(b.month));
+
+      const updatedDiagnostics = {
+        ...diagnostics,
+        minimumMonthlySample: MIN_MONTHLY_SAMPLE,
+        excludedLowSampleMonths,
+        includedMonths: monthlyRates.length,
+      };
 
       if (monthlyRates.length < 3) {
         return JSON.stringify({
@@ -81,7 +94,7 @@ export function createAnomalyTools(prisma: PrismaService) {
           methods: ['ROBUST_Z_SCORE'],
           metrics: [],
           data: null,
-          diagnostics,
+          diagnostics: updatedDiagnostics,
         });
       }
 
@@ -102,9 +115,24 @@ export function createAnomalyTools(prisma: PrismaService) {
           : (sortedDeviations[madMid - 1] + sortedDeviations[madMid]) / 2;
 
       const scaledMad = 1.4826 * mad;
+
+      if (scaledMad === 0) {
+        return JSON.stringify({
+          status: 'INSUFFICIENT_DATA',
+          reasonCode: 'ZERO_MAD_NO_VARIABILITY',
+          scopeHash,
+          appliedScope: scope,
+          rowCount: totalSampleSize,
+          sampleSize: totalSampleSize,
+          methods: ['ROBUST_Z_SCORE'],
+          metrics: [],
+          data: null,
+          diagnostics: updatedDiagnostics,
+        });
+      }
+
       const series = monthlyRates.map((m) => {
-        const robustZScore =
-          scaledMad > 0 ? (m.lateRatePct - median) / scaledMad : 0;
+        const robustZScore = (m.lateRatePct - median) / scaledMad;
         const roundedZ = Math.round(robustZScore * 100) / 100;
         return {
           month: m.month,
@@ -129,6 +157,15 @@ export function createAnomalyTools(prisma: PrismaService) {
           unit: 'COUNT',
           sampleSize: monthlyRates.length,
           sourcePath: '$.data.monthsEvaluated',
+          aggregation: 'COUNT',
+        },
+        {
+          key: 'anomaly.series.anomaly_count',
+          label: 'Cantidad de anomalías',
+          value: anomalies.length,
+          unit: 'COUNT',
+          sampleSize: monthlyRates.length,
+          sourcePath: '$.data.anomalyCount',
           aggregation: 'COUNT',
         },
         {
@@ -206,7 +243,7 @@ export function createAnomalyTools(prisma: PrismaService) {
           anomalies,
           series,
         },
-        diagnostics,
+        diagnostics: updatedDiagnostics,
       });
     },
     {

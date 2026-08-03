@@ -192,6 +192,13 @@ describe('V4.2 End-to-End & Integration Quality Gates', () => {
             sourcePath: '$.data.mad',
           },
           {
+            key: 'anomaly.series.anomaly_count',
+            label: 'Cantidad de anomalías',
+            value: 2,
+            unit: 'COUNT',
+            sourcePath: '$.data.anomalyCount',
+          },
+          {
             key: 'anomaly.point.2018-02.late_rate_pct',
             label: 'Tasa 2018-02',
             value: 14.5,

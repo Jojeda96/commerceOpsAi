@@ -10,6 +10,7 @@ export const ScenarioUnavailabilityReasonSchema = z.enum([
   'MISSING_REQUIRED_FEATURES',
   'MODEL_SERVICE_UNREACHABLE',
   'MODEL_BLOCKED_BY_GOVERNANCE',
+  'NO_VALID_PREDICTION',
 ]);
 
 export const ScenarioDiagnosticsSchema = z.object({
