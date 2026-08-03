@@ -72,6 +72,29 @@ export interface ScopeDatasetCoverage {
   isOutsideCoverage: boolean;
 }
 
+import {
+  MetricUnit,
+  AnalysisMethod,
+  EvidenceMetric,
+  NumericClaim,
+  MethodClaim,
+  ToolResultEnvelope,
+  METRIC_LABELS,
+  DeliveryAggregateData,
+  RouteDistributionData,
+  RouteMetric,
+  StageBreakdownData,
+} from './analytics';
+
+import {
+  FindingAuditStatus,
+  EvidenceQualityResult,
+  EvidenceQualityDimensions,
+  FindingAuditResult,
+} from './audit';
+
+import { RecommendationKind, ValidatedRecommendation } from './recommendations';
+
 export * from './analytics';
 export * from './audit';
 export * from './recommendations';
@@ -139,10 +162,6 @@ export interface ModelGovernanceMetadata {
   reasons: string[];
 }
 
-import { MethodClaim, NumericClaim, EvidenceMetric } from './analytics';
-import { FindingAuditStatus, EvidenceQualityResult } from './audit';
-import { RecommendationKind } from './recommendations';
-
 export interface Finding {
   id: string;
   investigationId: string;
@@ -198,19 +217,25 @@ export interface Contradiction {
   findingIdB: string;
   description: string;
   severity: Priority;
+  status: 'RESOLVED' | 'UNRESOLVED';
+  resolutionNote?: string;
 }
 
-export interface CriticFeedback {
-  id: string;
+export interface ModelPrediction {
+  id?: string;
   investigationId: string;
   findingId?: string;
-  severity: Priority;
-  message: string;
-  requiredAction?: string;
-  requestedAgents?: AgentName[];
-  requiredActions?: RequiredAction[];
-  status: 'PENDING' | 'RESOLVED';
-  createdAt: string;
+  scenarioId?: string;
+  modelName: string;
+  modelVersion: string;
+  deploymentStatus: string;
+  probability: number;
+  threshold: number;
+  predictedDelayed: boolean;
+  riskLevel: Priority;
+  operationallyActionable: boolean;
+  featuresJson?: Record<string, unknown>;
+  explanationJson?: Record<string, unknown>;
 }
 
 export interface Recommendation {
@@ -221,69 +246,65 @@ export interface Recommendation {
   priority: Priority;
   kind?: RecommendationKind;
   evidenceBasis?: string[];
+  supportingFindingIds?: string[];
   validationRequirements?: string[];
   expectedImpact?: string;
   expectedImpactClaims?: NumericClaim[];
-  supportingFindingIds: string[];
-  assumptions: string[];
+  assumptions?: string[];
   createdAt?: string;
 }
 
-export interface FinalReport {
+export interface CriticFeedback {
+  id: string;
   investigationId: string;
-  executiveSummary: string;
-  keyFindings: Finding[];
-  evidenceList: Evidence[];
-  recommendations: Recommendation[];
-  limitations: string[];
-  qualityScore: number;
-  generatedAt: string;
+  severity: Priority;
+  message: string;
+  status: 'OPEN' | 'RESOLVED';
 }
 
-export interface CommerceOpsState {
+export interface InvestigationReport {
   investigationId: string;
-  userQuestion: string;
-  filters: FilterState;
-  investigationPlan: InvestigationTask[];
-  activeAgents: AgentName[];
-  completedAgents: AgentName[];
-  findings: Finding[];
-  evidence: Evidence[];
-  contradictions: Contradiction[];
-  criticFeedback: CriticFeedback[];
+  title?: string;
+  question?: string;
+  status?: InvestigationStatus;
+  executiveSummary?: string;
+  qualityScore?: number;
+  iterationCount?: number;
+  completedAt?: string;
+  generatedAt?: string;
+  findings?: Finding[];
+  keyFindings?: Finding[];
+  evidenceList?: Evidence[];
   recommendations: Recommendation[];
-  finalReport?: FinalReport;
-  iteration: number;
-  maxIterations: number;
-  requiresHumanReview: boolean;
-  criticDecision: string;
-  criticScore: number;
-  requestedAgents: AgentName[];
-  requiredActions?: RequiredAction[];
+  criticFeedback?: CriticFeedback[];
+  limitations?: string[];
 }
+
+export type FinalReport = InvestigationReport;
 
 export type InvestigationEventType =
-  | 'investigation.started'
-  | 'investigation.queued'
-  | 'plan.created'
   | 'agent.started'
   | 'agent.completed'
+  | 'agent.failed'
   | 'tool.started'
   | 'tool.completed'
+  | 'tool.failed'
   | 'finding.created'
-  | 'critic.feedback'
-  | 'iteration.started'
   | 'recommendation.created'
-  | 'report.completed'
+  | 'investigation.started'
+  | 'investigation.queued'
   | 'investigation.completed'
-  | 'investigation.failed';
+  | 'investigation.failed'
+  | 'critic.feedback'
+  | 'plan.created'
+  | 'report.completed';
 
 export interface InvestigationEvent {
   eventId?: string;
-  sequence?: number;
-  type: InvestigationEventType;
   investigationId: string;
+  sequence?: number;
   iteration?: number;
   timestamp: string;
+  type: InvestigationEventType | string;
   payload: Record<string, unknown>;
 }

@@ -80,7 +80,7 @@ export function validateRecommendation(
   // 4. Default kind based on supporting findings
   if (!kind) {
     const supportingFindings = findings.filter((f) =>
-      rec.supportingFindingIds.includes(f.id),
+      rec.supportingFindingIds?.includes(f.id),
     );
     const hasDataQuality = supportingFindings.some(
       (f) =>
