@@ -11,7 +11,9 @@ export type InvestigationCapability =
   | 'CUSTOMER_EXPERIENCE_ANALYSIS'
   | 'SELLER_ANALYSIS';
 
-export function mapCapabilitiesToAgents(capabilities: InvestigationCapability[]): AgentName[] {
+export function mapCapabilitiesToAgents(
+  capabilities: InvestigationCapability[],
+): AgentName[] {
   const agents = new Set<AgentName>();
 
   for (const cap of capabilities) {

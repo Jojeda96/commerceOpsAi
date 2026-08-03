@@ -4,10 +4,12 @@ import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
 import { runAgentWithTrace } from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
+import { validateRecommendation } from './recommendation-validator';
 
 export function createStrategyNode(streaming: StreamingService) {
   return async (state: CommerceOpsStateType) => {
-    const { investigationId, userQuestion, findings, iteration } = state;
+    const { investigationId, userQuestion, findings, evidence, iteration } =
+      state;
     const currentIteration = iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
@@ -29,7 +31,7 @@ export function createStrategyNode(streaming: StreamingService) {
           (f: Finding) => f.operationalStatus === 'EXPERIMENTAL_CONTEXT',
         );
 
-        const recs: Recommendation[] = [];
+        const rawRecs: Recommendation[] = [];
 
         if (actionableFindings.length === 0) {
           console.warn(
@@ -47,10 +49,10 @@ export function createStrategyNode(streaming: StreamingService) {
         });
 
         const prompt = `Eres el Business Strategy Agent de CommerceOps AI.
-Tu tarea es convertir hallazgos técnicos ACCIONABLES en recomendaciones empresariales priorizadas.
+Tu tarea es convertir hallazgos técnicos ACCIONABLES en recomendaciones empresariales priorizadas y epistémicamente transparentes.
 
 Pregunta del usuario: "${userQuestion}"
-Hallazgos ACCIONABLES (Modelos/Operaciones Aprobados):
+Hallazgos ACCIONABLES:
 ${JSON.stringify(actionableFindings, null, 2)}
 
 ${
@@ -59,19 +61,20 @@ ${
     : ''
 }
 
-REGLAS STRICTAS PARA "expectedImpact":
-1. NO inventes cifras, reducciones porcentuales ni cálculos no presentes en los hallazgos.
-2. NO menciones factores externos no registrados en la base de datos (clima, tráfico, huelgas).
-3. Ejemplo de formato válido: "Métrica histórica afectada: lateRate. La magnitud futura requiere una simulación cuantitativa separada."
+REGLAS DE RIGOR METODOLÓGICO:
+1. NO inventes cifras ni proyectes reducciones de % sin simulación.
+2. NO utilices el término "tiempo real". Utiliza "monitoreo periódico" o "ejecución programada".
+3. Clasifica la recomendación en una de estas clases: "EVIDENCE_BACKED_ACTION", "HYPOTHESIS_TO_TEST", "MONITORING_ACTION", "DATA_QUALITY_ACTION".
 
 Genera 2 recomendaciones ejecutivas en formato JSON estricto:
 {
   "recommendations": [
     {
-      "title": "Título corto y estratégico",
+      "title": "Título estratégico",
       "description": "Descripción detallada de la acción recomendada.",
       "priority": "HIGH",
-      "expectedImpact": "Métrica histórica afectada: lateRate. La magnitud futura requiere una simulación cuantitativa separada.",
+      "kind": "MONITORING_ACTION",
+      "expectedImpact": "Métrica histórica afectada: lateRate. La magnitud futura requiere simulación cuantitativa.",
       "assumptions": ["Los patrones históricos observados se mantienen."]
     }
   ]
@@ -111,6 +114,7 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
                   description:
                     item.description || 'Implementar monitoreo continuo.',
                   priority: item.priority || 'MEDIUM',
+                  kind: item.kind || 'HYPOTHESIS_TO_TEST',
                   expectedImpact:
                     item.expectedImpact ||
                     'Métrica afectada según hallazgos accionables.',
@@ -121,11 +125,7 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
                   assumptions: item.assumptions || [],
                   createdAt: new Date().toISOString(),
                 };
-                recs.push(rec);
-                streaming.emit(investigationId, 'recommendation.created', {
-                  agent: 'STRATEGY',
-                  recommendation: rec,
-                });
+                rawRecs.push(rec);
               }
             }
           }
@@ -133,14 +133,16 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
           console.warn('[StrategyNode] Error creating recommendations:', err);
         }
 
-        if (recs.length === 0 && actionableFindings.length > 0) {
-          recs.push({
+        if (rawRecs.length === 0 && actionableFindings.length > 0) {
+          rawRecs.push({
             id: `rec-default-${Date.now()}`,
             investigationId,
-            title: 'Establecer monitoreo de SLA en rutas con mayor retraso',
+            title:
+              'Programar monitoreo periódico de la tasa mensual de atrasos',
             description:
-              'Revisar acuerdos con transportistas y capacidad del vendedor.',
+              'Verificar tamaño muestral, estabilidad temporal y composición por vendedor/categoría.',
             priority: 'HIGH',
+            kind: 'MONITORING_ACTION',
             expectedImpact: 'Métrica histórica afectada: lateRate.',
             supportingFindingIds: Array.from(actionableIds),
             assumptions: ['Los datos históricos reflejan la tendencia actual.'],
@@ -148,20 +150,33 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
           });
         }
 
+        // Pass through recommendation validator
+        const validatedRecs: Recommendation[] = [];
+        for (const raw of rawRecs) {
+          const valRes = validateRecommendation(raw, findings, evidence);
+          validatedRecs.push(valRes.recommendation);
+          streaming.emit(investigationId, 'recommendation.created', {
+            agent: 'STRATEGY',
+            recommendation: valRes.recommendation,
+          });
+        }
+
         return {
-          result: recs,
+          result: validatedRecs,
           inputTokens,
           outputTokens,
         };
       },
     });
 
-    streaming.emit(investigationId, 'agent.completed', { agent: 'STRATEGY' });
+    streaming.emit(investigationId, 'agent.completed', {
+      agent: 'STRATEGY',
+    });
 
     return {
       completedAgents: [...state.completedAgents, 'STRATEGY' as const],
-      recommendations: result,
       agentRunTraces: [agentTrace],
+      recommendations: result,
     };
   };
 }

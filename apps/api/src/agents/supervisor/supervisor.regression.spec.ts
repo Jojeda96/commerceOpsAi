@@ -15,6 +15,9 @@ describe('Supervisor Regression Specs (EXEC PLAN V4.1)', () => {
   it('interstatePredictionCase must classify ML capabilities and activate interstateOnly', () => {
     expect(interstatePredictionCase.question).toBeDefined();
     expect(interstatePredictionCase.expectedScope.interstateOnly).toBe(true);
-    expect(interstatePredictionCase.expectedAgents).toEqual(['LOGISTICS', 'DATA_SCIENCE']);
+    expect(interstatePredictionCase.expectedAgents).toEqual([
+      'LOGISTICS',
+      'DATA_SCIENCE',
+    ]);
   });
 });

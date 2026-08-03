@@ -1,5 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { CriticDecision, AgentName } from '@commerce-ops/shared-types';
+import { CriticDecision, AgentName, Finding } from '@commerce-ops/shared-types';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
 import { runAgentWithTrace } from '../../observability/agent-runner';
@@ -40,8 +40,25 @@ export function createCriticNode(streaming: StreamingService) {
 
     streaming.emit(investigationId, 'agent.started', { agent: 'CRITIC' });
 
-    // Deterministic audit checks (P0/P1)
+    // Deterministic audit checks (V4.2)
     const audit = performDeterministicAudit(findings, evidence);
+
+    // Merge per-finding audit results into findings
+    const perFindingMap = new Map(
+      audit.perFindingResults.map((r) => [r.findingId, r]),
+    );
+    const updatedFindings: Finding[] = findings.map((f) => {
+      const auditRes = perFindingMap.get(f.id);
+      if (auditRes) {
+        return {
+          ...f,
+          auditStatus: auditRes.status,
+          auditMessages: [...auditRes.errors, ...auditRes.warnings],
+          evidenceQuality: auditRes.evidenceQuality,
+        };
+      }
+      return f;
+    });
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'CRITIC',
@@ -57,13 +74,13 @@ export function createCriticNode(streaming: StreamingService) {
 
         const prompt = `Eres el Evidence Critic de CommerceOps AI, el agente encargado de auditar la calidad, consistencia y evidencia de todos los hallazgos producidos por el equipo multiagente.
 
-Hallazgos a evaluar (${findings.length}):
-${JSON.stringify(findings, null, 2)}
+Hallazgos a evaluar (${updatedFindings.length}):
+${JSON.stringify(updatedFindings, null, 2)}
 
 Evidencias registrables (${evidence.length}):
 ${JSON.stringify(evidence, null, 2)}
 
-Auditoría determinista previa:
+Auditoría determinista V4.2 previa:
 ${audit.criticalErrors.length > 0 ? `ERRORES CRÍTICOS:\n${audit.criticalErrors.join('\n')}` : 'Sin errores críticos.'}
 ${audit.warnings.length > 0 ? `ADVERTENCIAS:\n${audit.warnings.join('\n')}` : 'Sin advertencias.'}
 
@@ -73,13 +90,11 @@ Evalúa si la evidencia respalda suficientemente las conclusiones y decide el re
 - REQUIRES_MORE_ANALYSIS: Falta información clave o se requiere una segunda iteración.
 - REJECTED: Los hallazgos carecen de soporte o son contradictorios.
 
-Si la decisión es REQUIRES_MORE_ANALYSIS o REJECTED, especifica en 'requestedAgents' los nombres exactos de los agentes que deben re-ejecutar ("SALES", "LOGISTICS", "CUSTOMER_EXPERIENCE", "SELLER_PERFORMANCE", "ANOMALY", "DATA_SCIENCE") y en 'requiredActions' las acciones correctivas requeridas.
-
-Responde estrictamente en formato JSON con la siguiente estructura:
+Responde estrictamente en formato JSON:
 {
   "decision": "APPROVED",
   "score": 92,
-  "feedback": "Los hallazgos de ventas y logística cuentan con evidencias numéricas válidas.",
+  "feedback": "Los hallazgos cuentan con evidencias numéricas válidas.",
   "requestedAgents": [],
   "requiredActions": []
 }`;
@@ -87,12 +102,14 @@ Responde estrictamente en formato JSON con la siguiente estructura:
         let rawDecision: CriticDecision =
           audit.criticalErrors.length > 0
             ? 'REQUIRES_MORE_ANALYSIS'
-            : 'APPROVED';
-        let score = audit.criticalErrors.length > 0 ? 55 : 85;
+            : audit.warnings.length > 0
+              ? 'APPROVED_WITH_WARNINGS'
+              : 'APPROVED';
+        let score = audit.criticalErrors.length > 0 ? 55 : 88;
         let feedback =
           audit.criticalErrors.length > 0
             ? `Alertas deterministas críticas detectadas: ${audit.criticalErrors.join(' | ')}`
-            : 'Evidencia preliminarmente verificada.';
+            : 'Evidencia verificada determinísticamente por rúbrica V4.2.';
         let requestedAgents: AgentName[] = [];
         let requiredActions: string[] = [];
         let inputTokens: number | undefined;
@@ -122,13 +139,15 @@ Responde estrictamente en formato JSON con la siguiente estructura:
           }
         } catch (err) {
           console.warn('[CriticNode] Error executing LLM call:', err);
-          rawDecision = 'REQUIRES_MORE_ANALYSIS';
-          score = 50;
+          rawDecision =
+            audit.criticalErrors.length > 0
+              ? 'REQUIRES_MORE_ANALYSIS'
+              : 'APPROVED_WITH_WARNINGS';
+          score = 75;
           feedback =
-            'No se pudo completar la auditoría del LLM. Se requiere revisión adicional.';
+            'Auditoría determinista V4.2 completada. LLM complementario no disponible.';
         }
 
-        // Enforcement determinista incorruptible
         const enforced = enforceDeterministicDecision(rawDecision, audit);
         const finalDecision = enforced.decision;
         if (enforced.enforcedReason) {
@@ -139,11 +158,10 @@ Responde estrictamente en formato JSON con la siguiente estructura:
           finalDecision === 'REQUIRES_MORE_ANALYSIS' &&
           requestedAgents.length === 0
         ) {
-          // Si hubo errores en hallazgos específicos, solicitar re-ejecución de los agentes afectados
           const affectedAgents = new Set<AgentName>();
-          for (const f of findings) {
+          for (const f of updatedFindings) {
             if (audit.perFinding[f.id]?.criticalErrors?.length > 0) {
-              affectedAgents.add(f.agent || f.agentName || 'LOGISTICS');
+              affectedAgents.add(f.agent || 'LOGISTICS');
             }
           }
           requestedAgents = Array.from(affectedAgents);
@@ -196,6 +214,7 @@ Responde estrictamente en formato JSON con la siguiente estructura:
 
     return {
       completedAgents: [...state.completedAgents, 'CRITIC' as const],
+      findings: updatedFindings,
       criticFeedback: [criticFeedbackItem],
       criticDecision: result.finalDecision,
       criticScore: result.score,

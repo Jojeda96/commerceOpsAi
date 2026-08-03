@@ -2,7 +2,11 @@ import { z } from 'zod';
 
 export const explanationResultSchema = z.object({
   status: z.enum(['AVAILABLE', 'UNAVAILABLE', 'ERROR']),
-  explanationType: z.enum(['LOCAL_SHAP', 'LOCAL_LINEAR_CONTRIBUTION', 'UNAVAILABLE']),
+  explanationType: z.enum([
+    'LOCAL_SHAP',
+    'LOCAL_LINEAR_CONTRIBUTION',
+    'UNAVAILABLE',
+  ]),
   topFeatures: z
     .array(
       z.object({

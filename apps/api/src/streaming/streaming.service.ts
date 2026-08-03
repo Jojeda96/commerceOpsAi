@@ -57,7 +57,10 @@ export class StreamingService {
     const subject = this.getOrCreateSubject(investigationId);
     return subject.asObservable().pipe(
       filter((event) => event.investigationId === investigationId),
-      map((event) => ({ id: (event as any).eventId || `${investigationId}:0`, data: event })),
+      map((event) => ({
+        id: (event as any).eventId || `${investigationId}:0`,
+        data: event,
+      })),
     );
   }
 

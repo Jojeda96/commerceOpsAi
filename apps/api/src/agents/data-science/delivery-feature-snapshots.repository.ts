@@ -10,7 +10,7 @@ export interface FeatureSnapshotFilters {
   minOrders?: number;
   limit?: number;
   selectionMethod?:
-    | 'REPRESENTATIVE_MEDIAN' | 'HIGH_RISK_HISTORICAL' | (string & {});
+    'REPRESENTATIVE_MEDIAN' | 'HIGH_RISK_HISTORICAL' | (string & {});
 }
 
 export interface ScenarioSnapshotRow {

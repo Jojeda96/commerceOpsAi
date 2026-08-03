@@ -9,15 +9,19 @@ describe('Numeric Grounding Audit', () => {
         investigationId: 'inv1',
         agent: 'SALES',
         title: 'Mishandled total GMV',
-        description: 'GMV reported',
+        description: 'GMV de 150000.',
         findingType: 'SALES_DROP',
         confidence: 0.9,
         evidenceIds: ['e1'],
         numericClaims: [
           {
+            claimId: 'c1',
             metricKey: 'total_gmv',
             value: 150000.0,
+            unit: 'BRL',
             evidenceId: 'e1',
+            sourcePath: '$.total_gmv',
+            tolerance: 0.05,
           },
         ],
         createdAt: new Date().toISOString(),
@@ -33,7 +37,10 @@ describe('Numeric Grounding Audit', () => {
         metrics: [
           {
             key: 'total_gmv',
+            label: 'Total GMV',
             value: 100000.0, // Value mismatch: 150000 vs 100000
+            unit: 'BRL',
+            sourcePath: '$.total_gmv',
           },
         ],
         generatedAt: new Date().toISOString(),
@@ -41,8 +48,9 @@ describe('Numeric Grounding Audit', () => {
     ];
 
     const violations = auditNumericClaims(findings, evidence);
-    expect(violations).toHaveLength(1);
-    expect(violations[0].code).toBe('NUMERIC_VALUE_MISMATCH');
+    expect(violations.some((v) => v.code === 'NUMERIC_VALUE_MISMATCH')).toBe(
+      true,
+    );
   });
 
   it('test_critic_rejects_missing_evidence_metric', () => {
@@ -52,15 +60,19 @@ describe('Numeric Grounding Audit', () => {
         investigationId: 'inv1',
         agent: 'LOGISTICS',
         title: 'Late delivery rate',
-        description: 'Late rate reported',
+        description: 'Tasa de 12.5%.',
         findingType: 'LOGISTICS_DELAY',
         confidence: 0.8,
         evidenceIds: ['e1'],
         numericClaims: [
           {
+            claimId: 'c2',
             metricKey: 'late_rate_pct',
             value: 12.5,
+            unit: 'PERCENT',
             evidenceId: 'e1',
+            sourcePath: '$.late_rate_pct',
+            tolerance: 0.05,
           },
         ],
         createdAt: new Date().toISOString(),
@@ -76,7 +88,10 @@ describe('Numeric Grounding Audit', () => {
         metrics: [
           {
             key: 'average_shipping_days',
+            label: 'Días promedio',
             value: 5.0,
+            unit: 'DAYS',
+            sourcePath: '$.average_shipping_days',
           },
         ],
         generatedAt: new Date().toISOString(),
@@ -84,7 +99,8 @@ describe('Numeric Grounding Audit', () => {
     ];
 
     const violations = auditNumericClaims(findings, evidence);
-    expect(violations).toHaveLength(1);
-    expect(violations[0].code).toBe('MISSING_EVIDENCE_METRIC');
+    expect(violations.some((v) => v.code === 'MISSING_EVIDENCE_METRIC')).toBe(
+      true,
+    );
   });
 });

@@ -72,21 +72,9 @@ export interface ScopeDatasetCoverage {
   isOutsideCoverage: boolean;
 }
 
-export interface EvidenceMetric {
-  key: string;
-  value: number;
-  unit?: string;
-  sampleSize?: number;
-  sourcePath?: string;
-}
-
-export interface NumericClaim {
-  metricKey: string;
-  value: number;
-  unit?: string;
-  evidenceId: string;
-  tolerance?: number;
-}
+export * from './analytics';
+export * from './audit';
+export * from './recommendations';
 
 export interface RequiredAction {
   agentName: AgentName;
@@ -151,6 +139,10 @@ export interface ModelGovernanceMetadata {
   reasons: string[];
 }
 
+import { MethodClaim, NumericClaim, EvidenceMetric } from './analytics';
+import { FindingAuditStatus, EvidenceQualityResult } from './audit';
+import { RecommendationKind } from './recommendations';
+
 export interface Finding {
   id: string;
   investigationId: string;
@@ -161,7 +153,8 @@ export interface Finding {
   title: string;
   description: string;
   findingType: string;
-  confidence: number;
+  /** @deprecated Use evidenceQuality or modelGovernance instead. */
+  confidence?: number;
   evidenceIds: string[];
   iteration?: number;
   supersedesFindingId?: string;
@@ -169,6 +162,10 @@ export interface Finding {
   operationalStatus?: FindingOperationalStatus;
   modelGovernance?: ModelGovernanceMetadata;
   numericClaims?: NumericClaim[];
+  methodClaims?: MethodClaim[];
+  auditStatus?: FindingAuditStatus;
+  auditMessages?: string[];
+  evidenceQuality?: EvidenceQualityResult;
   createdAt: string;
 }
 
@@ -182,6 +179,10 @@ export interface Evidence {
   iteration?: number;
   toolName: string;
   queryHash?: string;
+  scopeHash?: string;
+  appliedScope?: AnalysisScope;
+  status?: 'AVAILABLE' | 'NO_DATA' | 'INSUFFICIENT_DATA' | 'UNAVAILABLE' | 'ERROR';
+  reasonCode?: string;
   parameters: Record<string, unknown>;
   resultSummary: string;
   rawReference?: string;
@@ -218,6 +219,9 @@ export interface Recommendation {
   title: string;
   description: string;
   priority: Priority;
+  kind?: RecommendationKind;
+  evidenceBasis?: string[];
+  validationRequirements?: string[];
   expectedImpact?: string;
   expectedImpactClaims?: NumericClaim[];
   supportingFindingIds: string[];

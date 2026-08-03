@@ -57,5 +57,17 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run TypeScript Jest Tests
+      - name: Run Snapshot Readiness Diagnostics
+        run: npm run snapshots:verify
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Run TypeScript Unit Tests
         run: npm run test
+
+      - name: Run V4.2 E2E Quality Gates
+        run: npm run test:e2e
+
+      - name: Run Workspace Build
+        run: npm run build

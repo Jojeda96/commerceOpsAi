@@ -259,6 +259,9 @@ model Finding {
   operationalStatus   String            @default("ACTIONABLE") @map("operational_status")
   modelGovernanceJson Json?             @map("model_governance_json")
   numericClaimsJson   Json?             @map("numeric_claims_json")
+  methodClaimsJson    Json?             @map("method_claims_json")
+  auditRationaleJson  Json?             @map("audit_rationale_json")
+  evidenceQualityJson Json?             @map("evidence_quality_json")
   createdAt           DateTime          @default(now()) @map("created_at")
   investigation       Investigation     @relation(fields: [investigationId], references: [id], onDelete: Cascade)
   agentRun            AgentRun?         @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
@@ -327,6 +330,9 @@ model Recommendation {
   title                    String
   description              String
   priority                 String
+  kind                     String        @default("HYPOTHESIS_TO_TEST")
+  evidenceBasisJson        Json?         @map("evidence_basis_json")
+  validationRequirementsJson Json?       @map("validation_requirements_json")
   expectedImpact           String?       @map("expected_impact")
   expectedImpactClaimsJson Json?         @map("expected_impact_claims_json")
   assumptionsJson          Json?         @map("assumptions_json")

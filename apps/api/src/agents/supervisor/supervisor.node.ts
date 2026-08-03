@@ -12,16 +12,18 @@ import { z } from 'zod';
 
 const supervisorOutputSchema = z.object({
   requiredCapabilities: z.array(z.string()).optional(),
-  selectedAgents: z.array(
-    z.enum([
-      'SALES',
-      'LOGISTICS',
-      'CUSTOMER_EXPERIENCE',
-      'SELLER_PERFORMANCE',
-      'ANOMALY',
-      'DATA_SCIENCE',
-    ]),
-  ).optional(),
+  selectedAgents: z
+    .array(
+      z.enum([
+        'SALES',
+        'LOGISTICS',
+        'CUSTOMER_EXPERIENCE',
+        'SELLER_PERFORMANCE',
+        'ANOMALY',
+        'DATA_SCIENCE',
+      ]),
+    )
+    .optional(),
   plan: z.array(
     z.object({
       agentName: z.string(),
@@ -62,7 +64,9 @@ export function createSupervisorNode(
 
     // 2. Classify capabilities and agents deterministically
     const deterministicCapabilities = classifyCapabilities(userQuestion);
-    const deterministicAgents = mapCapabilitiesToAgents(deterministicCapabilities);
+    const deterministicAgents = mapCapabilitiesToAgents(
+      deterministicCapabilities,
+    );
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SUPERVISOR',

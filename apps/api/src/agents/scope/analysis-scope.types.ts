@@ -1,4 +1,8 @@
-import { AnalysisScope, ScopeProvenanceEntry, ScopeSource } from '@commerce-ops/shared-types';
+import {
+  AnalysisScope,
+  ScopeProvenanceEntry,
+  ScopeSource,
+} from '@commerce-ops/shared-types';
 
 export { AnalysisScope, ScopeProvenanceEntry, ScopeSource };
 

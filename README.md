@@ -31,13 +31,21 @@ CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logí
 CommerceOps AI aplica un único `AnalysisScope` inmutable por ronda de investigación.
 Los filtros solo pueden provenir del request DTO, de un parser determinista de lenguaje natural o de una corrección tipada del Evidence Critic. Los agentes no pueden inventar periodos ni analizar universos distintos.
 
-El sistema distingue estrictamente:
+El sistema distingue strictly:
 - **Tasa histórica:** proporción observada en datos pasados en el módulo logístico.
 - **Probabilidad predictiva:** salida del modelo ML para un escenario específico.
 - **Gobernanza:** estado de aprobación, métricas y quality gates del modelo ML.
 - **Explicación local:** contribuciones de características (SHAP/Linear) para una predicción válida.
 
 Si no existe un escenario ML válido, el sistema devuelve contexto histórico y gobernanza, pero marca la predicción y explicación como no disponibles. No fabrica probabilidades ni factores SHAP sintéticos.
+
+---
+
+## ⚖️ Analytical honesty: historical, predictive and explanatory results (V4.2)
+
+CommerceOps AI separates observed historical rates, route-level distributions, model probabilities and local explanations. A historical late rate is never presented as a predictive probability. When a predictive scenario cannot be built, the platform returns governance and a reason-specific unavailable state without fabricating prediction or SHAP output.
+
+Every quantitative finding contains structured `NumericClaims` linked to `EvidenceMetrics`. The Evidence Critic validates values, units, sample sizes, scope hashes and method provenance before findings can be approved.
 
 ---
 

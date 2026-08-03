@@ -1,4 +1,7 @@
-import { AnalysisScope, ScopeProvenanceEntry } from '@commerce-ops/shared-types';
+import {
+  AnalysisScope,
+  ScopeProvenanceEntry,
+} from '@commerce-ops/shared-types';
 import { calculateScopeHash } from './analysis-scope.hash';
 import { ResolveScopeInput } from './analysis-scope.types';
 
@@ -49,7 +52,9 @@ export function parseDeterministicQuestionFilters(question: string): {
   }
 
   // Example: "entre enero y marzo de 2018"
-  const range2018Match = question.match(/entre\s+enero\s+y\s+marzo\s+(?:de\s+)?2018/i);
+  const range2018Match = question.match(
+    /entre\s+enero\s+y\s+marzo\s+(?:de\s+)?2018/i,
+  );
   if (range2018Match) {
     dateFrom = '2018-01-01T00:00:00.000Z';
     dateTo = '2018-03-31T23:59:59.999Z';
@@ -88,7 +93,8 @@ export function parseDeterministicQuestionFilters(question: string): {
   }
 
   // 2. Interstate regex
-  const interstateRegex = /interestatal|entre\s+estados|estado\s+de\s+origen\s+y\s+destino\s+distintos/i;
+  const interstateRegex =
+    /interestatal|entre\s+estados|estado\s+de\s+origen\s+y\s+destino\s+distintos/i;
   if (interstateRegex.test(question)) {
     interstateOnly = true;
     provenance.push({
@@ -141,7 +147,9 @@ export function resolveAnalysisScope(input: ResolveScopeInput): AnalysisScope {
     provenance.push({ field: 'interstateOnly', source: 'REQUEST_DTO' });
   } else if (parsed.interstateOnly !== undefined) {
     interstateOnly = parsed.interstateOnly;
-    provenance.push(...parsed.provenance.filter((p) => p.field === 'interstateOnly'));
+    provenance.push(
+      ...parsed.provenance.filter((p) => p.field === 'interstateOnly'),
+    );
   }
 
   // Categories
@@ -150,7 +158,9 @@ export function resolveAnalysisScope(input: ResolveScopeInput): AnalysisScope {
   if (categories && categories.length > 0) {
     provenance.push({
       field: 'categories',
-      source: input.criticScopePatch?.categories ? 'CRITIC_PATCH' : 'REQUEST_DTO',
+      source: input.criticScopePatch?.categories
+        ? 'CRITIC_PATCH'
+        : 'REQUEST_DTO',
     });
   }
 
@@ -171,8 +181,10 @@ export function resolveAnalysisScope(input: ResolveScopeInput): AnalysisScope {
     dateTo,
     categories: categories && categories.length > 0 ? categories : undefined,
     sellerIds: sellerIds && sellerIds.length > 0 ? sellerIds : undefined,
-    sellerStates: sellerStates && sellerStates.length > 0 ? sellerStates : undefined,
-    customerStates: customerStates && customerStates.length > 0 ? customerStates : undefined,
+    sellerStates:
+      sellerStates && sellerStates.length > 0 ? sellerStates : undefined,
+    customerStates:
+      customerStates && customerStates.length > 0 ? customerStates : undefined,
     interstateOnly,
     provenance,
   };

@@ -50,9 +50,13 @@ export const CommerceOpsAnnotation = Annotation.Root({
     value: (prev, next) => {
       const merged = [...prev];
       for (const item of next) {
-        const itemKey = (item as any).findingKey || `${item.agent || (item as any).agentName}:${item.title}`;
+        const itemKey =
+          (item as any).findingKey ||
+          `${item.agent || (item as any).agentName}:${item.title}`;
         for (let i = 0; i < merged.length; i++) {
-          const existingKey = (merged[i] as any).findingKey || `${merged[i].agent || (merged[i] as any).agentName}:${merged[i].title}`;
+          const existingKey =
+            (merged[i] as any).findingKey ||
+            `${merged[i].agent || (merged[i] as any).agentName}:${merged[i].title}`;
           if (existingKey === itemKey && merged[i].status !== 'SUPERSEDED') {
             merged[i] = {
               ...merged[i],

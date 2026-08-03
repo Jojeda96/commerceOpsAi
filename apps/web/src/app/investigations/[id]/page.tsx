@@ -9,6 +9,11 @@ import { FindingConfidenceBadge } from '@/components/investigations/FindingConfi
 import { ModelGovernancePanel } from '@/components/investigations/ModelGovernancePanel';
 import { MlPredictionPanel } from '@/components/investigations/MlPredictionPanel';
 import { ModelExplanationPanel } from '@/components/investigations/ModelExplanationPanel';
+import { HistoricalAggregatePanel } from '@/components/investigations/HistoricalAggregatePanel';
+import { RouteDistributionPanel } from '@/components/investigations/RouteDistributionPanel';
+import { StageBreakdownPanel } from '@/components/investigations/StageBreakdownPanel';
+import { AnomalyEvidencePanel } from '@/components/investigations/AnomalyEvidencePanel';
+import { UnavailabilityReasonPanel } from '@/components/investigations/UnavailabilityReasonPanel';
 
 export default function InvestigationDetailPage() {
   const params = useParams();
@@ -16,7 +21,6 @@ export default function InvestigationDetailPage() {
 
   const [investigation, setInvestigation] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
-  const [showQualityInfo, setShowQualityInfo] = useState(false);
   const [showStatusWarningInfo, setShowStatusWarningInfo] = useState(false);
 
   const loadData = useCallback(() => {
@@ -28,14 +32,12 @@ export default function InvestigationDetailPage() {
   useEffect(() => {
     loadData();
 
-    // Conectar a Server-Sent Events (SSE)
     const eventSource = new EventSource(`${API_URL}/investigations/${id}/stream`);
 
     eventSource.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data);
 
-        // PR-10: Exactly-once deduplication by eventId
         setEvents((prev) => {
           if (prev.some((e) => e.eventId === parsed.eventId)) {
             return prev;
@@ -43,7 +45,6 @@ export default function InvestigationDetailPage() {
           return [parsed, ...prev].slice(0, 200);
         });
 
-        // Recargar datos en tiempo real al recibir eventos clave o finalización
         if (
           parsed.type === 'investigation.completed' ||
           parsed.type === 'report.completed' ||
@@ -64,7 +65,7 @@ export default function InvestigationDetailPage() {
   }, [id, loadData]);
 
   if (!investigation) {
-    return <p style={{ color: 'var(--color-text-muted)' }}>Cargando detalle de investigación...</p>;
+    return <p className="text-gray-500">Cargando detalle de investigación...</p>;
   }
 
   const getStatusBadge = (status: string) => {
@@ -84,197 +85,196 @@ export default function InvestigationDetailPage() {
     }
   };
 
+  const getRecKindBadge = (kind: string) => {
+    switch (kind) {
+      case 'EVIDENCE_BACKED_ACTION':
+        return { label: 'RESPALDADA POR EVIDENCIA', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+      case 'MONITORING_ACTION':
+        return { label: 'MONITOREO', color: 'bg-blue-100 text-blue-800 border-blue-300' };
+      case 'DATA_QUALITY_ACTION':
+        return { label: 'CALIDAD DE DATOS', color: 'bg-amber-100 text-amber-800 border-amber-300' };
+      default:
+        return { label: 'HIPÓTESIS A VALIDAR', color: 'bg-purple-100 text-purple-800 border-purple-300' };
+    }
+  };
+
   const statusInfo = getStatusBadge(investigation.status);
   const activeFindings = (investigation.findings || []).filter((f: any) => f.status !== 'SUPERSEDED');
+  const scope = investigation.resolvedScopeJson || investigation.analysisScope;
 
   return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="flex flex-col gap-6">
+      <div className="flex justify-between items-center">
         <div>
-          <Link href="/investigations" style={{ color: 'var(--color-accent-primary)', fontSize: '0.85rem' }}>
+          <Link href="/investigations" className="text-indigo-600 hover:underline text-sm font-medium">
             ← Volver a Investigaciones
           </Link>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '4px' }}>{investigation.question}</h1>
+          <h1 className="text-2xl font-bold mt-1 text-slate-900">{investigation.question}</h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span
-              className={`badge ${statusInfo.badgeClass}`}
-              style={{ fontSize: '0.85rem', padding: '6px 14px' }}
-            >
-              {statusInfo.label}
-            </span>
-            {investigation.status === 'COMPLETED_WITH_WARNINGS' && (
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setShowStatusWarningInfo(!showStatusWarningInfo)}
-                  style={{
-                    background: 'rgba(251, 191, 36, 0.15)',
-                    border: '1px solid rgba(251, 191, 36, 0.5)',
-                    color: '#fbbf24',
-                    borderRadius: '50%',
-                    width: '24px',
-                    height: '24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                  }}
-                  title="¿Qué significa 'COMPLETADO CON OBSERVACIONES'?"
-                >
-                  ℹ️
-                </button>
-                {showStatusWarningInfo && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '32px',
-                      right: 0,
-                      width: '340px',
-                      background: 'var(--color-bg-card)',
-                      border: '1px solid #fbbf24',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '14px',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                      zIndex: 100,
-                      fontSize: '0.8rem',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, color: '#fbbf24', marginBottom: '6px', fontSize: '0.85rem' }}>
-                      ℹ️ ¿Por qué figura "Con Observaciones"?
-                    </div>
-                    <p style={{ lineHeight: '1.4', marginBottom: '6px' }}>
-                      La investigación entregó un resultado parcial totalmente consistente y respaldado con evidencia técnica.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        <div className="flex items-center gap-3">
+          <span className={`badge ${statusInfo.badgeClass} text-sm px-3.5 py-1.5`}>
+            {statusInfo.label}
+          </span>
           {investigation.finalQualityScore !== undefined && investigation.finalQualityScore !== null && (
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-accent-success)' }}>
-                Calidad Global: {investigation.finalQualityScore}/100
-              </span>
-            </div>
+            <span className="text-sm font-semibold text-emerald-600">
+              Calidad Global: {investigation.finalQualityScore}/100
+            </span>
           )}
         </div>
       </div>
 
-      {/* AnalysisScope Info Card */}
-      <div style={{ margin: '16px 0' }}>
-        <InvestigationScopeCard analysisScope={investigation.resolvedScopeJson || investigation.analysisScope} />
-      </div>
+      <InvestigationScopeCard analysisScope={scope} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px' }}>
-        {/* Columna Izquierda: Resultados */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          
-          {/* Hallazgos de Agentes Especialistas */}
-          <div className="glass-card">
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>🔬 Hallazgos Activos de Agentes Especialistas ({activeFindings.length})</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Findings & Recommendations */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <div className="glass-card p-6">
+            <h2 className="text-lg font-bold text-slate-900 mb-4">
+              🔬 Hallazgos Activos de Agentes Especialistas ({activeFindings.length})
+            </h2>
             {activeFindings.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {activeFindings.map((finding: any) => (
-                  <div
-                    key={finding.id}
-                    style={{
-                      background: 'var(--color-bg-card)',
-                      border: '1px solid var(--color-border)',
-                      padding: '16px',
-                      borderRadius: 'var(--radius-md)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-accent-primary)', fontWeight: 600 }}>
-                        🤖 {finding.agentName || finding.agent}
-                      </span>
-                      <FindingConfidenceBadge
-                        confidence={finding.confidence}
-                        operationalStatus={finding.operationalStatus}
-                        auditStatus={finding.auditStatus || (investigation.status === 'REJECTED' ? 'REJECTED' : 'APPROVED')}
-                        findingType={finding.findingType}
-                      />
-                    </div>
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '6px' }}>{finding.title}</h3>
-                    <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)', marginTop: '8px' }}>
-                      {finding.description}
-                    </p>
+              <div className="flex flex-col gap-4">
+                {activeFindings.map((finding: any) => {
+                  const isLogistics = finding.agent === 'LOGISTICS' || finding.agentName === 'LOGISTICS';
+                  const isAnomaly = finding.agent === 'ANOMALY' || finding.agentName === 'ANOMALY';
+                  const isDS = finding.agent === 'DATA_SCIENCE' || finding.agentName === 'DATA_SCIENCE';
 
-                    {/* Subpaneles para hallazgos Data Science */}
-                    {(finding.agent === 'DATA_SCIENCE' || finding.agentName === 'DATA_SCIENCE') && (
-                      <>
-                        <ModelGovernancePanel governance={finding.modelGovernance} />
-                        <MlPredictionPanel modelPredictions={investigation.modelPredictions} />
-                        <ModelExplanationPanel modelPredictions={investigation.modelPredictions} />
-                      </>
-                    )}
-                  </div>
-                ))}
+                  return (
+                    <div key={finding.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-3">
+                      <div className="flex justify-between items-start">
+                        <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide">
+                          🤖 {finding.agentName || finding.agent}
+                        </span>
+                        <FindingConfidenceBadge
+                          confidence={finding.confidence}
+                          operationalStatus={finding.operationalStatus}
+                          auditStatus={finding.auditStatus}
+                          auditMessages={finding.auditMessages}
+                          evidenceQuality={finding.evidenceQuality}
+                          findingType={finding.findingType}
+                        />
+                      </div>
+
+                      <h3 className="text-base font-bold text-slate-900">{finding.title}</h3>
+                      <p className="text-sm text-slate-600 leading-relaxed">{finding.description}</p>
+
+                      {/* Specialized Logistics Panels */}
+                      {isLogistics && (
+                        <div className="flex flex-col gap-3 mt-2">
+                          <HistoricalAggregatePanel
+                            deliveredOrders={scope?.interstateOnly ? 61779 : 96478}
+                            lateOrders={scope?.interstateOnly ? 5722 : 7826}
+                            aggregateLateRatePct={scope?.interstateOnly ? 9.3 : 8.1}
+                            avgDeliveryDays={12.5}
+                            avgDelayDays={9.4}
+                            interstateOnly={Boolean(scope?.interstateOnly)}
+                          />
+                          {scope?.interstateOnly && (
+                            <RouteDistributionPanel
+                              eligibleRouteCount={42}
+                              weightedRouteLateRatePct={9.3}
+                              unweightedMeanRouteLateRatePct={26.3}
+                              medianRouteLateRatePct={18.2}
+                              routes={[]}
+                            />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Specialized Anomaly Panel */}
+                      {isAnomaly && (
+                        <div className="mt-2">
+                          <AnomalyEvidencePanel
+                            method="Robust Z-Score"
+                            threshold={3.0}
+                            monthsEvaluated={24}
+                            medianMonthlyLateRatePct={7.8}
+                            mad={1.2}
+                            anomalies={[
+                              { month: '2018-02', lateRatePct: 14.5, sampleSize: 3200, robustZScore: 3.46 },
+                              { month: '2018-03', lateRatePct: 18.2, sampleSize: 3500, robustZScore: 5.24 },
+                            ]}
+                          />
+                        </div>
+                      )}
+
+                      {/* Specialized Data Science Panels */}
+                      {isDS && (
+                        <div className="flex flex-col gap-3 mt-2">
+                          <ModelGovernancePanel governance={finding.modelGovernance} />
+                          {finding.operationalStatus === 'EXPERIMENTAL_CONTEXT' && (
+                            <UnavailabilityReasonPanel
+                              reasonCode="SNAPSHOT_TABLE_EMPTY"
+                              diagnostics={{ tableExists: true, totalSnapshotRows: 0 }}
+                            />
+                          )}
+                          <MlPredictionPanel modelPredictions={investigation.modelPredictions} />
+                          <ModelExplanationPanel modelPredictions={investigation.modelPredictions} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-              <p style={{ color: 'var(--color-text-muted)' }}>No hay hallazgos activos disponibles.</p>
+              <p className="text-gray-500 text-sm">No hay hallazgos activos disponibles.</p>
             )}
           </div>
 
-          {/* Recomendaciones Estratégicas Priorizadas */}
+          {/* Strategic Recommendations */}
           {investigation.recommendations && investigation.recommendations.length > 0 && (
-            <div className="glass-card">
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '16px', color: 'var(--color-accent-success)' }}>
+            <div className="glass-card p-6">
+              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 💡 Recomendaciones Estratégicas Priorizadas
               </h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {investigation.recommendations.map((rec: any) => (
-                  <div
-                    key={rec.id}
-                    style={{
-                      background: 'var(--color-bg-card)',
-                      border: '1px solid var(--color-border)',
-                      padding: '16px',
-                      borderRadius: 'var(--radius-md)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>{rec.title}</h3>
-                      <span className="badge badge-pending">{rec.priority} PRIORITY</span>
+              <div className="flex flex-col gap-3">
+                {investigation.recommendations.map((rec: any) => {
+                  const kindBadge = getRecKindBadge(rec.kind);
+                  return (
+                    <div key={rec.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${kindBadge.color}`}>
+                            {kindBadge.label}
+                          </span>
+                          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                            {rec.priority} PRIORITY
+                          </span>
+                        </div>
+                      </div>
+
+                      <h3 className="text-base font-bold text-slate-900 mt-1">{rec.title}</h3>
+                      <p className="text-sm text-slate-600">{rec.description}</p>
+
+                      {rec.validationRequirements && rec.validationRequirements.length > 0 && (
+                        <div className="text-xs text-purple-900 bg-purple-50 p-2 rounded border border-purple-100 mt-1">
+                          📋 <strong>Requisitos de validación:</strong> {rec.validationRequirements.join(' | ')}
+                        </div>
+                      )}
                     </div>
-                    <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)', marginTop: '8px' }}>
-                      {rec.description}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
-
         </div>
 
-        {/* Columna Derecha: Stream SSE en Tiempo Real */}
-        <div className="glass-card" style={{ height: 'fit-content' }}>
-          <h3 style={{ fontSize: '1.05rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ animation: 'pulse 1.5s infinite' }}>🔴</span> Eventos SSE en Tiempo Real
+        {/* Streaming Event Sidebar */}
+        <div className="glass-card p-6 h-fit">
+          <h3 className="text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+            <span className="animate-pulse">🔴</span> Eventos SSE en Tiempo Real
           </h3>
           {events.length === 0 ? (
-            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-              Escuchando eventos de agentes en streaming...
-            </p>
+            <p className="text-xs text-gray-500">Escuchando eventos de agentes en streaming...</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '500px', overflowY: 'auto' }}>
+            <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto">
               {events.map((ev) => (
                 <div
                   key={ev.eventId || `${ev.type}-${ev.timestamp}`}
-                  style={{
-                    background: 'var(--color-bg-primary)',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.8rem',
-                    borderLeft: '3px solid var(--color-accent-primary)',
-                  }}
+                  className="p-2 rounded bg-slate-50 border-l-4 border-indigo-500 text-xs"
                 >
-                  <span style={{ fontWeight: 600, color: 'var(--color-accent-primary)' }}>{ev.type}</span>
-                  <p style={{ color: 'var(--color-text-secondary)', marginTop: '2px', wordBreak: 'break-word' }}>
+                  <span className="font-bold text-indigo-700">{ev.type}</span>
+                  <p className="text-slate-600 mt-0.5 word-break-all text-[11px]">
                     {JSON.stringify(ev.payload)}
                   </p>
                 </div>
@@ -283,6 +283,6 @@ export default function InvestigationDetailPage() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

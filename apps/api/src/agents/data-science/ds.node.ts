@@ -25,7 +25,9 @@ export function createDataScienceNode(
     streaming.emit(investigationId, 'agent.started', { agent: 'DATA_SCIENCE' });
 
     const tools = createDataScienceTools(prisma);
-    const govTool = tools.find((t) => t.name === 'get_delivery_model_governance')!;
+    const govTool = tools.find(
+      (t) => t.name === 'get_delivery_model_governance',
+    )!;
     const scenarioTool = tools.find(
       (t) => t.name === 'get_delivery_prediction_scenarios',
     )!;
@@ -144,7 +146,8 @@ export function createDataScienceNode(
             investigationId,
             localAgentRunId: localRunId,
             agent: 'DATA_SCIENCE',
-            title: 'Estado de Gobernanza del Modelo (Sin Escenarios Inferibles para Scope)',
+            title:
+              'Estado de Gobernanza del Modelo (Sin Escenarios Inferibles para Scope)',
             description: `Se obtuvo el estado de gobernanza del modelo (${govData.modelName || 'delivery_delay_champion'} v${govData.modelVersion || 'v3.0.0'}, deployment: ${govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED'}). No se ejecutó inferencia predictiva ni SHAP debido a que ningún escenario cumplió los criterios de filtrado y muestra mínima.`,
             findingType: 'MODEL_GOVERNANCE',
             confidence: 0.85,
@@ -153,7 +156,8 @@ export function createDataScienceNode(
             modelGovernance: {
               modelName: govData.modelName || 'delivery_delay_champion',
               modelVersion: govData.modelVersion || 'v3.0.0',
-              deploymentStatus: govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+              deploymentStatus:
+                govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
               operationallyActionable: Boolean(govData.operationallyActionable),
               reasons: govData.qualityGateReasons || [],
             },
@@ -215,7 +219,10 @@ export function createDataScienceNode(
           }
 
           if (parsedPred.status !== 'AVAILABLE') {
-            console.warn('[DSNode] Inferencia no disponible para escenario:', scenario.scenarioId);
+            console.warn(
+              '[DSNode] Inferencia no disponible para escenario:',
+              scenario.scenarioId,
+            );
             continue;
           }
 
@@ -267,7 +274,8 @@ export function createDataScienceNode(
           });
         }
 
-        const isApproved = govData.deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
+        const isApproved =
+          govData.deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
 
         const model = new ChatOpenAI({
           modelName,
@@ -328,7 +336,8 @@ Genera un hallazgo técnico cuantitativo y auditable en formato JSON:
           modelGovernance: {
             modelName: govData.modelName || 'delivery_delay_champion',
             modelVersion: govData.modelVersion || 'v3.0.0',
-            deploymentStatus: govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+            deploymentStatus:
+              govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
             operationallyActionable: Boolean(isApproved),
             reasons: govData.qualityGateReasons || [],
           },
@@ -341,9 +350,14 @@ Genera un hallazgo técnico cuantitativo y auditable en formato JSON:
             investigationId,
             findingId,
             scenarioId: p.scenario.scenarioId,
-            modelName: p.prediction.modelName || govData.modelName || 'delivery_delay_champion',
-            modelVersion: p.prediction.modelVersion || govData.modelVersion || 'v3.0.0',
-            deploymentStatus: govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
+            modelName:
+              p.prediction.modelName ||
+              govData.modelName ||
+              'delivery_delay_champion',
+            modelVersion:
+              p.prediction.modelVersion || govData.modelVersion || 'v3.0.0',
+            deploymentStatus:
+              govData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
             probability: Number(p.prediction.probability),
             threshold: Number(p.prediction.threshold),
             predictedDelayed: Boolean(p.prediction.predictedDelayed),

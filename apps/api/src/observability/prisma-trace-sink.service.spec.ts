@@ -7,13 +7,15 @@ describe('PrismaTraceSinkService', () => {
   beforeEach(() => {
     mockPrisma = {
       agentRun: {
-        upsert: jest.fn().mockResolvedValue({}),
-        update: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'db-run-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'db-run-1' }),
         findUnique: jest.fn().mockResolvedValue({ id: 'db-run-1' }),
       },
       toolExecution: {
-        upsert: jest.fn().mockResolvedValue({}),
-        update: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'db-tool-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'db-tool-1' }),
       },
     };
     sink = new PrismaTraceSinkService(mockPrisma);
@@ -28,14 +30,18 @@ describe('PrismaTraceSinkService', () => {
       startedAt: new Date(),
     });
 
-    expect(mockPrisma.agentRun.upsert).toHaveBeenCalledWith(
+    expect(mockPrisma.agentRun.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { localRunId: 'run-1' },
+        data: expect.objectContaining({
+          localRunId: 'run-1',
+        }),
       }),
     );
   });
 
   it('persists agent failed status on error', async () => {
+    mockPrisma.agentRun.findFirst.mockResolvedValueOnce({ id: 'db-run-1' });
+
     await sink.onAgentFailed({
       localRunId: 'run-1',
       completedAt: new Date(),
@@ -45,7 +51,7 @@ describe('PrismaTraceSinkService', () => {
 
     expect(mockPrisma.agentRun.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { localRunId: 'run-1' },
+        where: { id: 'db-run-1' },
         data: expect.objectContaining({
           status: 'FAILED',
           errorMessage: 'Network timeout',

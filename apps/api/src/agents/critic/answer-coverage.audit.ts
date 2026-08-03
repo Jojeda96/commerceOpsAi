@@ -20,24 +20,33 @@ export function auditAnswerCoverage(
   const activeFindings = findings.filter((f) => f.status !== 'SUPERSEDED');
   const text = userQuestion.toLowerCase();
 
-  const isPredictiveRequested = /probabilidad predictiva|predicci[oó]n|riesgo/i.test(text);
-  const isGovernanceRequested = /gobernanza|estado del modelo|quality gate/i.test(text);
-  const isShapRequested = /shap|factor(?:es)? de impacto|explicaci[oó]n/i.test(text);
+  const isPredictiveRequested =
+    /probabilidad predictiva|predicci[oó]n|riesgo/i.test(text);
+  const isGovernanceRequested =
+    /gobernanza|estado del modelo|quality gate/i.test(text);
+  const isShapRequested = /shap|factor(?:es)? de impacto|explicaci[oó]n/i.test(
+    text,
+  );
 
   const coverage: ComponentCoverage[] = [];
 
   // Historical Context
-  const hasLogistics = activeFindings.some((f) => f.agent === 'LOGISTICS' || (f as any).agentName === 'LOGISTICS');
+  const hasLogistics = activeFindings.some(
+    (f) => f.agent === 'LOGISTICS' || (f as any).agentName === 'LOGISTICS',
+  );
   coverage.push({
     component: 'HISTORICAL_CONTEXT',
     status: hasLogistics ? 'ANSWERED' : 'MISSING',
-    evidenceIds: activeFindings.filter((f) => f.agent === 'LOGISTICS').flatMap((f) => f.evidenceIds),
+    evidenceIds: activeFindings
+      .filter((f) => f.agent === 'LOGISTICS')
+      .flatMap((f) => f.evidenceIds),
   });
 
   // Model Governance
   if (isGovernanceRequested || isPredictiveRequested) {
     const hasGov = activeFindings.some(
-      (f) => f.findingType === 'MODEL_GOVERNANCE' || f.modelGovernance !== undefined,
+      (f) =>
+        f.findingType === 'MODEL_GOVERNANCE' || f.modelGovernance !== undefined,
     );
     coverage.push({
       component: 'MODEL_GOVERNANCE',
@@ -50,9 +59,12 @@ export function auditAnswerCoverage(
 
   // Prediction
   if (isPredictiveRequested) {
-    const hasPredictionFinding = activeFindings.some((f) => f.findingType === 'ML_PREDICTION');
+    const hasPredictionFinding = activeFindings.some(
+      (f) => f.findingType === 'ML_PREDICTION',
+    );
     const hasUnavailableFinding = activeFindings.some(
-      (f) => f.findingType === 'ML_UNAVAILABLE' || f.operationalStatus === 'BLOCKED',
+      (f) =>
+        f.findingType === 'ML_UNAVAILABLE' || f.operationalStatus === 'BLOCKED',
     );
     coverage.push({
       component: 'PREDICTION',
@@ -62,16 +74,23 @@ export function auditAnswerCoverage(
           ? 'UNAVAILABLE_WITH_REASON'
           : 'MISSING',
       evidenceIds: activeFindings
-        .filter((f) => f.findingType === 'ML_PREDICTION' || f.findingType === 'ML_UNAVAILABLE')
+        .filter(
+          (f) =>
+            f.findingType === 'ML_PREDICTION' ||
+            f.findingType === 'ML_UNAVAILABLE',
+        )
         .flatMap((f) => f.evidenceIds),
     });
   }
 
   // Local Explanation / SHAP
   if (isShapRequested) {
-    const hasPrediction = activeFindings.some((f) => f.findingType === 'ML_PREDICTION');
+    const hasPrediction = activeFindings.some(
+      (f) => f.findingType === 'ML_PREDICTION',
+    );
     const hasUnavailablePrediction = activeFindings.some(
-      (f) => f.findingType === 'ML_UNAVAILABLE' || f.operationalStatus === 'BLOCKED',
+      (f) =>
+        f.findingType === 'ML_UNAVAILABLE' || f.operationalStatus === 'BLOCKED',
     );
     coverage.push({
       component: 'LOCAL_EXPLANATION',

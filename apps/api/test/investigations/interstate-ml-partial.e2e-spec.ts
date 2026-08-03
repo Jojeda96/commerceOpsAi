@@ -12,7 +12,9 @@ describe('E2E Incident Case B: ML Interstate Prediction Partial Answer', () => {
 
     expect(scope.interstateOnly).toBe(true);
 
-    const capabilities = classifyCapabilities(interstatePredictionCase.question);
+    const capabilities = classifyCapabilities(
+      interstatePredictionCase.question,
+    );
     const selectedAgents = mapCapabilitiesToAgents(capabilities);
 
     expect(selectedAgents).toEqual(['LOGISTICS', 'DATA_SCIENCE']);

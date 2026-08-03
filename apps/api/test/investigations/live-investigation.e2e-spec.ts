@@ -47,7 +47,8 @@ describe('Live E2E Investigation Execution Test', () => {
       .post('/api/investigations')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        question: 'Detecta picos anómalos en la tasa de retraso de entregas mediante Z-Score',
+        question:
+          'Detecta picos anómalos en la tasa de retraso de entregas mediante Z-Score',
       })
       .expect(201);
 
@@ -86,12 +87,15 @@ describe('Live E2E Investigation Execution Test', () => {
     }
 
     expect(completedData).not.toBeNull();
-    expect(completedData.status).toMatch(/COMPLETED|COMPLETED_WITH_WARNINGS|APPROVED/);
+    expect(completedData.status).toMatch(
+      /COMPLETED|COMPLETED_WITH_WARNINGS|APPROVED/,
+    );
     expect(completedData.findings).toBeDefined();
-    console.log('--- TEST E2E HTTP CON AUTENTICACIÓN COMPLETADO EXITOSAMENTE ---');
+    console.log(
+      '--- TEST E2E HTTP CON AUTENTICACIÓN COMPLETADO EXITOSAMENTE ---',
+    );
     console.log('ID:', completedData.id);
     console.log('Status final:', completedData.status);
     console.log('Findings activos:', (completedData.findings || []).length);
   }, 90000);
 });
-

@@ -23,6 +23,8 @@
     "data:validate": "python scripts/validate-dataset.py",
     "data:fixtures": "npx ts-node --transpile-only scripts/create-fixtures.ts",
     "test": "turbo run test",
+    "test:e2e": "npm run test:e2e --workspace=apps/api",
+    "snapshots:verify": "npx ts-node --transpile-only -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/verify-delivery-feature-snapshots.ts",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix"
   },

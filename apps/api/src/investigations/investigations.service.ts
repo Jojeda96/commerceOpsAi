@@ -136,7 +136,30 @@ export class InvestigationsService {
       throw new NotFoundException(`Investigación con ID ${id} no encontrada`);
     }
 
-    return investigation;
+    const formattedFindings = investigation.findings.map((f: any) => ({
+      ...f,
+      methodClaims: f.methodClaimsJson || undefined,
+      auditMessages: f.auditRationaleJson || undefined,
+      evidenceQuality: f.evidenceQualityJson || undefined,
+      numericClaims: f.numericClaimsJson || undefined,
+      modelGovernance: f.modelGovernanceJson || undefined,
+    }));
+
+    const formattedRecommendations = investigation.recommendations.map(
+      (r: any) => ({
+        ...r,
+        kind: r.kind || 'HYPOTHESIS_TO_TEST',
+        evidenceBasis: r.evidenceBasisJson || undefined,
+        validationRequirements: r.validationRequirementsJson || undefined,
+        expectedImpactClaims: r.expectedImpactClaimsJson || undefined,
+      }),
+    );
+
+    return {
+      ...investigation,
+      findings: formattedFindings,
+      recommendations: formattedRecommendations,
+    };
   }
 
   async getFindings(id: string) {

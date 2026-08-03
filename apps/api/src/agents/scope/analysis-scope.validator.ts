@@ -1,4 +1,7 @@
-import { AnalysisScope, ScopeDatasetCoverage } from '@commerce-ops/shared-types';
+import {
+  AnalysisScope,
+  ScopeDatasetCoverage,
+} from '@commerce-ops/shared-types';
 
 export function validateScopeAgainstDataset(
   scope: AnalysisScope,
@@ -7,13 +10,19 @@ export function validateScopeAgainstDataset(
   let isOutsideCoverage = false;
 
   if (scope.dateFrom) {
-    if (new Date(scope.dateFrom) > new Date(coverage.maxDate) || new Date(scope.dateFrom) < new Date(coverage.minDate)) {
+    if (
+      new Date(scope.dateFrom) > new Date(coverage.maxDate) ||
+      new Date(scope.dateFrom) < new Date(coverage.minDate)
+    ) {
       isOutsideCoverage = true;
     }
   }
 
   if (scope.dateTo) {
-    if (new Date(scope.dateTo) < new Date(coverage.minDate) || new Date(scope.dateTo) > new Date(coverage.maxDate)) {
+    if (
+      new Date(scope.dateTo) < new Date(coverage.minDate) ||
+      new Date(scope.dateTo) > new Date(coverage.maxDate)
+    ) {
       isOutsideCoverage = true;
     }
   }

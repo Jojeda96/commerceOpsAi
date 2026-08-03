@@ -1,0 +1,18 @@
+export const METRIC_LABELS: Record<string, string> = {
+  'delivery.aggregate.delivered_orders': 'Total de pedidos entregados',
+  'delivery.aggregate.late_orders': 'Total de pedidos entregados tarde',
+  'delivery.aggregate.late_rate_pct': 'Tasa histórica agregada de atraso',
+  'delivery.aggregate.avg_delivery_days': 'Tiempo medio de entrega (días)',
+  'delivery.aggregate.avg_delay_days': 'Atraso medio en entregas tardías (días)',
+  'delivery.routes.weighted_late_rate_pct': 'Tasa ponderada por pedidos entre rutas',
+  'delivery.routes.unweighted_mean_late_rate_pct': 'Promedio simple de las tasas por ruta',
+  'delivery.routes.median_late_rate_pct': 'Mediana de las tasas por ruta',
+  'delivery.routes.eligible_route_count': 'Cantidad de rutas elegibles',
+  'delivery.stage.avg_seller_preparation_days': 'Tiempo medio de preparación del vendedor (días)',
+  'delivery.stage.avg_carrier_transit_days': 'Tiempo medio de tránsito del transportista (días)',
+  'delivery.stage.analyzed_orders': 'Pedidos analizados en desglose por etapa',
+  'anomaly.series.months_evaluated': 'Meses evaluados en serie temporal',
+  'anomaly.series.median_monthly_late_rate_pct': 'Mediana mensual histórica de tasa de atraso',
+  'anomaly.series.mad': 'Desviación absoluta respecto a la mediana (MAD)',
+  'anomaly.series.threshold': 'Umbral absoluto de Z-Score robusto',
+};

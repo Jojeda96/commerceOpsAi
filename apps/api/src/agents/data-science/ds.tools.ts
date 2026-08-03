@@ -38,11 +38,16 @@ export function createDataScienceTools(prisma: PrismaClient) {
 
   const getDeliveryModelGovernance = tool(
     async () => {
-      const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+      const mlServiceUrl =
+        process.env.ML_SERVICE_URL || 'http://localhost:8000';
       try {
         const [runtimeRes, metricsRes] = await Promise.all([
-          fetch(`${mlServiceUrl}/models/delivery-delay/runtime`).catch(() => null),
-          fetch(`${mlServiceUrl}/models/delivery-delay/metrics`).catch(() => null),
+          fetch(`${mlServiceUrl}/models/delivery-delay/runtime`).catch(
+            () => null,
+          ),
+          fetch(`${mlServiceUrl}/models/delivery-delay/metrics`).catch(
+            () => null,
+          ),
         ]);
 
         let runtimeData: any = {};
@@ -59,13 +64,35 @@ export function createDataScienceTools(prisma: PrismaClient) {
 
         return JSON.stringify({
           status: isAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
-          modelName: runtimeData.model_name || runtimeData.modelName || 'delivery_delay_champion',
-          modelVersion: runtimeData.model_version || runtimeData.modelVersion || 'v3.0.0',
-          deploymentStatus: runtimeData.deployment_status || runtimeData.deploymentStatus || 'EXPERIMENTAL_NOT_APPROVED',
-          operationallyActionable: Boolean(runtimeData.operationally_actionable || runtimeData.operationallyActionable || false),
-          qualityGateReasons: runtimeData.quality_gate_reasons || runtimeData.qualityGateReasons || ['MODEL_EXPERIMENTAL_NOT_APPROVED'],
-          testMetrics: metricsData.test_metrics || metricsData.testMetrics || runtimeData.test_metrics || {},
-          runtimeLoaded: Boolean(runtimeData.runtime_loaded || runtimeData.runtimeLoaded || isAvailable),
+          modelName:
+            runtimeData.model_name ||
+            runtimeData.modelName ||
+            'delivery_delay_champion',
+          modelVersion:
+            runtimeData.model_version || runtimeData.modelVersion || 'v3.0.0',
+          deploymentStatus:
+            runtimeData.deployment_status ||
+            runtimeData.deploymentStatus ||
+            'EXPERIMENTAL_NOT_APPROVED',
+          operationallyActionable: Boolean(
+            runtimeData.operationally_actionable ||
+            runtimeData.operationallyActionable ||
+            false,
+          ),
+          qualityGateReasons: runtimeData.quality_gate_reasons ||
+            runtimeData.qualityGateReasons || [
+              'MODEL_EXPERIMENTAL_NOT_APPROVED',
+            ],
+          testMetrics:
+            metricsData.test_metrics ||
+            metricsData.testMetrics ||
+            runtimeData.test_metrics ||
+            {},
+          runtimeLoaded: Boolean(
+            runtimeData.runtime_loaded ||
+            runtimeData.runtimeLoaded ||
+            isAvailable,
+          ),
         });
       } catch (err: any) {
         return JSON.stringify({
@@ -80,7 +107,8 @@ export function createDataScienceTools(prisma: PrismaClient) {
     },
     {
       name: 'get_delivery_model_governance',
-      description: 'Consulta el estado de gobernanza, quality gates, versión y métricas del modelo ML desde ml-service.',
+      description:
+        'Consulta el estado de gobernanza, quality gates, versión y métricas del modelo ML desde ml-service.',
       schema: z.object({}),
     },
   );
@@ -144,7 +172,10 @@ export function createDataScienceTools(prisma: PrismaClient) {
           });
         }
 
-        const totalSampleSize = scenarios.reduce((acc, s) => acc + (s.sampleSize || 0), 0);
+        const totalSampleSize = scenarios.reduce(
+          (acc, s) => acc + (s.sampleSize || 0),
+          0,
+        );
 
         return JSON.stringify({
           status: 'AVAILABLE',

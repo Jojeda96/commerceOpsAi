@@ -8,7 +8,9 @@ export interface ComputeFingerprintInput {
   toolParameters?: Record<string, unknown>;
 }
 
-export function computeExecutionFingerprint(input: ComputeFingerprintInput): string {
+export function computeExecutionFingerprint(
+  input: ComputeFingerprintInput,
+): string {
   const normalized = {
     scopeHash: input.analysisScope.scopeHash,
     agents: [...input.selectedAgents].sort(),
@@ -16,5 +18,8 @@ export function computeExecutionFingerprint(input: ComputeFingerprintInput): str
     toolParameters: input.toolParameters || {},
   };
 
-  return createHash('sha256').update(JSON.stringify(normalized)).digest('hex').substring(0, 16);
+  return createHash('sha256')
+    .update(JSON.stringify(normalized))
+    .digest('hex')
+    .substring(0, 16);
 }

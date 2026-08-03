@@ -129,7 +129,6 @@ export class PrismaTraceSinkService implements ITraceSink {
     }
   }
 
-
   async onToolCompleted(payload: ToolCompletedPayload): Promise<void> {
     try {
       const existing = await this.prisma.toolExecution.findFirst({

@@ -1,4 +1,7 @@
-import { resolveAnalysisScope, createEmptyScope } from './analysis-scope.resolver';
+import {
+  resolveAnalysisScope,
+  createEmptyScope,
+} from './analysis-scope.resolver';
 import { calculateScopeHash } from './analysis-scope.hash';
 import { anomalyNoDateCase } from '../../testing/fixtures/investigations/anomaly-zscore-no-date.fixture';
 import { interstatePredictionCase } from '../../testing/fixtures/investigations/interstate-prediction-governance-shap.fixture';
@@ -24,7 +27,9 @@ describe('AnalysisScope Unit Tests (PR-01)', () => {
     });
 
     expect(scope.interstateOnly).toBe(true);
-    expect(scope.provenance.some((p: any) => p.field === 'interstateOnly')).toBe(true);
+    expect(
+      scope.provenance.some((p: any) => p.field === 'interstateOnly'),
+    ).toBe(true);
   });
 
   it('must produce identical hash for equivalent scopes regardless of property key ordering', () => {

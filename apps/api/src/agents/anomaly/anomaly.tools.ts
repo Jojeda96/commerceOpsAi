@@ -1,8 +1,16 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { PrismaService } from '../../database/prisma.service';
+import { DeliveryScopeRepository } from '../logistics/delivery-scope.repository';
+import {
+  AnalysisScope,
+  EvidenceMetric,
+  METRIC_LABELS,
+} from '@commerce-ops/shared-types';
 
 export function createAnomalyTools(prisma: PrismaService) {
+  const scopeRepo = new DeliveryScopeRepository(prisma);
+
   const detectMetricAnomalies = tool(
     async ({
       metric = 'late_delivery_rate',
@@ -15,109 +23,49 @@ export function createAnomalyTools(prisma: PrismaService) {
       interstateOnly = false,
       scopeHash = 'unspecified',
     }) => {
-      const where: any = { orderStatus: 'delivered' };
-
-      if (dateFrom || dateTo) {
-        where.orderPurchaseTimestamp = {};
-        if (dateFrom) where.orderPurchaseTimestamp.gte = new Date(dateFrom);
-        if (dateTo) where.orderPurchaseTimestamp.lte = new Date(dateTo);
-      }
-
-      if (categories && categories.length > 0) {
-        where.items = {
-          some: {
-            product: {
-              productCategoryName: { in: categories },
-            },
-          },
-        };
-      }
-
-      if (interstateOnly || (sellerStates && sellerStates.length > 0) || (customerStates && customerStates.length > 0)) {
-        const itemWhere: any = {};
-        if (sellerStates && sellerStates.length > 0) {
-          itemWhere.seller = { sellerState: { in: sellerStates } };
-        }
-        where.items = {
-          some: {
-            ...where.items?.some,
-            ...itemWhere,
-          },
-        };
-        if (customerStates && customerStates.length > 0) {
-          where.customer = { customerState: { in: customerStates } };
-        }
-      }
-
-      const orders = await prisma.olistOrder.findMany({
-        where,
-        select: {
-          orderPurchaseTimestamp: true,
-          orderDeliveredCustomerDate: true,
-          orderEstimatedDeliveryDate: true,
-          customer: { select: { customerState: true } },
-          items: {
-            select: {
-              seller: { select: { sellerState: true } },
-            },
-            take: 1,
-          },
-        },
-      });
-
-      // If interstateOnly, filter strictly in memory if needed
-      const filteredOrders = interstateOnly
-        ? orders.filter((o) => {
-            const sellerState = o.items[0]?.seller?.sellerState;
-            const custState = o.customer?.customerState;
-            return sellerState && custState && sellerState !== custState;
-          })
-        : orders;
-
-      const totalSampleSize = filteredOrders.length;
-      const appliedScope = {
-        dateFrom: dateFrom || null,
-        dateTo: dateTo || null,
-        categories: categories || null,
-        sellerStates: sellerStates || null,
-        customerStates: customerStates || null,
+      const scope: AnalysisScope = {
+        dateFrom,
+        dateTo,
+        categories,
+        sellerStates,
+        customerStates,
         interstateOnly: Boolean(interstateOnly),
+        provenance: [],
         scopeHash,
       };
+
+      const { orders, diagnostics } =
+        await scopeRepo.getScopedDeliveredOrders(scope);
+      const totalSampleSize = orders.length;
 
       if (totalSampleSize === 0) {
         return JSON.stringify({
           status: 'NO_DATA',
           reasonCode: 'NO_DELIVERED_ORDERS_IN_SCOPE',
-          appliedScope,
           scopeHash,
+          appliedScope: scope,
           rowCount: 0,
           sampleSize: 0,
+          methods: ['ROBUST_Z_SCORE'],
+          metrics: [],
           data: null,
+          diagnostics,
         });
       }
 
       const monthlyData: Record<string, { total: number; late: number }> = {};
-
-      for (const o of filteredOrders) {
-        const month = o.orderPurchaseTimestamp.toISOString().slice(0, 7); // YYYY-MM
+      for (const o of orders) {
+        const month = o.purchaseTimestamp.toISOString().slice(0, 7); // YYYY-MM
         if (!monthlyData[month]) monthlyData[month] = { total: 0, late: 0 };
         monthlyData[month].total++;
-
-        if (
-          o.orderDeliveredCustomerDate &&
-          o.orderEstimatedDeliveryDate &&
-          o.orderDeliveredCustomerDate > o.orderEstimatedDeliveryDate
-        ) {
-          monthlyData[month].late++;
-        }
+        if (o.isLate) monthlyData[month].late++;
       }
 
       const monthlyRates = Object.entries(monthlyData)
         .filter(([_, d]) => d.total >= 3)
         .map(([month, d]) => ({
           month,
-          rate: (d.late / d.total) * 100,
+          lateRatePct: Math.round((d.late / d.total) * 1000) / 10,
           sampleSize: d.total,
         }))
         .sort((a, b) => a.month.localeCompare(b.month));
@@ -126,16 +74,18 @@ export function createAnomalyTools(prisma: PrismaService) {
         return JSON.stringify({
           status: 'INSUFFICIENT_DATA',
           reasonCode: 'MINIMUM_THREE_MONTHS_REQUIRED',
-          appliedScope,
           scopeHash,
+          appliedScope: scope,
           rowCount: totalSampleSize,
           sampleSize: totalSampleSize,
-          monthsAvailable: monthlyRates.length,
-          timeSeries: monthlyRates,
+          methods: ['ROBUST_Z_SCORE'],
+          metrics: [],
+          data: null,
+          diagnostics,
         });
       }
 
-      const rates = monthlyRates.map((m) => m.rate);
+      const rates = monthlyRates.map((m) => m.lateRatePct);
       const sorted = [...rates].sort((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
       const median =
@@ -152,35 +102,111 @@ export function createAnomalyTools(prisma: PrismaService) {
           : (sortedDeviations[madMid - 1] + sortedDeviations[madMid]) / 2;
 
       const scaledMad = 1.4826 * mad;
-      const timeSeriesWithZScore = monthlyRates.map((m) => {
-        const robustZScore = scaledMad > 0 ? (m.rate - median) / scaledMad : 0;
+      const series = monthlyRates.map((m) => {
+        const robustZScore =
+          scaledMad > 0 ? (m.lateRatePct - median) / scaledMad : 0;
+        const roundedZ = Math.round(robustZScore * 100) / 100;
         return {
-          ...m,
-          rate: Math.round(m.rate * 10) / 10,
-          robustZScore: Math.round(robustZScore * 100) / 100,
-          isAnomaly: Math.abs(robustZScore) > threshold,
+          month: m.month,
+          lateRatePct: m.lateRatePct,
+          sampleSize: m.sampleSize,
+          robustZScore: roundedZ,
+          isAnomaly: Math.abs(roundedZ) >= threshold,
         };
       });
 
-      const anomaliesDetected = timeSeriesWithZScore.filter((a) => a.isAnomaly);
+      const anomalies = series.filter((s) => s.isAnomaly);
+      const medianMonthlyLateRatePct = Math.round(median * 10) / 10;
+      const roundedMad = Math.round(mad * 100) / 100;
+
+      const metrics: EvidenceMetric[] = [
+        {
+          key: 'anomaly.series.months_evaluated',
+          label:
+            METRIC_LABELS['anomaly.series.months_evaluated'] ||
+            'Meses evaluados',
+          value: monthlyRates.length,
+          unit: 'COUNT',
+          sampleSize: monthlyRates.length,
+          sourcePath: '$.data.monthsEvaluated',
+          aggregation: 'COUNT',
+        },
+        {
+          key: 'anomaly.series.threshold',
+          label: METRIC_LABELS['anomaly.series.threshold'] || 'Umbral Z-Score',
+          value: threshold,
+          unit: 'ROBUST_Z_SCORE',
+          sourcePath: '$.data.threshold',
+        },
+        {
+          key: 'anomaly.series.median_monthly_late_rate_pct',
+          label:
+            METRIC_LABELS['anomaly.series.median_monthly_late_rate_pct'] ||
+            'Mediana mensual',
+          value: medianMonthlyLateRatePct,
+          unit: 'PERCENT',
+          sampleSize: monthlyRates.length,
+          sourcePath: '$.data.medianMonthlyLateRatePct',
+          aggregation: 'MEDIAN',
+        },
+        {
+          key: 'anomaly.series.mad',
+          label: METRIC_LABELS['anomaly.series.mad'] || 'MAD',
+          value: roundedMad,
+          unit: 'PERCENT',
+          sampleSize: monthlyRates.length,
+          sourcePath: '$.data.mad',
+        },
+      ];
+
+      for (let i = 0; i < anomalies.length; i++) {
+        const a = anomalies[i];
+        metrics.push({
+          key: `anomaly.point.${a.month}.late_rate_pct`,
+          label: `Tasa atraso ${a.month}`,
+          value: a.lateRatePct,
+          unit: 'PERCENT',
+          sampleSize: a.sampleSize,
+          sourcePath: `$.data.anomalies[${i}].lateRatePct`,
+        });
+        metrics.push({
+          key: `anomaly.point.${a.month}.sample_size`,
+          label: `Muestra ${a.month}`,
+          value: a.sampleSize,
+          unit: 'COUNT',
+          sampleSize: a.sampleSize,
+          sourcePath: `$.data.anomalies[${i}].sampleSize`,
+        });
+        metrics.push({
+          key: `anomaly.point.${a.month}.robust_z_score`,
+          label: `Robust Z ${a.month}`,
+          value: a.robustZScore,
+          unit: 'ROBUST_Z_SCORE',
+          sampleSize: a.sampleSize,
+          sourcePath: `$.data.anomalies[${i}].robustZScore`,
+          aggregation: 'ROBUST_Z_SCORE',
+        });
+      }
 
       return JSON.stringify({
         status: 'AVAILABLE',
-        metric,
-        method: 'ROBUST_Z_SCORE',
-        threshold,
-        appliedScope,
         scopeHash,
+        appliedScope: scope,
         rowCount: totalSampleSize,
         sampleSize: totalSampleSize,
+        methods: ['ROBUST_Z_SCORE'],
+        metrics,
         data: {
-          totalMonths: monthlyRates.length,
-          median: Math.round(median * 10) / 10,
-          mad: Math.round(mad * 100) / 100,
-          anomaliesDetected: anomaliesDetected.length,
-          anomalies: anomaliesDetected,
-          timeSeries: timeSeriesWithZScore,
+          method: 'ROBUST_Z_SCORE',
+          threshold,
+          monthsEvaluated: monthlyRates.length,
+          medianMonthlyLateRatePct,
+          mad: roundedMad,
+          anomalyCount: anomalies.length,
+          anomalies,
+          series,
         },
+        diagnostics,
       });
     },
     {

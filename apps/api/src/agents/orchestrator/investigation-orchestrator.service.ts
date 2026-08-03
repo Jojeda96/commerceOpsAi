@@ -171,7 +171,10 @@ export class InvestigationOrchestratorService {
                 resultSummary:
                   typeof toolTrace.resultSummary === 'string'
                     ? toolTrace.resultSummary.substring(0, 1000)
-                    : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+                    : JSON.stringify(toolTrace.resultSummary).substring(
+                        0,
+                        1000,
+                      ),
               },
             });
           } else {
@@ -184,7 +187,10 @@ export class InvestigationOrchestratorService {
                 resultSummary:
                   typeof toolTrace.resultSummary === 'string'
                     ? toolTrace.resultSummary.substring(0, 1000)
-                    : JSON.stringify(toolTrace.resultSummary).substring(0, 1000),
+                    : JSON.stringify(toolTrace.resultSummary).substring(
+                        0,
+                        1000,
+                      ),
                 status: toolTrace.status || 'COMPLETED',
                 durationMs: toolTrace.durationMs,
                 errorMessage: toolTrace.errorMessage,
@@ -220,14 +226,23 @@ export class InvestigationOrchestratorService {
               investigationId,
               agentRunId: agentRunId || null,
               agentName: finding.agent || finding.agentName || 'UNKNOWN',
-              findingKey: (finding as any).findingKey || `${finding.agent || (finding as any).agentName}:${finding.title}`,
+              findingKey:
+                finding.findingKey ||
+                `${finding.agent || finding.agentName}:${finding.title}`,
               title: finding.title,
               description: finding.description,
               findingType: finding.findingType || 'INSIGHT',
-              confidence: finding.confidence !== undefined ? finding.confidence : null,
-              confidenceKind: (finding as any).confidenceDetails?.kind || 'EVIDENCE_QUALITY',
-              confidenceRationale: (finding as any).confidenceDetails?.rationaleCodes || undefined,
-              auditStatus: (finding as any).auditStatus || (finalState.criticDecision === 'REJECTED' ? 'REJECTED' : 'APPROVED'),
+              confidence:
+                finding.confidence !== undefined ? finding.confidence : null,
+              confidenceKind:
+                finding.confidenceDetails?.kind || 'EVIDENCE_QUALITY',
+              confidenceRationale:
+                finding.confidenceDetails?.rationaleCodes || undefined,
+              auditStatus:
+                finding.auditStatus ||
+                (finalState.criticDecision === 'REJECTED'
+                  ? 'REJECTED'
+                  : 'APPROVED'),
               iteration: finding.iteration || finalState.iteration || 1,
               supersedesFindingId: finding.supersedesFindingId,
               status: finding.status || 'ACTIVE',
@@ -237,6 +252,15 @@ export class InvestigationOrchestratorService {
                 : undefined,
               numericClaimsJson: finding.numericClaims
                 ? finding.numericClaims
+                : undefined,
+              methodClaimsJson: finding.methodClaims
+                ? finding.methodClaims
+                : undefined,
+              auditRationaleJson: finding.auditMessages
+                ? finding.auditMessages
+                : undefined,
+              evidenceQualityJson: finding.evidenceQuality
+                ? finding.evidenceQuality
                 : undefined,
             },
           });
@@ -263,8 +287,12 @@ export class InvestigationOrchestratorService {
                       ? ev.resultSummary
                       : JSON.stringify(ev.resultSummary),
                   status: (ev as any).status || 'AVAILABLE',
-                  scopeHash: (ev as any).scopeHash || (finalState.analysisScope?.scopeHash),
-                  appliedScopeJson: (ev as any).appliedScope ? ((ev as any).appliedScope as any) : (finalState.analysisScope as any),
+                  scopeHash:
+                    (ev as any).scopeHash ||
+                    finalState.analysisScope?.scopeHash,
+                  appliedScopeJson: (ev as any).appliedScope
+                    ? (ev as any).appliedScope
+                    : (finalState.analysisScope as any),
                   reasonCode: (ev as any).reasonCode,
                   rawReference: JSON.stringify(ev.parameters || {}),
                   metricsJson: ev.metrics ? (ev.metrics as any) : undefined,
@@ -312,6 +340,13 @@ export class InvestigationOrchestratorService {
               title: rec.title,
               description: rec.description,
               priority: rec.priority,
+              kind: rec.kind || 'HYPOTHESIS_TO_TEST',
+              evidenceBasisJson: rec.evidenceBasis
+                ? (rec.evidenceBasis as any)
+                : undefined,
+              validationRequirementsJson: rec.validationRequirements
+                ? (rec.validationRequirements as any)
+                : undefined,
               expectedImpact: rec.expectedImpact,
               expectedImpactClaimsJson: rec.expectedImpactClaims
                 ? (rec.expectedImpactClaims as any)

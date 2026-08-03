@@ -1,17 +1,27 @@
 import { InvestigationCapability } from './capability-agent-map';
 
-export function classifyCapabilities(question: string): InvestigationCapability[] {
+export function classifyCapabilities(
+  question: string,
+): InvestigationCapability[] {
   const capabilities = new Set<InvestigationCapability>();
   const text = question.toLowerCase();
 
   // Anomaly regex pattern
-  if (/z[- ]?score|desviaci[oó]n|pico[s]? an[oó]malo[s]?|anomal[ií]a|outlier/i.test(text)) {
+  if (
+    /z[- ]?score|desviaci[oó]n|pico[s]? an[oó]malo[s]?|anomal[ií]a|outlier/i.test(
+      text,
+    )
+  ) {
     capabilities.add('DESCRIPTIVE_LOGISTICS');
     capabilities.add('ANOMALY_DETECTION');
   }
 
   // Predictive ML & Governance & SHAP regex patterns
-  if (/probabilidad predictiva|predicci[oó]n|riesgo de atraso|predecir/i.test(text)) {
+  if (
+    /probabilidad predictiva|predicci[oó]n|riesgo de atraso|predecir/i.test(
+      text,
+    )
+  ) {
     capabilities.add('HISTORICAL_CONTEXT');
     capabilities.add('ML_PREDICTION');
   }
@@ -20,13 +30,19 @@ export function classifyCapabilities(question: string): InvestigationCapability[
     capabilities.add('MODEL_GOVERNANCE');
   }
 
-  if (/shap|factor(?:es)? de impacto|explicaci[oó]n del modelo|impacto de flete/i.test(text)) {
+  if (
+    /shap|factor(?:es)? de impacto|explicaci[oó]n del modelo|impacto de flete/i.test(
+      text,
+    )
+  ) {
     capabilities.add('LOCAL_EXPLANATION');
   }
 
   // General logistics pattern if not already set
   if (
-    /entrega|atraso|flete|env[ií]o|log[ií]stica|sla|retraso|interestatal/i.test(text) &&
+    /entrega|atraso|flete|env[ií]o|log[ií]stica|sla|retraso|interestatal/i.test(
+      text,
+    ) &&
     capabilities.size === 0
   ) {
     capabilities.add('DESCRIPTIVE_LOGISTICS');
