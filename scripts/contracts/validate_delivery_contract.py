@@ -14,6 +14,8 @@ from pathlib import Path
 import joblib
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "apps" / "ml-service"))
+
 CONTRACT_PATH = PROJECT_ROOT / "data" / "contracts" / "delivery_feature_contract.v3.json"
 BUNDLE_PATH = PROJECT_ROOT / "data" / "models" / "delivery_delay_champion.joblib"
 METRICS_PATH = PROJECT_ROOT / "data" / "models" / "delivery_delay_metrics.json"

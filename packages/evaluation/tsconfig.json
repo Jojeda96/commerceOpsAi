@@ -4,7 +4,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@commerce-ops/shared-types": ["../shared-types/dist/index.d.ts"]
+      "@commerce-ops/shared-types": ["../shared-types/src/index.ts"]
     }
   },
   "include": ["src/**/*"]
