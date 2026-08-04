@@ -34,5 +34,8 @@ export function sanitizeAnalyticalText(text: string): string {
   // 4. Remove hex hashes (e.g., f3ec52388020d442)
   sanitized = sanitized.replace(/\b[0-9a-f]{12,64}\b/gi, ' ');
 
+  // 5. Remove quoted text snippets (e.g., customer review quotes in "...")
+  sanitized = sanitized.replace(/"[^"]*"/g, ' ');
+
   return sanitized;
 }

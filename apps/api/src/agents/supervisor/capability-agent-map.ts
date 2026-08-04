@@ -9,6 +9,7 @@ export type InvestigationCapability =
   | 'LOCAL_EXPLANATION'
   | 'SALES_ANALYSIS'
   | 'CUSTOMER_EXPERIENCE_ANALYSIS'
+  | 'REVIEW_COMPLAINT_ANALYSIS'
   | 'SELLER_ANALYSIS';
 
 export function mapCapabilitiesToAgents(
@@ -36,6 +37,7 @@ export function mapCapabilitiesToAgents(
         agents.add('SALES');
         break;
       case 'CUSTOMER_EXPERIENCE_ANALYSIS':
+      case 'REVIEW_COMPLAINT_ANALYSIS':
         agents.add('CUSTOMER_EXPERIENCE');
         break;
       case 'SELLER_ANALYSIS':

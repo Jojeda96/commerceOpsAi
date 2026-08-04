@@ -34,6 +34,10 @@ export const CommerceOpsAnnotation = Annotation.Root({
     value: (_, next) => next,
     default: () => [],
   }),
+  selectedAgents: Annotation<AgentName[]>({
+    value: (_, next) => next,
+    default: () => [],
+  }),
   completedAgents: Annotation<AgentName[]>({
     value: (prev, next) => [...new Set([...prev, ...next])],
     default: () => [],
@@ -120,6 +124,23 @@ export const CommerceOpsAnnotation = Annotation.Root({
   }),
   modelPredictions: Annotation<any[]>({
     value: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+  requiredCapabilities: Annotation<any[]>({
+    value: (_, next) => next ?? [],
+    default: () => [],
+  }),
+  requiredAnswerComponents: Annotation<any[]>({
+    value: (_, next) => next ?? [],
+    default: () => [],
+  }),
+  answerCoverage: Annotation<any[]>({
+    value: (prev, next) => {
+      const mergedMap = new Map<string, any>();
+      for (const item of prev) mergedMap.set(item.component, item);
+      for (const item of next) mergedMap.set(item.component, item);
+      return Array.from(mergedMap.values());
+    },
     default: () => [],
   }),
 });

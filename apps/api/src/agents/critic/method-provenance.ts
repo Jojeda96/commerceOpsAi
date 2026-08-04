@@ -8,6 +8,9 @@ export const TOOL_METHOD_REGISTRY: Record<string, AnalysisMethod[]> = {
   detect_metric_anomalies: ['ROBUST_Z_SCORE'],
   predict_delivery_delay: ['MODEL_INFERENCE'],
   explain_delivery_delay: ['LOCAL_SHAP', 'LINEAR_CONTRIBUTION'],
+  analyze_review_complaints: ['REVIEW_LEXICON_AGGREGATION'],
+  get_rating_summary: ['RATING_DISTRIBUTION', 'DESCRIPTIVE_AGGREGATION'],
+  search_reviews_semantic: ['SEMANTIC_REVIEW_RETRIEVAL'],
 };
 
 export interface MethodProvenanceViolation {

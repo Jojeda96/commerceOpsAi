@@ -17,6 +17,8 @@
     "build:web": "turbo run build --filter=web",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
     "db:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
+    "db:migrate:status": "prisma migrate status --schema=prisma/schema.prisma",
+    "db:schema:check": "node scripts/check-schema-migration-parity.js",
     "db:generate": "npm run db:generate --workspace=apps/api",
     "db:seed": "npx ts-node --transpile-only -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/import-olist.ts",
     "db:seed:ci": "npx ts-node --transpile-only -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/seed-ci-fixtures.ts",

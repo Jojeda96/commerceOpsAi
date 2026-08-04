@@ -5,6 +5,7 @@ import { StreamingService } from '../../streaming/streaming.service';
 import { runAgentWithTrace } from '../../observability/agent-runner';
 import { extractModelUsage } from '../../observability/usage';
 import { validateRecommendation } from './recommendation-validator';
+import { validateRecommendationSupport } from './recommendation-support-policy';
 
 export function createStrategyNode(streaming: StreamingService) {
   return async (state: CommerceOpsStateType) => {
@@ -150,19 +151,43 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
           });
         }
 
-        // Pass through recommendation validator
+        // Pass through recommendation validator & support policy (V4.4)
         const validatedRecs: Recommendation[] = [];
         for (const raw of rawRecs) {
           const valRes = validateRecommendation(raw, findings, evidence);
           validatedRecs.push(valRes.recommendation);
+        }
+
+        const answeredComponents = (state.answerCoverage || [])
+          .filter((c) => c.status === 'ANSWERED')
+          .map((c) => c.component);
+        const unavailableComponents = (state.answerCoverage || [])
+          .filter(
+            (c) =>
+              c.status === 'UNAVAILABLE_WITH_REASON' ||
+              c.status === 'UNANSWERED',
+          )
+          .map((c) => c.component);
+
+        const supportValidation = validateRecommendationSupport({
+          recommendations: validatedRecs as any[],
+          findings,
+          answeredComponents,
+          unavailableComponents,
+        });
+
+        const finalRecs =
+          supportValidation.acceptedRecommendations as Recommendation[];
+
+        for (const rec of finalRecs) {
           streaming.emit(investigationId, 'recommendation.created', {
             agent: 'STRATEGY',
-            recommendation: valRes.recommendation,
+            recommendation: rec,
           });
         }
 
         return {
-          result: validatedRecs,
+          result: finalRecs,
           inputTokens,
           outputTokens,
         };

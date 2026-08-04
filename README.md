@@ -5,10 +5,10 @@
 
 CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logística, experiencia de cliente, rendimiento de vendedores, detección de anomalías, machine learning y estrategia empresarial. Un **Evidence Critic** audita y evalúa la evidencia numérica antes de generar el informe final.
 
-### 📋 Estado del Proyecto (V4.3 Final Closure)
+### 📋 Estado del Proyecto (V4.4 Final Closure Validation)
 
-> **Feature-Complete Portfolio MVP — Maintenance-Only Mode.**  
-> El repositorio se encuentra verificado, auditado y congelado para demostraciones técnicas y entrevistas. No se agregarán nuevas capacidades.
+> **Final closure validation in progress.**  
+> **Do not treat the repository as release-complete until all V4.4 required checks pass.**
 
 | Capacidad | Estado verificado | Evidencia |
 |---|---|---|

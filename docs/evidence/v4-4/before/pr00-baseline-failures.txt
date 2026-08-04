@@ -1,0 +1,30 @@
+=== PR-00 BASELINE FAILURE EVIDENCE LOG ===
+Date: 2026-08-04
+Commit Base: 29f401c8f2f5d968c1ac4a00d7aeb6cc626f5046
+Branch: fix/v4-4-absolute-final-closure
+
+1. review-question-routing.spec.ts:
+FAIL apps/api/test/v4-4/review-question-routing.spec.ts
+  ● PR-00 / V4.4: Review Question Routing & Intent Contract › should route review complaint questions strictly to CUSTOMER_EXPERIENCE capability and agent
+    expect(received).toEqual(expected)
+    - Expected: ["REVIEW_COMPLAINT_ANALYSIS"]
+    + Received: ["DESCRIPTIVE_LOGISTICS"]
+
+2. review-complaint-analysis.spec.ts:
+FAIL apps/api/test/v4-4/review-complaint-analysis.spec.ts
+  ● TS2307: Cannot find module '../../src/agents/customer-experience/review-text-normalizer'
+  ● TS2307: Cannot find module '../../src/agents/customer-experience/review-complaint-taxonomy'
+
+3. question-coverage-audit.spec.ts:
+FAIL apps/api/test/v4-4/question-coverage-audit.spec.ts
+  ● TS2307: Cannot find module '../../src/agents/critic/question-coverage'
+
+4. recommendation-support-policy.spec.ts:
+FAIL apps/api/test/v4-4/recommendation-support-policy.spec.ts
+  ● TS2307: Cannot find module '../../src/agents/strategy/recommendation-support-policy'
+
+5. schema-migration-parity.spec.ts:
+FAIL apps/api/test/v4-4/schema-migration-parity.spec.ts
+  ● Script check-schema-migration-parity.js failed: resolved_scope_json missing in applied migrations.
+
+Conclusion: All PR-00 contracts fail as expected on commit base. PR-00 criteria met.

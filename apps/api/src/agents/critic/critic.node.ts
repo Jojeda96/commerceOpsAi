@@ -40,10 +40,17 @@ export function createCriticNode(streaming: StreamingService) {
 
     streaming.emit(investigationId, 'agent.started', { agent: 'CRITIC' });
 
-    // Deterministic audit checks (V4.2)
-    const audit = performDeterministicAudit(findings, evidence);
+    // Deterministic audit checks (V4.4)
+    const audit = performDeterministicAudit({
+      userQuestion: state.userQuestion,
+      requiredCapabilities: state.requiredCapabilities || [],
+      requiredAnswerComponents: state.requiredAnswerComponents || [],
+      selectedAgents: state.selectedAgents || [],
+      findings,
+      evidence,
+      answerCoverage: state.answerCoverage || [],
+    });
 
-    // Merge per-finding audit results into findings
     const perFindingMap = new Map(
       audit.perFindingResults.map((r) => [r.findingId, r]),
     );
@@ -158,7 +165,7 @@ Responde estrictamente en formato JSON:
           finalDecision === 'REQUIRES_MORE_ANALYSIS' &&
           requestedAgents.length === 0
         ) {
-          const affectedAgents = new Set<AgentName>();
+          const affectedAgents = new Set<AgentName>(audit.missingAgents || []);
           for (const f of updatedFindings) {
             if (audit.perFinding[f.id]?.criticalErrors?.length > 0) {
               affectedAgents.add(f.agent || 'LOGISTICS');
