@@ -1,4 +1,5 @@
 const { execSync } = require('child_process');
+const path = require('path');
 
 function checkSchemaMigrationParity() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -8,11 +9,12 @@ function checkSchemaMigrationParity() {
     process.exit(1);
   }
 
+  const schemaPath = path.resolve(__dirname, '../prisma/schema.prisma');
   console.log('Checking database schema vs prisma/schema.prisma parity...');
 
   try {
     const output = execSync(
-      `npx prisma migrate diff --from-url "${databaseUrl}" --to-schema-datamodel prisma/schema.prisma --exit-code`,
+      `npx prisma migrate diff --from-url "${databaseUrl}" --to-schema-datamodel "${schemaPath}" --exit-code`,
       { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
     );
 
