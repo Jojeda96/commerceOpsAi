@@ -2,12 +2,13 @@ name: CommerceOps AI - CI Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, fix/* ]
   pull_request:
     branches: [ main, develop ]
 
 jobs:
-  python-tests:
+  python-ml:
+    name: Python ML Service & Contracts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +41,141 @@ jobs:
         run: |
           PYTHONPATH=.:apps/ml-service python -m pytest tests/contracts tests/ml apps/ml-service/tests -v
 
+  typescript-static:
+    name: TypeScript Static Checks & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Run Workspace Build
+        run: npm run build
+
+      - name: Run Linter
+        run: npm run lint
+
+  migration-clean-database:
+    name: Clean Database Migration & Schema Parity
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: commerce_ops_db
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5434/commerce_ops_db?schema=public"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5434 -U postgres && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Run Database Migrations (Clean DB)
+        run: npm run db:migrate:deploy
+
+      - name: Check Migration Status
+        run: npm run db:migrate:status
+
+      - name: Check Schema Parity (0 Drift)
+        run: npm run db:schema:check
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
   postgres-integration:
+    name: Integration Tests & Snapshots
+    needs: migration-clean-database
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: commerce_ops_db
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5434/commerce_ops_db?schema=public"
+      SNAPSHOT_VERIFY_STRICT: "true"
+      SNAPSHOT_EXPECTATION: "EMPTY_ALLOWED"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5434 -U postgres && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Run Database Migrations
+        run: npm run db:migrate:deploy
+
+      - name: Check Schema Parity
+        run: npm run db:schema:check
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Seed Database Fixtures
+        run: npm run db:seed:ci
+
+      - name: Run Snapshot Readiness Diagnostics
+        run: npm run snapshots:verify
+
+      - name: Run TypeScript Unit & Integration Tests
+        run: npm run test
+
+  v4-4-acceptance:
+    name: V4.4 Acceptance Matrix E2E
+    needs: postgres-integration
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -89,17 +224,5 @@ jobs:
       - name: Seed Database Fixtures
         run: npm run db:seed:ci
 
-      - name: Run Snapshot Readiness Diagnostics
-        run: npm run snapshots:verify
-
-      - name: Run Workspace Build
-        run: npm run build
-
-      - name: Run Linter
-        run: npm run lint
-
-      - name: Run TypeScript Unit & Integration Tests
-        run: npm run test
-
-      - name: Run E2E Quality Gates
+      - name: Run Required E2E Acceptance Matrix
         run: npm run test:e2e
