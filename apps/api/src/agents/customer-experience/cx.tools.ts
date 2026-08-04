@@ -2,7 +2,36 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { PrismaService } from '../../database/prisma.service';
 
+import { ReviewComplaintRepository } from './review-complaint.repository';
+
 export function createCustomerExperienceTools(prisma: PrismaService) {
+  const repository = new ReviewComplaintRepository(prisma);
+
+  const analyzeReviewComplaints = tool(
+    async (input) => {
+      const envelope = await repository.analyzeReviewComplaints(input as any);
+      return JSON.stringify(envelope);
+    },
+    {
+      name: 'analyze_review_complaints',
+      description:
+        'Analiza determinísticamente quejas en reseñas de clientes agrupadas por temas (DELIVERY_DELAY, PACKAGE_DAMAGE) y calcula frecuencias, porcentajes y ejemplos reales.',
+      schema: z.object({
+        topics: z
+          .array(z.enum(['DELIVERY_DELAY', 'PACKAGE_DAMAGE']))
+          .min(1)
+          .describe('Temas a analizar'),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        categories: z.array(z.string()).optional(),
+        minimumReviewScore: z.number().min(1).max(5).optional(),
+        maximumReviewScore: z.number().min(1).max(5).optional(),
+        examplesPerSubtheme: z.number().min(1).max(5).default(3),
+        scopeHash: z.string().describe('Scope hash asignado inmutable'),
+      }),
+    },
+  );
+
   const getRatingSummary = tool(
     async ({ dateFrom, dateTo, category }) => {
       const where: any = {};
@@ -148,5 +177,5 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
     },
   );
 
-  return [getRatingSummary, searchReviewsSemantic];
+  return [analyzeReviewComplaints, getRatingSummary, searchReviewsSemantic];
 }

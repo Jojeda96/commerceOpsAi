@@ -8,7 +8,8 @@ export type MetricUnit =
   | 'ROBUST_Z_SCORE'
   | 'KILOMETERS'
   | 'BRL'
-  | 'BOOLEAN';
+  | 'BOOLEAN'
+  | 'SCORE';
 
 export type AnalysisMethod =
   | 'DESCRIPTIVE_AGGREGATION'
@@ -17,7 +18,10 @@ export type AnalysisMethod =
   | 'ROBUST_Z_SCORE'
   | 'MODEL_INFERENCE'
   | 'LOCAL_SHAP'
-  | 'LINEAR_CONTRIBUTION';
+  | 'LINEAR_CONTRIBUTION'
+  | 'REVIEW_LEXICON_AGGREGATION'
+  | 'SEMANTIC_REVIEW_RETRIEVAL'
+  | 'RATING_DISTRIBUTION';
 
 export interface EvidenceMetric {
   key: string;
