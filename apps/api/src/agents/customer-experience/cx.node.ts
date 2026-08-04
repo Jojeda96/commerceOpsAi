@@ -1,4 +1,3 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
@@ -7,8 +6,9 @@ import {
   runAgentWithTrace,
   executeToolWithTrace,
 } from '../../observability/agent-runner';
-import { extractModelUsage } from '../../observability/usage';
-import { ToolExecutionTrace } from '@commerce-ops/shared-types';
+import { ToolExecutionTrace, Evidence, AnswerCoverageItem } from '@commerce-ops/shared-types';
+import { createEvidenceFromToolEnvelope } from './cx-evidence-builder';
+import { buildReviewComplaintFinding } from './build-review-complaint-finding';
 
 function extractCategory(question: string): string | undefined {
   const categoryPatterns = [
@@ -73,15 +73,19 @@ export function createCustomerExperienceNode(
   streaming: StreamingService,
 ) {
   return async (state: CommerceOpsStateType) => {
-    const { investigationId, userQuestion } = state;
+    const { investigationId, userQuestion, analysisScope, requiredAnswerComponents = [] } = state;
     const iteration = state.iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const scopeHash = analysisScope?.scopeHash || 'global-scope';
 
     streaming.emit(investigationId, 'agent.started', {
       agent: 'CUSTOMER_EXPERIENCE',
     });
 
     const tools = createCustomerExperienceTools(prisma);
+    const analyzeComplaintsTool = tools.find(
+      (t) => t.name === 'analyze_review_complaints',
+    )!;
     const ratingTool = tools.find((t) => t.name === 'get_rating_summary')!;
     const searchTool = tools.find((t) => t.name === 'search_reviews_semantic')!;
     const detectedCategory = extractCategory(userQuestion);
@@ -92,184 +96,163 @@ export function createCustomerExperienceNode(
       modelName,
       execute: async ({ localRunId }) => {
         const toolTraces: ToolExecutionTrace[] = [];
-        const evidenceItems: any[] = [];
+        const evidenceItems: Evidence[] = [];
 
-        // Tool 1: Rating summary
-        const ratingParams = {
+        // 1. Tool 1: Deterministic review complaint aggregation tool
+        const complaintParams = {
+          topics: ['DELIVERY_DELAY', 'PACKAGE_DAMAGE'],
           dateFrom: state.filters.dateFrom,
           dateTo: state.filters.dateTo,
-          category: detectedCategory,
-        };
-        streaming.emit(investigationId, 'tool.started', {
-          agent: 'CUSTOMER_EXPERIENCE',
-          tool: 'get_rating_summary',
-        });
-
-        const { result: ratingResult, trace: ratingTrace } =
-          await executeToolWithTrace({
-            localAgentRunId: localRunId,
-            agentName: 'CUSTOMER_EXPERIENCE',
-            iteration,
-            toolName: 'get_rating_summary',
-            parameters: ratingParams,
-            execute: () => ratingTool.invoke(ratingParams),
-          });
-        toolTraces.push(ratingTrace);
-        streaming.emit(investigationId, 'tool.completed', {
-          agent: 'CUSTOMER_EXPERIENCE',
-          tool: 'get_rating_summary',
-        });
-
-        evidenceItems.push({
-          id: `ev-cx-rating-${Date.now()}`,
-          localAgentRunId: localRunId,
-          localToolExecutionId: ratingTrace.localExecutionId,
-          sourceType: 'TOOL_EXECUTION' as const,
-          agentName: 'CUSTOMER_EXPERIENCE' as const,
-          iteration,
-          toolName: 'get_rating_summary',
-          parameters: ratingParams,
-          resultSummary: ratingResult,
-          generatedAt: new Date().toISOString(),
-        });
-
-        // Tool 2: Semantic review search
-        const reviewScores =
-          /1\s*estrella|una\s*estrella|baja\s*calificaci[oó]n|atraso|retraso/i.test(
-            userQuestion,
-          )
-            ? [1, 2]
-            : undefined;
-
-        const searchParams = {
-          query: userQuestion,
-          topK: 5,
-          reviewScores,
           categories: detectedCategory
             ? [detectedCategory]
             : state.filters.categories,
-          dateFrom: state.filters.dateFrom,
-          dateTo: state.filters.dateTo,
+          scopeHash,
         };
 
         streaming.emit(investigationId, 'tool.started', {
           agent: 'CUSTOMER_EXPERIENCE',
-          tool: 'search_reviews_semantic',
+          tool: 'analyze_review_complaints',
         });
 
-        const { result: searchResult, trace: searchTrace } =
+        const { result: complaintResultStr, trace: complaintTrace } =
           await executeToolWithTrace({
             localAgentRunId: localRunId,
             agentName: 'CUSTOMER_EXPERIENCE',
             iteration,
-            toolName: 'search_reviews_semantic',
-            parameters: searchParams,
-            execute: () => searchTool.invoke(searchParams),
+            toolName: 'analyze_review_complaints',
+            parameters: complaintParams,
+            execute: () => analyzeComplaintsTool.invoke(complaintParams as any),
           });
-        toolTraces.push(searchTrace);
+        toolTraces.push(complaintTrace);
+
         streaming.emit(investigationId, 'tool.completed', {
           agent: 'CUSTOMER_EXPERIENCE',
-          tool: 'search_reviews_semantic',
+          tool: 'analyze_review_complaints',
         });
 
-        evidenceItems.push({
-          id: `ev-cx-semantic-${Date.now()}`,
+        const complaintEvidence = createEvidenceFromToolEnvelope({
+          id: `ev-cx-complaints-${Date.now()}`,
           localAgentRunId: localRunId,
-          localToolExecutionId: searchTrace.localExecutionId,
-          sourceType: 'TOOL_EXECUTION' as const,
-          agentName: 'CUSTOMER_EXPERIENCE' as const,
+          localToolExecutionId: complaintTrace.localExecutionId,
+          agentName: 'CUSTOMER_EXPERIENCE',
           iteration,
-          toolName: 'search_reviews_semantic',
-          parameters: searchParams,
-          resultSummary: searchResult,
-          generatedAt: new Date().toISOString(),
+          toolName: 'analyze_review_complaints',
+          scopeHash,
+          appliedScope: analysisScope,
+          parameters: complaintParams,
+          rawResultString: complaintResultStr,
         });
+        evidenceItems.push(complaintEvidence);
 
-        let nlpMethodUsed = 'búsqueda semántica NLP';
+        let parsedComplaintEnvelope: any = {};
         try {
-          const parsedSearch = JSON.parse(searchResult);
-          if (parsedSearch.method) nlpMethodUsed = parsedSearch.method;
+          parsedComplaintEnvelope = JSON.parse(complaintResultStr);
         } catch (e) {
-          console.warn('[CXNode] Error parseando searchResult:', e);
+          console.warn('[CXNode] Failed to parse complaint envelope:', e);
         }
 
-        const model = new ChatOpenAI({
-          modelName,
-          temperature: 0.2,
-          apiKey: process.env.OPENAI_API_KEY,
-        });
+        // 2. Tool 2: get_rating_summary (optional or if required)
+        let ratingEvidence: Evidence | undefined = undefined;
+        if (requiredAnswerComponents.includes('REVIEW_RATING_CONTEXT')) {
+          const ratingParams = {
+            dateFrom: state.filters.dateFrom,
+            dateTo: state.filters.dateTo,
+            category: detectedCategory,
+          };
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'CUSTOMER_EXPERIENCE',
+            tool: 'get_rating_summary',
+          });
 
-        const categoryContext = detectedCategory
-          ? `Categoría filtrada: "${detectedCategory}".`
-          : 'Sin filtro de categoría (datos globales del dataset).';
+          const { result: ratingResultStr, trace: ratingTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'CUSTOMER_EXPERIENCE',
+              iteration,
+              toolName: 'get_rating_summary',
+              parameters: ratingParams,
+              execute: () => ratingTool.invoke(ratingParams),
+            });
+          toolTraces.push(ratingTrace);
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'CUSTOMER_EXPERIENCE',
+            tool: 'get_rating_summary',
+          });
 
-        const prompt = `Eres el Customer Experience Agent de CommerceOps AI.
-Pregunta del usuario: "${userQuestion}"
-${categoryContext}
+          ratingEvidence = createEvidenceFromToolEnvelope({
+            id: `ev-cx-rating-${Date.now()}`,
+            localAgentRunId: localRunId,
+            localToolExecutionId: ratingTrace.localExecutionId,
+            agentName: 'CUSTOMER_EXPERIENCE',
+            iteration,
+            toolName: 'get_rating_summary',
+            scopeHash,
+            appliedScope: analysisScope,
+            parameters: ratingParams,
+            rawResultString: ratingResultStr,
+          });
+          evidenceItems.push(ratingEvidence);
+        }
 
-Métricas deterministas de satisfacción:
-${ratingResult}
-
-Búsqueda semántica de reseñas (Método: '${nlpMethodUsed}'):
-${searchResult}
-
-Genera un hallazgo técnico objetivo en formato JSON.
-REGLAS OBLIGATORIAS:
-- La descripción DEBE analizar la distribución de estrellas (1-5) Y TAMBIÉN citar directamente al menos 1 o 2 comentarios reales en portugués recuperados por la búsqueda semántica, indicando sus puntajes de similitud semántica.
-
-Estructura JSON requerida:
-{
-  "title": "Análisis de satisfacción y búsqueda semántica de reseñas (NLP)",
-  "description": "Análisis cuantitativo de estrellas y citas de reseñas recuperadas por similitud semántica...",
-  "confidence": 0.94,
-  "findingType": "CUSTOMER_SATISFACTION"
-}`;
-
-        let title = 'Análisis de satisfacción y calificaciones completado';
-        let description =
-          'Se evaluó la distribución de estrellas de los clientes.';
-        let confidence = 0.94;
-        let inputTokens: number | undefined;
-        let outputTokens: number | undefined;
+        // 3. Optional semantic search enrichment
+        const searchParams = {
+          query: userQuestion,
+          topK: 3,
+          categories: detectedCategory ? [detectedCategory] : state.filters.categories,
+          dateFrom: state.filters.dateFrom,
+          dateTo: state.filters.dateTo,
+        };
 
         try {
-          const response = await model.invoke(prompt);
-          const usage = extractModelUsage(response);
-          inputTokens = usage.inputTokens;
-          outputTokens = usage.outputTokens;
+          const { result: searchResultStr, trace: searchTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'CUSTOMER_EXPERIENCE',
+              iteration,
+              toolName: 'search_reviews_semantic',
+              parameters: searchParams,
+              execute: () => searchTool.invoke(searchParams),
+            });
+          toolTraces.push(searchTrace);
 
-          const content =
-            typeof response.content === 'string'
-              ? response.content
-              : JSON.stringify(response.content);
-          const match = content.match(/\{[\s\S]*\}/);
-          if (match) {
-            const parsed = JSON.parse(match[0]);
-            if (parsed.title) title = parsed.title;
-            if (parsed.description) description = parsed.description;
-            if (parsed.confidence) confidence = parsed.confidence;
-          }
-        } catch (err) {
-          console.warn('[CXNode] Error executing LLM call:', err);
+          const searchEvidence = createEvidenceFromToolEnvelope({
+            id: `ev-cx-semantic-${Date.now()}`,
+            localAgentRunId: localRunId,
+            localToolExecutionId: searchTrace.localExecutionId,
+            agentName: 'CUSTOMER_EXPERIENCE',
+            iteration,
+            toolName: 'search_reviews_semantic',
+            scopeHash,
+            appliedScope: analysisScope,
+            parameters: searchParams,
+            rawResultString: searchResultStr,
+          });
+          evidenceItems.push(searchEvidence);
+        } catch (e) {
+          console.warn('[CXNode] Optional semantic search enrichment failed or skipped:', e);
         }
 
-        const findingItem = {
-          id: `finding-cx-${Date.now()}`,
+        // 4. Build deterministic finding and coverage items
+        const complaintData = parsedComplaintEnvelope.data || {
+          taxonomyVersion: 'v1.0.0',
+          method: 'DETERMINISTIC_LEXICON_AGGREGATION',
+          totalCommentedReviews: 0,
+          totalMatchedReviews: 0,
+          topics: [],
+        };
+
+        const { finding, coverageItems } = buildReviewComplaintFinding({
           investigationId,
           localAgentRunId: localRunId,
-          agent: 'CUSTOMER_EXPERIENCE' as const,
-          title,
-          description,
-          findingType: 'CUSTOMER_SATISFACTION',
-          confidence,
-          evidenceIds: evidenceItems.map((e) => e.id),
-          operationalStatus: 'ACTIONABLE' as const,
-          createdAt: new Date().toISOString(),
-        };
+          complaintData,
+          complaintEvidence,
+          ratingEvidence,
+          requiredAnswerComponents,
+        });
 
         streaming.emit(investigationId, 'finding.created', {
           agent: 'CUSTOMER_EXPERIENCE',
-          finding: findingItem,
+          finding,
         });
         streaming.emit(investigationId, 'agent.completed', {
           agent: 'CUSTOMER_EXPERIENCE',
@@ -277,12 +260,11 @@ Estructura JSON requerida:
 
         return {
           result: {
-            finding: findingItem,
+            finding,
             evidence: evidenceItems,
             toolTraces,
+            coverageItems,
           },
-          inputTokens,
-          outputTokens,
         };
       },
     });
@@ -296,6 +278,7 @@ Estructura JSON requerida:
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],
       evidence: result.evidence,
+      answerCoverage: result.coverageItems as AnswerCoverageItem[],
     };
   };
 }
