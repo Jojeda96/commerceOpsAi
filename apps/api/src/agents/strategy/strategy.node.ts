@@ -176,7 +176,8 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
           unavailableComponents,
         });
 
-        const finalRecs = supportValidation.acceptedRecommendations as Recommendation[];
+        const finalRecs =
+          supportValidation.acceptedRecommendations as Recommendation[];
 
         for (const rec of finalRecs) {
           streaming.emit(investigationId, 'recommendation.created', {

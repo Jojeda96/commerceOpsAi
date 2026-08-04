@@ -22,7 +22,8 @@ describe('Question Intent & Capability Classification', () => {
   });
 
   it('should map generic logistics query to LOGISTICS', () => {
-    const question = '¿Cuál es la tasa de atraso interestatal en los envíos de los últimos 3 meses?';
+    const question =
+      '¿Cuál es la tasa de atraso interestatal en los envíos de los últimos 3 meses?';
     const caps = resolveQuestionCapabilities(question);
     const agents = mapCapabilitiesToAgents(caps);
     expect(agents).toEqual(['LOGISTICS']);

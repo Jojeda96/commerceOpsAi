@@ -13,7 +13,10 @@ import { auditSemanticMetricPolicy } from './semantic-metric-policy';
 import { auditCrossEvidenceConsistency } from './cross-evidence-consistency';
 import { calculateDeterministicEvidenceQuality } from './evidence-quality';
 import { FindingAuditResult } from './finding-audit-result';
-import { auditQuestionCoverage, QuestionCoverageAuditResult } from './question-coverage';
+import {
+  auditQuestionCoverage,
+  QuestionCoverageAuditResult,
+} from './question-coverage';
 
 export interface AuditResult {
   criticalErrors: string[];

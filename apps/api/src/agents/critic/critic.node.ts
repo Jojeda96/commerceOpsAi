@@ -51,7 +51,6 @@ export function createCriticNode(streaming: StreamingService) {
       answerCoverage: state.answerCoverage || [],
     });
 
-    // Merge per-finding audit results into findings
     const perFindingMap = new Map(
       audit.perFindingResults.map((r) => [r.findingId, r]),
     );

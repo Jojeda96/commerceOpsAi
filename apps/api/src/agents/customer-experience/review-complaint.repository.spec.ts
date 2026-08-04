@@ -25,11 +25,15 @@ describe('ReviewComplaintRepository', () => {
     expect(result.data?.totalMatchedReviews).toBe(3);
     expect(result.data?.topics).toHaveLength(2);
 
-    const delayTopic = result.data?.topics.find((t) => t.topic === 'DELIVERY_DELAY');
+    const delayTopic = result.data?.topics.find(
+      (t) => t.topic === 'DELIVERY_DELAY',
+    );
     expect(delayTopic).toBeDefined();
     expect(delayTopic?.uniqueReviewCount).toBe(2);
 
-    const damageTopic = result.data?.topics.find((t) => t.topic === 'PACKAGE_DAMAGE');
+    const damageTopic = result.data?.topics.find(
+      (t) => t.topic === 'PACKAGE_DAMAGE',
+    );
     expect(damageTopic).toBeDefined();
     expect(damageTopic?.uniqueReviewCount).toBe(2);
   });

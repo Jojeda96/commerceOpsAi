@@ -6,7 +6,11 @@ import {
   runAgentWithTrace,
   executeToolWithTrace,
 } from '../../observability/agent-runner';
-import { ToolExecutionTrace, Evidence, AnswerCoverageItem } from '@commerce-ops/shared-types';
+import {
+  ToolExecutionTrace,
+  Evidence,
+  AnswerCoverageItem,
+} from '@commerce-ops/shared-types';
 import { createEvidenceFromToolEnvelope } from './cx-evidence-builder';
 import { buildReviewComplaintFinding } from './build-review-complaint-finding';
 
@@ -73,7 +77,12 @@ export function createCustomerExperienceNode(
   streaming: StreamingService,
 ) {
   return async (state: CommerceOpsStateType) => {
-    const { investigationId, userQuestion, analysisScope, requiredAnswerComponents = [] } = state;
+    const {
+      investigationId,
+      userQuestion,
+      analysisScope,
+      requiredAnswerComponents = [],
+    } = state;
     const iteration = state.iteration || 1;
     const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     const scopeHash = analysisScope?.scopeHash || 'global-scope';
@@ -212,7 +221,9 @@ export function createCustomerExperienceNode(
         const searchParams = {
           query: userQuestion,
           topK: 3,
-          categories: detectedCategory ? [detectedCategory] : state.filters.categories,
+          categories: detectedCategory
+            ? [detectedCategory]
+            : state.filters.categories,
           dateFrom: state.filters.dateFrom,
           dateTo: state.filters.dateTo,
         };
@@ -250,7 +261,10 @@ export function createCustomerExperienceNode(
           });
           evidenceItems.push(searchEvidence);
         } catch (e) {
-          console.warn('[CXNode] Optional semantic search enrichment failed or skipped:', e);
+          console.warn(
+            '[CXNode] Optional semantic search enrichment failed or skipped:',
+            e,
+          );
         }
 
         // 4. Build deterministic finding and coverage items
@@ -299,7 +313,7 @@ export function createCustomerExperienceNode(
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],
       evidence: result.evidence,
-      answerCoverage: result.coverageItems as AnswerCoverageItem[],
+      answerCoverage: result.coverageItems,
     };
   };
 }

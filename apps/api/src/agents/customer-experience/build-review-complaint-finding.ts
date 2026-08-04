@@ -71,8 +71,12 @@ export function buildReviewComplaintFinding(
     renderedTextFragment: `${totalMatched} reseñas con quejas`,
   });
 
-  const delayTopic = complaintData.topics.find((t) => t.topic === 'DELIVERY_DELAY');
-  const damageTopic = complaintData.topics.find((t) => t.topic === 'PACKAGE_DAMAGE');
+  const delayTopic = complaintData.topics.find(
+    (t) => t.topic === 'DELIVERY_DELAY',
+  );
+  const damageTopic = complaintData.topics.find(
+    (t) => t.topic === 'PACKAGE_DAMAGE',
+  );
 
   const delayCount = delayTopic ? delayTopic.uniqueReviewCount : 0;
   const delayShare = delayTopic ? delayTopic.shareOfCommentedPct : 0;
@@ -102,6 +106,20 @@ export function buildReviewComplaintFinding(
       sampleSize: totalComments,
       renderedTextFragment: `${delayShare}% de los comentarios`,
     });
+
+    for (const sub of delayTopic.subthemes) {
+      numericClaims.push({
+        claimId: `claim-subtheme-${sub.code}-${Date.now()}`,
+        metricKey: `reviews.subtheme.${sub.code.toLowerCase()}.count`,
+        value: sub.uniqueReviewCount,
+        unit: 'COUNT',
+        evidenceId: complaintEvidence.id,
+        sourcePath: `topics.delivery_delay.subthemes.${sub.code.toLowerCase()}.uniqueReviewCount`,
+        tolerance: 0,
+        sampleSize: delayCount,
+        renderedTextFragment: `${sub.uniqueReviewCount} reseñas`,
+      });
+    }
   }
 
   if (damageTopic) {
@@ -127,9 +145,23 @@ export function buildReviewComplaintFinding(
       sampleSize: totalComments,
       renderedTextFragment: `${damageShare}% de los comentarios`,
     });
+
+    for (const sub of damageTopic.subthemes) {
+      numericClaims.push({
+        claimId: `claim-subtheme-${sub.code}-${Date.now()}`,
+        metricKey: `reviews.subtheme.${sub.code.toLowerCase()}.count`,
+        value: sub.uniqueReviewCount,
+        unit: 'COUNT',
+        evidenceId: complaintEvidence.id,
+        sourcePath: `topics.package_damage.subthemes.${sub.code.toLowerCase()}.uniqueReviewCount`,
+        tolerance: 0,
+        sampleSize: damageCount,
+        renderedTextFragment: `${sub.uniqueReviewCount} reseñas`,
+      });
+    }
   }
 
-  let descriptionLines: string[] = [];
+  const descriptionLines: string[] = [];
   descriptionLines.push(
     `Se analizaron ${totalComments} reseñas con comentario en el scope asignado.`,
   );
@@ -147,7 +179,9 @@ export function buildReviewComplaintFinding(
     const examples = delayTopic.subthemes.flatMap((s) => s.examples);
     if (examples.length > 0) {
       const quote = examples[0].originalText;
-      descriptionLines.push(`Ejemplo real de cliente sobre demoras: "${quote}"`);
+      descriptionLines.push(
+        `Ejemplo real de cliente sobre demoras: "${quote}"`,
+      );
     }
   }
 
@@ -185,7 +219,8 @@ export function buildReviewComplaintFinding(
       component: 'DELIVERY_DELAY_COMPLAINTS',
       status: delayCount > 0 ? 'ANSWERED' : 'NO_DATA_WITH_REASON',
       evidenceIds: [complaintEvidence.id],
-      reasonCode: delayCount > 0 ? undefined : 'NO_DELIVERY_DELAY_COMPLAINTS_IN_SCOPE',
+      reasonCode:
+        delayCount > 0 ? undefined : 'NO_DELIVERY_DELAY_COMPLAINTS_IN_SCOPE',
     });
   }
 
@@ -194,7 +229,8 @@ export function buildReviewComplaintFinding(
       component: 'PACKAGE_DAMAGE_COMPLAINTS',
       status: damageCount > 0 ? 'ANSWERED' : 'NO_DATA_WITH_REASON',
       evidenceIds: [complaintEvidence.id],
-      reasonCode: damageCount > 0 ? undefined : 'NO_PACKAGE_DAMAGE_COMPLAINTS_IN_SCOPE',
+      reasonCode:
+        damageCount > 0 ? undefined : 'NO_PACKAGE_DAMAGE_COMPLAINTS_IN_SCOPE',
     });
   }
 

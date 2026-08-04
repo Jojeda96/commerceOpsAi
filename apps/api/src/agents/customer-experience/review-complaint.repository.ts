@@ -50,15 +50,18 @@ export class ReviewComplaintRepository {
 
     if (minimumReviewScore !== undefined || maximumReviewScore !== undefined) {
       where.reviewScore = {};
-      if (minimumReviewScore !== undefined) where.reviewScore.gte = minimumReviewScore;
-      if (maximumReviewScore !== undefined) where.reviewScore.lte = maximumReviewScore;
+      if (minimumReviewScore !== undefined)
+        where.reviewScore.gte = minimumReviewScore;
+      if (maximumReviewScore !== undefined)
+        where.reviewScore.lte = maximumReviewScore;
     }
 
     if (dateFrom || dateTo || (categories && categories.length > 0)) {
       where.order = {};
       if (dateFrom || dateTo) {
         where.order.orderPurchaseTimestamp = {};
-        if (dateFrom) where.order.orderPurchaseTimestamp.gte = new Date(dateFrom);
+        if (dateFrom)
+          where.order.orderPurchaseTimestamp.gte = new Date(dateFrom);
         if (dateTo) where.order.orderPurchaseTimestamp.lte = new Date(dateTo);
       }
       if (categories && categories.length > 0) {
@@ -121,7 +124,7 @@ export class ReviewComplaintRepository {
       const topicMatchedReviewsMap = new Map<
         string,
         {
-          review: typeof validReviews[0];
+          review: (typeof validReviews)[0];
           matchedTerms: Set<string>;
           subthemes: Set<string>;
         }
@@ -132,7 +135,7 @@ export class ReviewComplaintRepository {
         Map<
           string,
           {
-            review: typeof validReviews[0];
+            review: (typeof validReviews)[0];
             matchedTerms: Set<string>;
           }
         >
@@ -170,7 +173,10 @@ export class ReviewComplaintRepository {
 
             const subMap = subthemeReviewsMap.get(subDef.code)!;
             if (!subMap.has(rev.reviewId)) {
-              subMap.set(rev.reviewId, { review: rev, matchedTerms: new Set() });
+              subMap.set(rev.reviewId, {
+                review: rev,
+                matchedTerms: new Set(),
+              });
             }
             matchedTermsInSub.forEach((tm) =>
               subMap.get(rev.reviewId)!.matchedTerms.add(tm),
@@ -215,16 +221,16 @@ export class ReviewComplaintRepository {
             ? Math.round((subCount / topicUniqueCount) * 10000) / 100
             : 0;
 
-        const candidateExamples: ReviewExample[] = Array.from(subMap.values()).map(
-          ({ review, matchedTerms }) => ({
-            reviewId: review.reviewId,
-            reviewScore: review.reviewScore,
-            originalText: review.reviewCommentMessage || '',
-            matchedTerms: Array.from(matchedTerms),
-            subthemes: [subDef.code],
-            scoreKind: 'LEXICON_MATCH',
-          }),
-        );
+        const candidateExamples: ReviewExample[] = Array.from(
+          subMap.values(),
+        ).map(({ review, matchedTerms }) => ({
+          reviewId: review.reviewId,
+          reviewScore: review.reviewScore,
+          originalText: review.reviewCommentMessage || '',
+          matchedTerms: Array.from(matchedTerms),
+          subthemes: [subDef.code],
+          scoreKind: 'LEXICON_MATCH',
+        }));
 
         candidateExamples.sort((a, b) => {
           if (a.reviewScore !== b.reviewScore) {

@@ -34,6 +34,10 @@ export const CommerceOpsAnnotation = Annotation.Root({
     value: (_, next) => next,
     default: () => [],
   }),
+  selectedAgents: Annotation<AgentName[]>({
+    value: (_, next) => next,
+    default: () => [],
+  }),
   completedAgents: Annotation<AgentName[]>({
     value: (prev, next) => [...new Set([...prev, ...next])],
     default: () => [],

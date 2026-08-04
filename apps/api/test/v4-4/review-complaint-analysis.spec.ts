@@ -4,7 +4,9 @@ import { REVIEW_COMPLAINT_TAXONOMY_VERSION } from '../../src/agents/customer-exp
 describe('PR-00 / V4.4: Review Complaint Analysis & Text Normalizer Contract', () => {
   it('should normalize portuguese review text removing accents, punctuation and lowercasing', () => {
     expect(normalizeReviewText('Não chegou!')).toBe('nao chegou');
-    expect(normalizeReviewText('Embalagem danificada')).toBe('embalagem danificada');
+    expect(normalizeReviewText('Embalagem danificada')).toBe(
+      'embalagem danificada',
+    );
     expect(normalizeReviewText('CAIXA AMASSADA')).toBe('caixa amassada');
   });
 

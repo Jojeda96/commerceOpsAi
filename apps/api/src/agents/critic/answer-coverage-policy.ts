@@ -1,4 +1,7 @@
-import { AnswerComponent, AnswerCoverageItem } from '@commerce-ops/shared-types';
+import {
+  AnswerComponent,
+  AnswerCoverageItem,
+} from '@commerce-ops/shared-types';
 
 export interface ComponentCoverageRule {
   component: AnswerComponent;
@@ -9,7 +12,10 @@ export interface ComponentCoverageRule {
   allowNoDataWithReason: boolean;
 }
 
-export const COMPONENT_COVERAGE_POLICIES: Record<AnswerComponent, ComponentCoverageRule> = {
+export const COMPONENT_COVERAGE_POLICIES: Record<
+  AnswerComponent,
+  ComponentCoverageRule
+> = {
   REVIEW_COMPLAINT_THEMES: {
     component: 'REVIEW_COMPLAINT_THEMES',
     requiredAgent: 'CUSTOMER_EXPERIENCE',
@@ -20,14 +26,20 @@ export const COMPONENT_COVERAGE_POLICIES: Record<AnswerComponent, ComponentCover
   DELIVERY_DELAY_COMPLAINTS: {
     component: 'DELIVERY_DELAY_COMPLAINTS',
     requiredAgent: 'CUSTOMER_EXPERIENCE',
-    requiredMetricKeys: ['reviews.topic.delivery_delay.count', 'reviews.comments.total'],
+    requiredMetricKeys: [
+      'reviews.topic.delivery_delay.count',
+      'reviews.comments.total',
+    ],
     allowUnavailableWithReason: false,
     allowNoDataWithReason: true,
   },
   PACKAGE_DAMAGE_COMPLAINTS: {
     component: 'PACKAGE_DAMAGE_COMPLAINTS',
     requiredAgent: 'CUSTOMER_EXPERIENCE',
-    requiredMetricKeys: ['reviews.topic.package_damage.count', 'reviews.comments.total'],
+    requiredMetricKeys: [
+      'reviews.topic.package_damage.count',
+      'reviews.comments.total',
+    ],
     allowUnavailableWithReason: false,
     allowNoDataWithReason: true,
   },
@@ -70,13 +82,17 @@ export const COMPONENT_COVERAGE_POLICIES: Record<AnswerComponent, ComponentCover
   },
 };
 
-export function validateAnswerCoverageItemPolicy(
-  item: AnswerCoverageItem,
-): { valid: boolean; error?: string } {
+export function validateAnswerCoverageItemPolicy(item: AnswerCoverageItem): {
+  valid: boolean;
+  error?: string;
+} {
   const policy = COMPONENT_COVERAGE_POLICIES[item.component];
   if (!policy) return { valid: true };
 
-  if (item.status === 'UNAVAILABLE_WITH_REASON' && !policy.allowUnavailableWithReason) {
+  if (
+    item.status === 'UNAVAILABLE_WITH_REASON' &&
+    !policy.allowUnavailableWithReason
+  ) {
     return {
       valid: false,
       error: `El componente ${item.component} no admite estado UNAVAILABLE_WITH_REASON.`,
@@ -91,7 +107,8 @@ export function validateAnswerCoverageItemPolicy(
   }
 
   if (
-    (item.status === 'UNAVAILABLE_WITH_REASON' || item.status === 'NO_DATA_WITH_REASON') &&
+    (item.status === 'UNAVAILABLE_WITH_REASON' ||
+      item.status === 'NO_DATA_WITH_REASON') &&
     !item.reasonCode
   ) {
     return {

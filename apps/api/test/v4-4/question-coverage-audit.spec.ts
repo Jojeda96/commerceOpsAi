@@ -3,7 +3,8 @@ import { auditQuestionCoverage } from '../../src/agents/critic/question-coverage
 describe('PR-00 / V4.4: Question Coverage Audit Contract', () => {
   it('should detect critical violations when required agent or tools are missing', () => {
     const auditResult = auditQuestionCoverage({
-      userQuestion: '¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?',
+      userQuestion:
+        '¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?',
       requiredCapabilities: ['REVIEW_COMPLAINT_ANALYSIS'],
       requiredAnswerComponents: [
         'REVIEW_COMPLAINT_THEMES',

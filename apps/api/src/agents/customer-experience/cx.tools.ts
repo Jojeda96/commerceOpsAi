@@ -9,7 +9,7 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
 
   const analyzeReviewComplaints = tool(
     async (input) => {
-      const envelope = await repository.analyzeReviewComplaints(input as any);
+      const envelope = await repository.analyzeReviewComplaints(input);
       return JSON.stringify(envelope);
     },
     {

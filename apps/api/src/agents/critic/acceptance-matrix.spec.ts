@@ -1,9 +1,9 @@
-import { classifyCapabilities } from '../../src/agents/supervisor/capability-classifier';
-import { mapCapabilitiesToAgents } from '../../src/agents/supervisor/capability-agent-map';
-import { classifyAnswerComponents } from '../../src/agents/supervisor/answer-component-classifier';
-import { validateRecommendationSupport } from '../../src/agents/strategy/recommendation-support-policy';
+import { classifyCapabilities } from '../supervisor/capability-classifier';
+import { mapCapabilitiesToAgents } from '../supervisor/capability-agent-map';
+import { classifyAnswerComponents } from '../supervisor/answer-component-classifier';
+import { validateRecommendationSupport } from '../strategy/recommendation-support-policy';
 
-describe('V4.4 Three-Query Acceptance Matrix Contract', () => {
+describe('PR-08: Three-Query Acceptance Matrix Contract', () => {
   describe('Query A: Review Complaints', () => {
     const questionA =
       '¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?';

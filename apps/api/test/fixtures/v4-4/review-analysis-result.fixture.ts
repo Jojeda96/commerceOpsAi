@@ -19,7 +19,8 @@ export const mockReviewAnalysisResultFixture = {
             {
               reviewId: 'rev-001',
               reviewScore: 1,
-              originalText: 'O produto não chegou no prazo. Entrega muito atrasada e demorou 20 dias a mais.',
+              originalText:
+                'O produto não chegou no prazo. Entrega muito atrasada e demorou 20 dias a mais.',
               matchedTerms: ['atrasada', 'demorou'],
               subthemes: ['LATE_DELIVERY'],
               scoreKind: 'LEXICON_MATCH' as const,

@@ -47,11 +47,25 @@ export const REVIEW_COMPLAINT_TAXONOMY: TopicTaxonomyDefinition[] = [
     subthemes: [
       {
         code: 'BROKEN_PRODUCT',
-        terms: ['quebrado', 'quebrada', 'rachado', 'rachada', 'partido', 'partida'],
+        terms: [
+          'quebrado',
+          'quebrada',
+          'rachado',
+          'rachada',
+          'partido',
+          'partida',
+        ],
       },
       {
         code: 'DAMAGED_PRODUCT',
-        terms: ['danificado', 'danificada', 'avariado', 'avariada', 'estragado', 'estragada'],
+        terms: [
+          'danificado',
+          'danificada',
+          'avariado',
+          'avariada',
+          'estragado',
+          'estragada',
+        ],
       },
       {
         code: 'DAMAGED_PACKAGING',

@@ -69,7 +69,8 @@ export function createSupervisorNode(
     const deterministicAgents = mapCapabilitiesToAgents(
       deterministicCapabilities,
     );
-    const deterministicAnswerComponents = classifyAnswerComponents(userQuestion);
+    const deterministicAnswerComponents =
+      classifyAnswerComponents(userQuestion);
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SUPERVISOR',
@@ -198,6 +199,7 @@ Responde strictly en formato JSON sin inventar campos de filtros:
 
     return {
       activeAgents: result.selectedAgents,
+      selectedAgents: result.selectedAgents,
       investigationPlan: result.tasks,
       analysisScope: result.analysisScope,
       requiredCapabilities: result.requiredCapabilities,

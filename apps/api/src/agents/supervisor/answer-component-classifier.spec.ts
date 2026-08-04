@@ -13,7 +13,8 @@ describe('Answer Component Classifier', () => {
   });
 
   it('should classify delay-only review query without package damage component', () => {
-    const question = '¿Cuáles son las quejas en reseñas sobre demoras de entrega?';
+    const question =
+      '¿Cuáles son las quejas en reseñas sobre demoras de entrega?';
     const components = classifyAnswerComponents(question);
 
     expect(components).toContain('REVIEW_COMPLAINT_THEMES');
@@ -22,7 +23,8 @@ describe('Answer Component Classifier', () => {
   });
 
   it('should classify anomaly question into historical and anomaly components', () => {
-    const question = 'Detecta desviaciones o picos anómalos mediante Z-Score robusto';
+    const question =
+      'Detecta desviaciones o picos anómalos mediante Z-Score robusto';
     const components = classifyAnswerComponents(question);
 
     expect(components).toContain('HISTORICAL_LOGISTICS_CONTEXT');

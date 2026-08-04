@@ -15,7 +15,7 @@ describe('buildReviewComplaintFinding', () => {
       investigationId: 'inv-001',
       localAgentRunId: 'run-001',
       complaintData: mockReviewAnalysisResultFixture,
-      complaintEvidence: mockEvidence as any,
+      complaintEvidence: mockEvidence,
       requiredAnswerComponents: [
         'REVIEW_COMPLAINT_THEMES',
         'DELIVERY_DELAY_COMPLAINTS',

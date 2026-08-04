@@ -126,7 +126,7 @@ export function auditQuestionCoverage(
     if (!coverageItem) {
       // Deduce coverage dynamically if not explicitly provided
       let isAnswered = false;
-      let isReasonedUnavailable = false;
+      const isReasonedUnavailable = false;
 
       if (component === 'REVIEW_COMPLAINT_THEMES') {
         isAnswered = findings.some(
@@ -141,7 +141,9 @@ export function auditQuestionCoverage(
             hasMetricKey(e, 'reviews.comments.total'),
         );
         const hasFinding = findings.some(
-          (f) => f.agent === 'CUSTOMER_EXPERIENCE' || (f as any).agentName === 'CUSTOMER_EXPERIENCE',
+          (f) =>
+            f.agent === 'CUSTOMER_EXPERIENCE' ||
+            (f as any).agentName === 'CUSTOMER_EXPERIENCE',
         );
         isAnswered = hasMetric || hasFinding;
       } else if (component === 'PACKAGE_DAMAGE_COMPLAINTS') {
@@ -151,12 +153,16 @@ export function auditQuestionCoverage(
             hasMetricKey(e, 'reviews.comments.total'),
         );
         const hasFinding = findings.some(
-          (f) => f.agent === 'CUSTOMER_EXPERIENCE' || (f as any).agentName === 'CUSTOMER_EXPERIENCE',
+          (f) =>
+            f.agent === 'CUSTOMER_EXPERIENCE' ||
+            (f as any).agentName === 'CUSTOMER_EXPERIENCE',
         );
         isAnswered = hasMetric || hasFinding;
       } else if (component === 'PREDICTION') {
         const hasDsFinding = findings.some(
-          (f) => f.agent === 'DATA_SCIENCE' || (f as any).agentName === 'DATA_SCIENCE',
+          (f) =>
+            f.agent === 'DATA_SCIENCE' ||
+            (f as any).agentName === 'DATA_SCIENCE',
         );
         isAnswered = hasDsFinding;
       } else if (component === 'LOCAL_EXPLANATION') {
@@ -212,14 +218,15 @@ export function auditQuestionCoverage(
     }
   }
 
-  const criticalCount = violations.filter((v) => v.severity === 'CRITICAL').length;
-  const warningCount = violations.filter((v) => v.severity === 'WARNING').length;
+  const criticalCount = violations.filter(
+    (v) => v.severity === 'CRITICAL',
+  ).length;
+  const warningCount = violations.filter(
+    (v) => v.severity === 'WARNING',
+  ).length;
 
   const passed = criticalCount === 0;
-  const score = Math.max(
-    0,
-    100 - criticalCount * 30 - warningCount * 10,
-  );
+  const score = Math.max(0, 100 - criticalCount * 30 - warningCount * 10);
 
   return {
     passed,

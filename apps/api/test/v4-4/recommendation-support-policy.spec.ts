@@ -28,7 +28,9 @@ describe('PR-00 / V4.4: Recommendation Support Policy Contract', () => {
     expect(validated.rejectedOrDropped).toContainEqual(
       expect.objectContaining({
         recommendationId: 'rec-01',
-        reason: expect.stringMatching(/RECOMMENDATION_MISSING_EVIDENCE_BASIS|RECOMMENDATION_DOMAIN_NOT_SUPPORTED/),
+        reason: expect.stringMatching(
+          /RECOMMENDATION_MISSING_EVIDENCE_BASIS|RECOMMENDATION_DOMAIN_NOT_SUPPORTED/,
+        ),
       }),
     );
   });
@@ -53,7 +55,9 @@ describe('PR-00 / V4.4: Recommendation Support Policy Contract', () => {
     expect(validated.rejectedOrDropped).toContainEqual(
       expect.objectContaining({
         recommendationId: 'rec-02',
-        reason: expect.stringMatching(/RECOMMENDATION_REQUIRES_UNAVAILABLE_COMPONENT/),
+        reason: expect.stringMatching(
+          /RECOMMENDATION_REQUIRES_UNAVAILABLE_COMPONENT/,
+        ),
       }),
     );
   });
@@ -81,7 +85,9 @@ describe('PR-00 / V4.4: Recommendation Support Policy Contract', () => {
       unavailableComponents: [],
     });
 
-    const outputRec = validated.acceptedRecommendations.find((r) => r.recommendationId === 'rec-03');
+    const outputRec = validated.acceptedRecommendations.find(
+      (r) => r.recommendationId === 'rec-03',
+    );
     expect(outputRec).toBeDefined();
     expect(outputRec?.kind).toBe('HYPOTHESIS_TO_TEST');
   });

@@ -4,7 +4,8 @@ export const mockReviewsFixture = [
     orderId: 'ord-001',
     reviewScore: 1,
     reviewCommentTitle: 'Péssimo',
-    reviewCommentMessage: 'O produto não chegou no prazo. Entrega muito atrasada e demorou 20 dias a mais.',
+    reviewCommentMessage:
+      'O produto não chegou no prazo. Entrega muito atrasada e demorou 20 dias a mais.',
     reviewCreationDate: new Date('2023-01-10'),
     reviewAnswerTimestamp: new Date('2023-01-12'),
   },
@@ -22,7 +23,8 @@ export const mockReviewsFixture = [
     orderId: 'ord-003',
     reviewScore: 2,
     reviewCommentTitle: 'Demora e danificado',
-    reviewCommentMessage: 'Demorou muito para entregar e a caixa veio toda rasgada e amassada.',
+    reviewCommentMessage:
+      'Demorou muito para entregar e a caixa veio toda rasgada e amassada.',
     reviewCreationDate: new Date('2023-01-20'),
     reviewAnswerTimestamp: new Date('2023-01-21'),
   },
