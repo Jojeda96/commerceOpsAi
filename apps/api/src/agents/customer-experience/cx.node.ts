@@ -114,7 +114,7 @@ export function createCustomerExperienceNode(
           tool: 'analyze_review_complaints',
         });
 
-        const { result: complaintResultStr, trace: complaintTrace } =
+        const { result: rawComplaintResult, trace: complaintTrace } =
           await executeToolWithTrace({
             localAgentRunId: localRunId,
             agentName: 'CUSTOMER_EXPERIENCE',
@@ -123,6 +123,13 @@ export function createCustomerExperienceNode(
             parameters: complaintParams,
             execute: () => analyzeComplaintsTool.invoke(complaintParams as any),
           });
+        const complaintResultStr =
+          typeof rawComplaintResult === 'string'
+            ? rawComplaintResult
+            : typeof (rawComplaintResult as any)?.content === 'string'
+              ? (rawComplaintResult as any).content
+              : JSON.stringify(rawComplaintResult);
+
         toolTraces.push(complaintTrace);
 
         streaming.emit(investigationId, 'tool.completed', {
@@ -164,7 +171,7 @@ export function createCustomerExperienceNode(
             tool: 'get_rating_summary',
           });
 
-          const { result: ratingResultStr, trace: ratingTrace } =
+          const { result: rawRatingResult, trace: ratingTrace } =
             await executeToolWithTrace({
               localAgentRunId: localRunId,
               agentName: 'CUSTOMER_EXPERIENCE',
@@ -173,6 +180,13 @@ export function createCustomerExperienceNode(
               parameters: ratingParams,
               execute: () => ratingTool.invoke(ratingParams),
             });
+          const ratingResultStr =
+            typeof rawRatingResult === 'string'
+              ? rawRatingResult
+              : typeof (rawRatingResult as any)?.content === 'string'
+                ? (rawRatingResult as any).content
+                : JSON.stringify(rawRatingResult);
+
           toolTraces.push(ratingTrace);
           streaming.emit(investigationId, 'tool.completed', {
             agent: 'CUSTOMER_EXPERIENCE',
@@ -204,7 +218,7 @@ export function createCustomerExperienceNode(
         };
 
         try {
-          const { result: searchResultStr, trace: searchTrace } =
+          const { result: rawSearchResult, trace: searchTrace } =
             await executeToolWithTrace({
               localAgentRunId: localRunId,
               agentName: 'CUSTOMER_EXPERIENCE',
@@ -213,6 +227,13 @@ export function createCustomerExperienceNode(
               parameters: searchParams,
               execute: () => searchTool.invoke(searchParams),
             });
+          const searchResultStr =
+            typeof rawSearchResult === 'string'
+              ? rawSearchResult
+              : typeof (rawSearchResult as any)?.content === 'string'
+                ? (rawSearchResult as any).content
+                : JSON.stringify(rawSearchResult);
+
           toolTraces.push(searchTrace);
 
           const searchEvidence = createEvidenceFromToolEnvelope({

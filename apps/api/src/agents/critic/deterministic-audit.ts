@@ -3,6 +3,9 @@ import {
   Evidence,
   FindingAuditStatus,
   CriticDecision,
+  AgentName,
+  AnswerComponent,
+  AnswerCoverageItem,
 } from '@commerce-ops/shared-types';
 import { auditNumericClaims } from './numeric-grounding';
 import { auditMethodProvenance } from './method-provenance';
@@ -10,18 +13,44 @@ import { auditSemanticMetricPolicy } from './semantic-metric-policy';
 import { auditCrossEvidenceConsistency } from './cross-evidence-consistency';
 import { calculateDeterministicEvidenceQuality } from './evidence-quality';
 import { FindingAuditResult } from './finding-audit-result';
+import { auditQuestionCoverage, QuestionCoverageAuditResult } from './question-coverage';
 
 export interface AuditResult {
   criticalErrors: string[];
   warnings: string[];
   perFindingResults: FindingAuditResult[];
   perFinding: Record<string, { criticalErrors: string[]; warnings: string[] }>;
+  coverageAudit?: QuestionCoverageAuditResult;
+  missingAgents?: AgentName[];
+}
+
+export interface DeterministicAuditOptions {
+  userQuestion?: string;
+  requiredCapabilities?: string[];
+  requiredAnswerComponents?: AnswerComponent[];
+  selectedAgents?: AgentName[];
+  findings: Finding[];
+  evidence: Evidence[];
+  answerCoverage?: AnswerCoverageItem[];
 }
 
 export function performDeterministicAudit(
-  findings: Finding[],
-  evidence: Evidence[],
+  findingsOrOptions: Finding[] | DeterministicAuditOptions,
+  evidenceParam?: Evidence[],
 ): AuditResult {
+  let findings: Finding[];
+  let evidence: Evidence[];
+  let options: DeterministicAuditOptions | undefined;
+
+  if (Array.isArray(findingsOrOptions)) {
+    findings = findingsOrOptions;
+    evidence = evidenceParam || [];
+  } else {
+    options = findingsOrOptions;
+    findings = options.findings;
+    evidence = options.evidence;
+  }
+
   const criticalErrors: string[] = [];
   const warnings: string[] = [];
   const perFindingResults: FindingAuditResult[] = [];
@@ -29,6 +58,30 @@ export function performDeterministicAudit(
     string,
     { criticalErrors: string[]; warnings: string[] }
   > = {};
+
+  let coverageAudit: QuestionCoverageAuditResult | undefined;
+  let missingAgents: AgentName[] = [];
+
+  if (options && options.userQuestion) {
+    coverageAudit = auditQuestionCoverage({
+      userQuestion: options.userQuestion,
+      requiredCapabilities: options.requiredCapabilities || [],
+      requiredAnswerComponents: options.requiredAnswerComponents || [],
+      selectedAgents: options.selectedAgents || [],
+      findings,
+      evidence,
+      answerCoverage: options.answerCoverage || [],
+    });
+
+    for (const v of coverageAudit.violations) {
+      if (v.severity === 'CRITICAL') {
+        criticalErrors.push(`[${v.code}] ${v.details}`);
+      } else {
+        warnings.push(`[${v.code}] ${v.details}`);
+      }
+    }
+    missingAgents = coverageAudit.missingAgents;
+  }
 
   // 1. Audits across findings and evidence
   const numericViolations = auditNumericClaims(findings, evidence);
@@ -131,6 +184,8 @@ export function performDeterministicAudit(
     warnings,
     perFindingResults,
     perFinding,
+    coverageAudit,
+    missingAgents,
   };
 }
 
