@@ -27,6 +27,25 @@ export type CriticDecision =
   | 'REQUIRES_MORE_ANALYSIS'
   | 'REJECTED';
 
+export type AnswerComponent =
+  | 'REVIEW_COMPLAINT_THEMES'
+  | 'DELIVERY_DELAY_COMPLAINTS'
+  | 'PACKAGE_DAMAGE_COMPLAINTS'
+  | 'REVIEW_RATING_CONTEXT'
+  | 'HISTORICAL_LOGISTICS_CONTEXT'
+  | 'MODEL_GOVERNANCE'
+  | 'PREDICTION'
+  | 'LOCAL_EXPLANATION'
+  | 'ANOMALY_DETECTION';
+
+export interface AnswerCoverageItem {
+  component: AnswerComponent;
+  status: 'ANSWERED' | 'NO_DATA_WITH_REASON' | 'UNAVAILABLE_WITH_REASON' | 'UNANSWERED';
+  evidenceIds?: string[];
+  reasonCode?: string;
+  explanation?: string;
+}
+
 export interface FilterState {
   dateFrom?: string;
   dateTo?: string;

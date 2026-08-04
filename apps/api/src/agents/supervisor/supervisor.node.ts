@@ -32,6 +32,8 @@ const supervisorOutputSchema = z.object({
   ),
 });
 
+import { classifyAnswerComponents } from './answer-component-classifier';
+
 export function createSupervisorNode(
   prisma: PrismaService,
   streaming: StreamingService,
@@ -67,6 +69,7 @@ export function createSupervisorNode(
     const deterministicAgents = mapCapabilitiesToAgents(
       deterministicCapabilities,
     );
+    const deterministicAnswerComponents = classifyAnswerComponents(userQuestion);
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SUPERVISOR',
@@ -98,14 +101,14 @@ ${JSON.stringify(analysisScope, null, 2)}
 Agentes seleccionados determinísticamente:
 ${deterministicAgents.join(', ')}
 
-Responde estrictamente en formato JSON sin inventar campos de filtros:
+Responde strictly en formato JSON sin inventar campos de filtros:
 {
   "requiredCapabilities": ${JSON.stringify(deterministicCapabilities)},
   "selectedAgents": ${JSON.stringify(deterministicAgents)},
   "plan": [
     {
       "agentName": "${deterministicAgents[0] || 'LOGISTICS'}",
-      "objective": "Analizar métricas logísticas y contexto para el scope asignado."
+      "objective": "Analizar métricas correspondientes."
     }
   ]
 }`;
@@ -170,6 +173,8 @@ Responde estrictamente en formato JSON sin inventar campos de filtros:
           analysisScope,
           scopeHash: analysisScope.scopeHash,
           tasksCount: tasks.length,
+          requiredCapabilities: deterministicCapabilities,
+          requiredAnswerComponents: deterministicAnswerComponents,
         });
 
         streaming.emit(investigationId, 'agent.completed', {
@@ -182,6 +187,8 @@ Responde estrictamente en formato JSON sin inventar campos de filtros:
             selectedAgents,
             tasks,
             analysisScope,
+            requiredCapabilities: deterministicCapabilities,
+            requiredAnswerComponents: deterministicAnswerComponents,
           },
           inputTokens,
           outputTokens,
@@ -193,6 +200,8 @@ Responde estrictamente en formato JSON sin inventar campos de filtros:
       activeAgents: result.selectedAgents,
       investigationPlan: result.tasks,
       analysisScope: result.analysisScope,
+      requiredCapabilities: result.requiredCapabilities,
+      requiredAnswerComponents: result.requiredAnswerComponents,
       filters: {
         dateFrom: result.analysisScope.dateFrom,
         dateTo: result.analysisScope.dateTo,
