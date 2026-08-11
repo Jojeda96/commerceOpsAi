@@ -63,8 +63,153 @@ export function buildReviewComplaintFinding(
     },
   ];
 
-  const totalComments = complaintData.totalCommentedReviews;
-  const totalMatched = complaintData.totalMatchedReviews;
+  const totalComments = complaintData?.totalCommentedReviews || 0;
+  const totalMatched = complaintData?.totalMatchedReviews || 0;
+
+  const isNoData = complaintEvidence?.status === 'NO_DATA';
+  const isUnavailable =
+    complaintEvidence?.status !== undefined &&
+    complaintEvidence.status !== 'AVAILABLE' &&
+    complaintEvidence.status !== 'NO_DATA';
+
+  if (isNoData) {
+    const noDataReason =
+      complaintEvidence.reasonCode ||
+      (totalComments === 0
+        ? 'NO_REVIEW_COMMENTS_IN_SCOPE'
+        : 'NO_COMPLAINTS_MATCHED_TAXONOMY');
+
+    const noDataExplanation =
+      noDataReason === 'NO_REVIEW_COMMENTS_IN_SCOPE'
+        ? 'Sin comentarios de reseñas en el ámbito analizado'
+        : 'Se encontraron reseñas con comentario, pero ninguna coincidió con la taxonomía de quejas solicitada.';
+
+    const noDataDescription =
+      noDataReason === 'NO_REVIEW_COMMENTS_IN_SCOPE'
+        ? 'No se encontraron reseñas con comentario en el ámbito analizado.'
+        : 'Se encontraron reseñas con comentario, pero ninguna coincidió con la taxonomía de quejas solicitada.';
+
+    const coverageItems: AnswerCoverageItem[] = [
+      {
+        component: 'REVIEW_COMPLAINT_THEMES',
+        status: 'NO_DATA_WITH_REASON',
+        reasonCode: noDataReason,
+        evidenceIds: [complaintEvidence.id],
+        explanation: noDataExplanation,
+      },
+    ];
+
+    if (requiredAnswerComponents.includes('DELIVERY_DELAY_COMPLAINTS')) {
+      coverageItems.push({
+        component: 'DELIVERY_DELAY_COMPLAINTS',
+        status: 'NO_DATA_WITH_REASON',
+        reasonCode: noDataReason,
+        evidenceIds: [complaintEvidence.id],
+      });
+    }
+
+    if (requiredAnswerComponents.includes('PACKAGE_DAMAGE_COMPLAINTS')) {
+      coverageItems.push({
+        component: 'PACKAGE_DAMAGE_COMPLAINTS',
+        status: 'NO_DATA_WITH_REASON',
+        reasonCode: noDataReason,
+        evidenceIds: [complaintEvidence.id],
+      });
+    }
+
+    if (requiredAnswerComponents.includes('REVIEW_RATING_CONTEXT')) {
+      coverageItems.push({
+        component: 'REVIEW_RATING_CONTEXT',
+        status: ratingEvidence ? 'ANSWERED' : 'UNAVAILABLE_WITH_REASON',
+        evidenceIds: ratingEvidence ? [ratingEvidence.id] : [],
+        reasonCode: ratingEvidence
+          ? undefined
+          : 'RATING_EVIDENCE_NOT_COLLECTED',
+      });
+    }
+
+    const finding: Finding = {
+      id: findingId,
+      investigationId,
+      localAgentRunId,
+      agent: 'CUSTOMER_EXPERIENCE',
+      title: 'Análisis determinista de quejas y opiniones en reseñas',
+      description: noDataDescription,
+      findingType: 'REVIEW_COMPLAINT_ANALYSIS',
+      evidenceIds: [complaintEvidence.id],
+      numericClaims: [],
+      methodClaims: [],
+      auditStatus: 'PENDING',
+      operationalStatus: 'UNAVAILABLE',
+      createdAt: new Date().toISOString(),
+    };
+
+    return { finding, coverageItems };
+  }
+
+  if (isUnavailable) {
+    const reasonCode =
+      complaintEvidence.reasonCode || 'REVIEW_COMPLAINT_ANALYSIS_UNAVAILABLE';
+
+    const coverageItems: AnswerCoverageItem[] = [
+      {
+        component: 'REVIEW_COMPLAINT_THEMES',
+        status: 'UNAVAILABLE_WITH_REASON',
+        reasonCode,
+        evidenceIds: [complaintEvidence.id],
+        explanation:
+          'No fue posible completar el análisis de reseñas en el ámbito solicitado.',
+      },
+    ];
+
+    if (requiredAnswerComponents.includes('DELIVERY_DELAY_COMPLAINTS')) {
+      coverageItems.push({
+        component: 'DELIVERY_DELAY_COMPLAINTS',
+        status: 'UNAVAILABLE_WITH_REASON',
+        reasonCode,
+        evidenceIds: [complaintEvidence.id],
+      });
+    }
+
+    if (requiredAnswerComponents.includes('PACKAGE_DAMAGE_COMPLAINTS')) {
+      coverageItems.push({
+        component: 'PACKAGE_DAMAGE_COMPLAINTS',
+        status: 'UNAVAILABLE_WITH_REASON',
+        reasonCode,
+        evidenceIds: [complaintEvidence.id],
+      });
+    }
+
+    if (requiredAnswerComponents.includes('REVIEW_RATING_CONTEXT')) {
+      coverageItems.push({
+        component: 'REVIEW_RATING_CONTEXT',
+        status: ratingEvidence ? 'ANSWERED' : 'UNAVAILABLE_WITH_REASON',
+        evidenceIds: ratingEvidence ? [ratingEvidence.id] : [],
+        reasonCode: ratingEvidence
+          ? undefined
+          : 'RATING_EVIDENCE_NOT_COLLECTED',
+      });
+    }
+
+    const finding: Finding = {
+      id: findingId,
+      investigationId,
+      localAgentRunId,
+      agent: 'CUSTOMER_EXPERIENCE',
+      title: 'Análisis determinista de quejas y opiniones en reseñas',
+      description:
+        'No fue posible completar el análisis de reseñas en el ámbito solicitado.',
+      findingType: 'REVIEW_COMPLAINT_ANALYSIS',
+      evidenceIds: [complaintEvidence.id],
+      numericClaims: [],
+      methodClaims: [],
+      auditStatus: 'PENDING',
+      operationalStatus: 'UNAVAILABLE',
+      createdAt: new Date().toISOString(),
+    };
+
+    return { finding, coverageItems };
+  }
 
   numericClaims.push({
     claimId: `claim-comments-total-${Date.now()}`,

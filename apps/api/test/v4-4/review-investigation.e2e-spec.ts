@@ -60,6 +60,8 @@ describe('V4.4 Acceptance Query A: Review Complaints (E2E)', () => {
       body = detailRes.body;
       if (
         body.status === 'COMPLETED' ||
+        body.status === 'COMPLETED_WITH_WARNINGS' ||
+        body.status === 'NEEDS_HUMAN_REVIEW' ||
         body.status === 'FAILED' ||
         body.status === 'REJECTED'
       ) {

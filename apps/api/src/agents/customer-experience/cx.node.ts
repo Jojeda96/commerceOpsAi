@@ -160,11 +160,48 @@ export function createCustomerExperienceNode(
         });
         evidenceItems.push(complaintEvidence);
 
-        let parsedComplaintEnvelope: any = {};
+        let parsedComplaintEnvelope: any;
+
         try {
           parsedComplaintEnvelope = JSON.parse(complaintResultStr);
-        } catch (e) {
-          console.warn('[CXNode] Failed to parse complaint envelope:', e);
+
+          if (
+            !parsedComplaintEnvelope ||
+            ![
+              'AVAILABLE',
+              'NO_DATA',
+              'INSUFFICIENT_DATA',
+              'UNAVAILABLE',
+              'ERROR',
+            ].includes(parsedComplaintEnvelope.status)
+          ) {
+            throw new Error(
+              'Invalid analyze_review_complaints envelope status',
+            );
+          }
+        } catch (error) {
+          console.warn('[CXNode] Invalid complaint analysis envelope:', error);
+
+          parsedComplaintEnvelope = {
+            status: 'ERROR',
+            reasonCode: 'INVALID_COMPLAINT_TOOL_RESULT',
+            rowCount: 0,
+            sampleSize: 0,
+            metrics: [],
+            data: {
+              taxonomyVersion: 'v1.0.0',
+              method: 'DETERMINISTIC_LEXICON_AGGREGATION',
+              totalCommentedReviews: 0,
+              totalMatchedReviews: 0,
+              topics: [],
+            },
+          };
+
+          complaintEvidence.status = 'ERROR';
+          complaintEvidence.reasonCode = 'INVALID_COMPLAINT_TOOL_RESULT';
+          complaintEvidence.rowCount = 0;
+          complaintEvidence.sampleSize = 0;
+          complaintEvidence.metrics = [];
         }
 
         // 2. Tool 2: get_rating_summary (optional or if required)
