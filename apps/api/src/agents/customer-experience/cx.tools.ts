@@ -33,7 +33,7 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
   );
 
   const getRatingSummary = tool(
-    async ({ dateFrom, dateTo, category }) => {
+    async ({ dateFrom, dateTo, category, scopeHash }) => {
       const where: any = {};
 
       // Filtro por fecha
@@ -76,14 +76,55 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
         distMap[item.reviewScore] = item._count.id;
       }
 
+      const totalReviews = agg._count.id || 0;
+      const averageRating = Math.round((agg._avg.reviewScore || 0) * 100) / 100;
+
       return JSON.stringify({
-        averageRating: Math.round((agg._avg.reviewScore || 0) * 100) / 100,
-        totalReviews: agg._count.id || 0,
-        distribution: distMap,
-        appliedFilters: {
-          category: category || 'ALL',
+        status: totalReviews > 0 ? 'AVAILABLE' : 'NO_DATA',
+        reasonCode: totalReviews > 0 ? undefined : 'NO_RATINGS_IN_SCOPE',
+        scopeHash: scopeHash || 'global-scope',
+        appliedScope: {
+          category: category || null,
           dateFrom: dateFrom || null,
           dateTo: dateTo || null,
+          scopeHash: scopeHash || 'global-scope',
+        },
+        rowCount: totalReviews,
+        sampleSize: totalReviews,
+        methods: ['RATING_DISTRIBUTION'],
+        metrics: [
+          {
+            key: 'reviews.rating.total',
+            label: 'Total de reseñas',
+            value: totalReviews,
+            unit: 'COUNT',
+            sampleSize: totalReviews,
+            sourcePath: '$.data.totalReviews',
+            aggregation: 'COUNT',
+          },
+          {
+            key: 'reviews.rating.average',
+            label: 'Calificación promedio',
+            value: averageRating,
+            unit: 'RATING',
+            sampleSize: totalReviews,
+            sourcePath: '$.data.averageRating',
+            aggregation: 'MEAN',
+          },
+          ...Object.entries(distMap).map(([score, count]) => ({
+            key: `reviews.rating.score_${score}.count`,
+            label: `Reseñas de ${score} estrellas`,
+            value: count,
+            unit: 'COUNT',
+            sampleSize: totalReviews,
+            sourcePath: `$.data.distribution.${score}`,
+            aggregation: 'COUNT',
+          })),
+        ],
+        data: {
+          averageRating,
+          totalReviews,
+          distribution: distMap,
         },
       });
     },
@@ -100,6 +141,10 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
           .describe(
             'Nombre de la categoría de producto a filtrar (ej: informatica_acessorios, moveis_decoracao)',
           ),
+        scopeHash: z
+          .string()
+          .optional()
+          .describe('Scope hash asignado inmutable'),
       }),
     },
   );

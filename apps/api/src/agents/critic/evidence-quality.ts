@@ -95,26 +95,38 @@ export function calculateDeterministicEvidenceQuality(
 
   // 4. Sample Adequacy (20 points)
   let sampleAdequacy = 20;
-  let minSampleSize = Infinity;
-  for (const ev of linkedEv) {
-    if (ev.sampleSize !== undefined && ev.sampleSize < minSampleSize) {
-      minSampleSize = ev.sampleSize;
+  // Only consider AVAILABLE evidence with explicitly defined and positive sampleSize
+  const validSampleSizes = linkedEv
+    .filter((e) => e.status === 'AVAILABLE')
+    .map((e) => e.sampleSize)
+    .filter((size): size is number => typeof size === 'number' && size > 0);
+
+  if (validSampleSizes.length === 0) {
+    // Check if there are ANY available evidence items at all (could just be missing sampleSize)
+    const hasAvailableEv = linkedEv.some((e) => e.status === 'AVAILABLE');
+    if (!hasAvailableEv) {
+      sampleAdequacy = 0;
+      rationale.push(
+        'Adecuación muestral: Muestra insuficiente o ausente (0/20).',
+      );
+    } else {
+      // Available evidence exists but no numeric sampleSize — treat as adequate (not penalized)
+      rationale.push(
+        'Adecuación muestral: Evidencia disponible sin tamaño de muestra explícito (20/20).',
+      );
     }
-  }
-  if (minSampleSize === Infinity || minSampleSize === 0) {
-    sampleAdequacy = 0;
-    rationale.push(
-      'Adecuación muestral: Muestra insuficiente o ausente (0/20).',
-    );
-  } else if (minSampleSize < 10) {
-    sampleAdequacy = 10;
-    rationale.push(
-      `Adecuación muestral: Tamaño muestral bajo (${minSampleSize} observaciones) (10/20).`,
-    );
   } else {
-    rationale.push(
-      `Adecuación muestral: Muestra robusta de ${minSampleSize.toLocaleString('es-ES')} observaciones (20/20).`,
-    );
+    const minSampleSize = Math.min(...validSampleSizes);
+    if (minSampleSize < 10) {
+      sampleAdequacy = 10;
+      rationale.push(
+        `Adecuación muestral: Tamaño muestral bajo (${minSampleSize} observaciones) (10/20).`,
+      );
+    } else {
+      rationale.push(
+        `Adecuación muestral: Muestra robusta de ${minSampleSize.toLocaleString('es-ES')} observaciones (20/20).`,
+      );
+    }
   }
 
   // 5. Method Provenance (15 points)

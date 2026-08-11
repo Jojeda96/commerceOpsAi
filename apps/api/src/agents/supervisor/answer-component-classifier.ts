@@ -5,6 +5,10 @@ import {
   DELIVERY_COMPLAINT_TERMS,
 } from './question-intent';
 
+// Only add REVIEW_RATING_CONTEXT when the question explicitly asks for ratings/stars
+const RATING_TERMS =
+  /\b(estrella(?:s)?|calificaci[oó]n|rating|puntuaci[oó]n|satisfacci[oó]n)\b/i;
+
 export function classifyAnswerComponents(question: string): AnswerComponent[] {
   const components = new Set<AnswerComponent>();
   const text = question.toLowerCase();
@@ -13,7 +17,11 @@ export function classifyAnswerComponents(question: string): AnswerComponent[] {
 
   if (isReviewQuery) {
     components.add('REVIEW_COMPLAINT_THEMES');
-    components.add('REVIEW_RATING_CONTEXT');
+
+    // Only add REVIEW_RATING_CONTEXT when the question explicitly asks for it
+    if (RATING_TERMS.test(question)) {
+      components.add('REVIEW_RATING_CONTEXT');
+    }
 
     if (DELIVERY_COMPLAINT_TERMS.test(text)) {
       components.add('DELIVERY_DELAY_COMPLAINTS');

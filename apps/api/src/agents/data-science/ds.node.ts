@@ -2,7 +2,11 @@ import { ChatOpenAI } from '@langchain/openai';
 import { PrismaClient } from '@prisma/client';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { StreamingService } from '../../streaming/streaming.service';
-import { Finding, Evidence } from '@commerce-ops/shared-types';
+import {
+  Finding,
+  Evidence,
+  AnswerCoverageItem,
+} from '@commerce-ops/shared-types';
 import { createDataScienceTools, DeliveryScenario } from './ds.tools';
 import {
   runAgentWithTrace,
@@ -144,6 +148,13 @@ export function createDataScienceNode(
           const unavailabilityReason =
             scenarioPayload.reasonCode || 'SNAPSHOT_TABLE_EMPTY';
 
+          const governanceAvailable =
+            govData.status === 'AVAILABLE' ||
+            Boolean(govData.modelVersion && govData.deploymentStatus) ||
+            Boolean(
+              govData.data?.modelVersion && govData.data?.deploymentStatus,
+            );
+
           const govMetadata = {
             modelName:
               govData.data?.modelName || govData.modelName || 'xgboost',
@@ -164,6 +175,39 @@ export function createDataScienceNode(
               govData.qualityGateReasons ||
               [],
           };
+
+          const partialCoverage: AnswerCoverageItem[] = [
+            {
+              component: 'MODEL_GOVERNANCE',
+              status: governanceAvailable
+                ? 'ANSWERED'
+                : 'UNAVAILABLE_WITH_REASON',
+              reasonCode: governanceAvailable
+                ? undefined
+                : govData.reasonCode ||
+                  govData.reason ||
+                  'MODEL_GOVERNANCE_UNAVAILABLE',
+              evidenceIds: [govEvId],
+              explanation:
+                'Se verificaron versión, deployment status y quality gate del modelo.',
+            },
+            {
+              component: 'PREDICTION',
+              status: 'UNAVAILABLE_WITH_REASON',
+              reasonCode: unavailabilityReason,
+              evidenceIds: [scenEvId],
+              explanation:
+                'No se produjo una probabilidad predictiva porque no existía un escenario válido.',
+            },
+            {
+              component: 'LOCAL_EXPLANATION',
+              status: 'UNAVAILABLE_WITH_REASON',
+              reasonCode: 'NO_VALID_PREDICTION',
+              evidenceIds: [scenEvId],
+              explanation:
+                'No se ejecutó SHAP porque no existe una predicción válida que explicar.',
+            },
+          ];
 
           const partialFinding = buildGovernanceFinding({
             investigationId,
@@ -187,6 +231,7 @@ export function createDataScienceNode(
               evidence: evidenceItems,
               toolTraces,
               modelPredictions: [],
+              coverageItems: partialCoverage,
             },
           };
         }
@@ -279,12 +324,44 @@ export function createDataScienceNode(
             toolName: 'predict_delivery_delay',
             parameters: { scenarioId: scenario.scenarioId },
             resultSummary: JSON.stringify(parsedPred),
+            rowCount: parsedPred.status === 'AVAILABLE' ? 1 : 0,
+            sampleSize: parsedPred.status === 'AVAILABLE' ? 1 : 0,
+            metrics: [],
+            generatedAt: new Date().toISOString(),
+          });
+
+          // Add evidence for explain_delivery_delay
+          const explainEvId = `ev-ds-explain-${scenario.scenarioId}-${Date.now()}`;
+          evidenceItems.push({
+            id: explainEvId,
+            localAgentRunId: localRunId,
+            localToolExecutionId: explainTrace.localExecutionId,
+            sourceType: 'TOOL_EXECUTION',
+            agentName: 'DATA_SCIENCE',
+            iteration,
+            toolName: 'explain_delivery_delay',
+            scopeHash: commonScope.scopeHash,
+            appliedScope: state.analysisScope,
+            status: parsedExplain.status,
+            reasonCode: parsedExplain.reasonCode,
+            parameters: {
+              scenarioId: scenario.scenarioId,
+            },
+            resultSummary: JSON.stringify(parsedExplain),
+            rowCount: parsedExplain.status === 'AVAILABLE' ? 1 : 0,
+            sampleSize: parsedExplain.status === 'AVAILABLE' ? 1 : 0,
+            metrics: [],
             generatedAt: new Date().toISOString(),
           });
         }
 
         const isApproved =
           govData.deploymentStatus === 'APPROVED_FOR_DEMO_INFERENCE';
+
+        const governanceAvailableFull =
+          govData.status === 'AVAILABLE' ||
+          Boolean(govData.modelVersion && govData.deploymentStatus) ||
+          Boolean(govData.data?.modelVersion && govData.data?.deploymentStatus);
 
         const model = new ChatOpenAI({
           modelName,
@@ -376,6 +453,58 @@ Genera un hallazgo técnico cuantitativo y auditable en formato JSON:
             explanationJson: p.explanation,
           }));
 
+        // Build completeCoverage for full predictions branch
+        const hasPrediction = modelPredictionTraces.length > 0;
+        const hasLocalExplanation = predictions.some(
+          (p) =>
+            p.explanation &&
+            p.explanation.status === 'AVAILABLE' &&
+            Array.isArray(
+              p.explanation.topFeatures || p.explanation.top_features,
+            ),
+        );
+
+        const completeCoverage: AnswerCoverageItem[] = [
+          {
+            component: 'MODEL_GOVERNANCE',
+            status: governanceAvailableFull
+              ? 'ANSWERED'
+              : 'UNAVAILABLE_WITH_REASON',
+            reasonCode: governanceAvailableFull
+              ? undefined
+              : 'MODEL_GOVERNANCE_UNAVAILABLE',
+            evidenceIds: [govEvId],
+            explanation:
+              'Se verificaron versión, deployment status y quality gate del modelo.',
+          },
+          {
+            component: 'PREDICTION',
+            status: hasPrediction ? 'ANSWERED' : 'UNAVAILABLE_WITH_REASON',
+            reasonCode: hasPrediction ? undefined : 'NO_VALID_PREDICTION',
+            evidenceIds: evidenceItems
+              .filter((e) => e.toolName === 'predict_delivery_delay')
+              .map((e) => e.id),
+            explanation: hasPrediction
+              ? 'Se generó predicción de probabilidad de atraso.'
+              : 'No se generó predicción válida.',
+          },
+          {
+            component: 'LOCAL_EXPLANATION',
+            status: hasLocalExplanation
+              ? 'ANSWERED'
+              : 'UNAVAILABLE_WITH_REASON',
+            reasonCode: hasLocalExplanation
+              ? undefined
+              : 'LOCAL_EXPLANATION_NOT_PRODUCED',
+            evidenceIds: evidenceItems
+              .filter((e) => e.toolName === 'explain_delivery_delay')
+              .map((e) => e.id),
+            explanation: hasLocalExplanation
+              ? 'Factores SHAP disponibles para la predicción.'
+              : 'No se produjo explicación local SHAP.',
+          },
+        ];
+
         streaming.emit(investigationId, 'finding.created', {
           agent: 'DATA_SCIENCE',
           finding: findingItem,
@@ -390,6 +519,7 @@ Genera un hallazgo técnico cuantitativo y auditable en formato JSON:
             evidence: evidenceItems,
             toolTraces,
             modelPredictions: modelPredictionTraces,
+            coverageItems: completeCoverage,
           },
         };
       },
@@ -402,6 +532,7 @@ Genera un hallazgo técnico cuantitativo y auditable en formato JSON:
       findings: [result.finding],
       evidence: result.evidence,
       modelPredictions: result.modelPredictions,
+      answerCoverage: result.coverageItems,
     };
   };
 }

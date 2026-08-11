@@ -91,4 +91,49 @@ describe('PR-05: Recommendation Support Policy', () => {
     expect(outputRec).toBeDefined();
     expect(outputRec?.kind).toBe('HYPOTHESIS_TO_TEST');
   });
+
+  // Test 8.9: Recommendation metric check
+  it('Test 8.9 — recommendation for review complaints must reference reviews.topic.delivery_delay.share_pct and not lateRate', () => {
+    const rec = {
+      recommendationId: 'rec-cx-01',
+      kind: 'MONITORING_ACTION' as const,
+      title: 'Monitorear quejas de retraso en reseñas',
+      description:
+        'Monitorear la proporción de reseñas sobre entregas tardías.',
+      evidenceBasis: [
+        {
+          evidenceId: 'ev-cx-1',
+          findingId: 'f-cx-1',
+          metricKeys: ['reviews.topic.delivery_delay.share_pct'],
+          answerComponents: ['DELIVERY_DELAY_COMPLAINTS'],
+        },
+      ],
+      supportingFindingIds: ['f-cx-1'],
+    };
+
+    const validated = validateRecommendationSupport({
+      recommendations: [rec],
+      findings: [
+        {
+          id: 'f-cx-1',
+          agent: 'CUSTOMER_EXPERIENCE',
+          findingType: 'REVIEW_COMPLAINT_ANALYSIS',
+          title: 'Quejas principales en reseñas de clientes',
+          description: 'Demoras en la entrega',
+        } as any,
+      ],
+      answeredComponents: [
+        'REVIEW_COMPLAINT_THEMES',
+        'DELIVERY_DELAY_COMPLAINTS',
+      ],
+      unavailableComponents: [],
+    });
+
+    const accepted = validated.acceptedRecommendations[0];
+    expect(accepted).toBeDefined();
+    expect(accepted.evidenceBasis![0].metricKeys).toContain(
+      'reviews.topic.delivery_delay.share_pct',
+    );
+    expect(accepted.evidenceBasis![0].metricKeys).not.toContain('lateRate');
+  });
 });

@@ -6,7 +6,11 @@ import {
   runAgentWithTrace,
   executeToolWithTrace,
 } from '../../observability/agent-runner';
-import { ToolExecutionTrace, Evidence } from '@commerce-ops/shared-types';
+import {
+  ToolExecutionTrace,
+  Evidence,
+  AnswerCoverageItem,
+} from '@commerce-ops/shared-types';
 import { buildToolScope } from '../scope/build-tool-scope';
 import { buildAnomalyFinding } from './build-anomaly-finding';
 import { AnomalyResultSchema } from './anomaly-result.schema';
@@ -111,6 +115,28 @@ export function createAnomalyNode(
           evidence: evidenceItem,
         });
 
+        // Build answerCoverage for ANOMALY_DETECTION
+        const anomalyCoverage: AnswerCoverageItem[] = [
+          {
+            component: 'ANOMALY_DETECTION',
+            status:
+              parsedResult.status === 'AVAILABLE'
+                ? 'ANSWERED'
+                : parsedResult.status === 'NO_DATA'
+                  ? 'NO_DATA_WITH_REASON'
+                  : 'UNAVAILABLE_WITH_REASON',
+            reasonCode:
+              parsedResult.status === 'AVAILABLE'
+                ? undefined
+                : parsedResult.reasonCode || 'ANOMALY_ANALYSIS_UNAVAILABLE',
+            evidenceIds: [evidenceItem.id],
+            explanation:
+              parsedResult.status === 'AVAILABLE'
+                ? 'Anomalías evaluadas mediante Robust Z-Score.'
+                : 'No fue posible producir un resultado de anomalías.',
+          },
+        ];
+
         streaming.emit(investigationId, 'finding.created', {
           agent: 'ANOMALY',
           finding: findingItem,
@@ -124,6 +150,7 @@ export function createAnomalyNode(
             finding: findingItem,
             evidence: [evidenceItem],
             toolTraces,
+            coverageItems: anomalyCoverage,
           },
         };
       },
@@ -135,6 +162,7 @@ export function createAnomalyNode(
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],
       evidence: result.evidence,
+      answerCoverage: result.coverageItems,
     };
   };
 }

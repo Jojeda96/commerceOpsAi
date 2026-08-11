@@ -28,6 +28,10 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@commerce-ops/shared-types": "workspace:*",
+    "@commerce-ops/agent-contracts": "workspace:*",
+    "@commerce-ops/observability": "workspace:*",
+    "@commerce-ops/evaluation": "workspace:*",
     "@langchain/core": "^1.2.3",
     "@langchain/langgraph": "^1.4.8",
     "@langchain/openai": "^1.5.5",
@@ -88,6 +92,12 @@
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.ts$": "ts-jest"
+    },
+    "moduleNameMapper": {
+      "^@commerce-ops/shared-types$": "<rootDir>/../../../packages/shared-types/src/index.ts",
+      "^@commerce-ops/agent-contracts$": "<rootDir>/../../../packages/agent-contracts/src/index.ts",
+      "^@commerce-ops/observability$": "<rootDir>/../../../packages/observability/src/index.ts",
+      "^@commerce-ops/evaluation$": "<rootDir>/../../../packages/evaluation/src/index.ts"
     },
     "collectCoverageFrom": [
       "**/*.ts"

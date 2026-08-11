@@ -34,13 +34,13 @@ describe('Live E2E Investigation Execution Test', () => {
         '[live-investigation.e2e] Database not reachable — skipping live integration tests.',
       );
     }
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (app) {
       await app.close();
     }
-  });
+  }, 30000);
 
   it('should authenticate, execute investigation via HTTP POST, poll to completion and verify clean status', async () => {
     if (!dbAvailable) {

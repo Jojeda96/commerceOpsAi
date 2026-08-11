@@ -10,6 +10,7 @@ import {
   ToolExecutionTrace,
   Evidence,
   EvidenceMetric,
+  AnswerCoverageItem,
 } from '@commerce-ops/shared-types';
 import { buildToolScope } from '../scope/build-tool-scope';
 import { buildLogisticsFinding } from './build-logistics-finding';
@@ -208,6 +209,30 @@ export function createLogisticsNode(
           stageEvidence,
         });
 
+        // Build answerCoverage for HISTORICAL_LOGISTICS_CONTEXT
+        const logisticsCoverage: AnswerCoverageItem[] = [
+          {
+            component: 'HISTORICAL_LOGISTICS_CONTEXT',
+            status:
+              parsedDel.status === 'AVAILABLE'
+                ? 'ANSWERED'
+                : parsedDel.status === 'ERROR'
+                  ? 'UNAVAILABLE_WITH_REASON'
+                  : 'NO_DATA_WITH_REASON',
+            reasonCode:
+              parsedDel.status === 'AVAILABLE'
+                ? undefined
+                : parsedDel.status === 'ERROR'
+                  ? parsedDel.reasonCode || 'DELIVERY_SUMMARY_FAILED'
+                  : parsedDel.reasonCode || 'NO_DELIVERIES_IN_SCOPE',
+            evidenceIds: [summaryEvidence.id],
+            explanation:
+              parsedDel.status === 'AVAILABLE'
+                ? 'Contexto histórico calculado mediante get_delivery_summary.'
+                : 'No se encontraron entregas en el scope.',
+          },
+        ];
+
         streaming.emit(investigationId, 'finding.created', {
           agent: 'LOGISTICS',
           finding: findingItem,
@@ -221,6 +246,7 @@ export function createLogisticsNode(
             finding: findingItem,
             evidence: evidenceItems,
             toolTraces,
+            coverageItems: logisticsCoverage,
           },
           inputTokens: 0,
           outputTokens: 0,
@@ -234,6 +260,7 @@ export function createLogisticsNode(
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],
       evidence: result.evidence,
+      answerCoverage: result.coverageItems,
     };
   };
 }

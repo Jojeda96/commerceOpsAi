@@ -174,6 +174,7 @@ export function createCustomerExperienceNode(
             dateFrom: state.filters.dateFrom,
             dateTo: state.filters.dateTo,
             category: detectedCategory,
+            scopeHash,
           };
           streaming.emit(investigationId, 'tool.started', {
             agent: 'CUSTOMER_EXPERIENCE',

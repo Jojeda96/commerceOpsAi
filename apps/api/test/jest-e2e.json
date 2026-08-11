@@ -5,5 +5,11 @@
   "testRegex": ".*(e2e-spec|spec)\\.ts$",
   "transform": {
     "^.+\\.ts$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@commerce-ops/shared-types$": "<rootDir>/../../../packages/shared-types/src/index.ts",
+    "^@commerce-ops/agent-contracts$": "<rootDir>/../../../packages/agent-contracts/src/index.ts",
+    "^@commerce-ops/observability$": "<rootDir>/../../../packages/observability/src/index.ts",
+    "^@commerce-ops/evaluation$": "<rootDir>/../../../packages/evaluation/src/index.ts"
   }
 }

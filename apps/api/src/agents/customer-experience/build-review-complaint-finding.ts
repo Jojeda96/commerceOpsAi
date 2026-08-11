@@ -22,6 +22,25 @@ export interface ReviewFindingResult {
   coverageItems: AnswerCoverageItem[];
 }
 
+// Human-readable labels for subtheme codes
+const SUBTHEME_LABELS: Record<string, string> = {
+  NOT_DELIVERED: 'Pedido no recibido',
+  LATE_DELIVERY: 'Entrega tardía',
+  DEADLINE_MISSED: 'Plazo de entrega incumplido',
+  BROKEN_PRODUCT: 'Producto quebrado',
+  DAMAGED_PRODUCT: 'Producto dañado',
+  DAMAGED_PACKAGING: 'Embalaje o caja dañada',
+};
+
+const formatCount = (value: number) =>
+  new Intl.NumberFormat('es-CL').format(value);
+
+const formatPct = (value: number) =>
+  new Intl.NumberFormat('es-CL', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+
 export function buildReviewComplaintFinding(
   input: BuildReviewComplaintFindingInput,
 ): ReviewFindingResult {
@@ -56,7 +75,7 @@ export function buildReviewComplaintFinding(
     sourcePath: 'totalCommentedReviews',
     tolerance: 0,
     sampleSize: totalComments,
-    renderedTextFragment: `${totalComments} reseñas con comentario`,
+    renderedTextFragment: `${formatCount(totalComments)} reseñas con comentario`,
   });
 
   numericClaims.push({
@@ -68,7 +87,7 @@ export function buildReviewComplaintFinding(
     sourcePath: 'totalMatchedReviews',
     tolerance: 0,
     sampleSize: totalComments,
-    renderedTextFragment: `${totalMatched} reseñas con quejas`,
+    renderedTextFragment: `${formatCount(totalMatched)} reseñas con quejas`,
   });
 
   const delayTopic = complaintData.topics.find(
@@ -83,6 +102,23 @@ export function buildReviewComplaintFinding(
   const damageCount = damageTopic ? damageTopic.uniqueReviewCount : 0;
   const damageShare = damageTopic ? damageTopic.shareOfCommentedPct : 0;
 
+  // Sort subthemes descending by uniqueReviewCount (ties broken alphabetically)
+  const sortedDelaySubthemes = delayTopic
+    ? [...delayTopic.subthemes].sort(
+        (a, b) =>
+          b.uniqueReviewCount - a.uniqueReviewCount ||
+          a.code.localeCompare(b.code),
+      )
+    : [];
+
+  const sortedDamageSubthemes = damageTopic
+    ? [...damageTopic.subthemes].sort(
+        (a, b) =>
+          b.uniqueReviewCount - a.uniqueReviewCount ||
+          a.code.localeCompare(b.code),
+      )
+    : [];
+
   if (delayTopic) {
     numericClaims.push({
       claimId: `claim-delay-count-${Date.now()}`,
@@ -93,7 +129,7 @@ export function buildReviewComplaintFinding(
       sourcePath: 'topics.delivery_delay.uniqueReviewCount',
       tolerance: 0,
       sampleSize: totalComments,
-      renderedTextFragment: `${delayCount} reseñas relacionadas con demoras`,
+      renderedTextFragment: `${formatCount(delayCount)} reseñas relacionadas con demoras`,
     });
     numericClaims.push({
       claimId: `claim-delay-share-${Date.now()}`,
@@ -104,10 +140,10 @@ export function buildReviewComplaintFinding(
       sourcePath: 'topics.delivery_delay.shareOfCommentedPct',
       tolerance: 0.1,
       sampleSize: totalComments,
-      renderedTextFragment: `${delayShare}% de los comentarios`,
+      renderedTextFragment: `${formatPct(delayShare)} % de los comentarios`,
     });
 
-    for (const sub of delayTopic.subthemes) {
+    for (const sub of sortedDelaySubthemes) {
       numericClaims.push({
         claimId: `claim-subtheme-${sub.code}-${Date.now()}`,
         metricKey: `reviews.subtheme.${sub.code.toLowerCase()}.count`,
@@ -117,7 +153,7 @@ export function buildReviewComplaintFinding(
         sourcePath: `topics.delivery_delay.subthemes.${sub.code.toLowerCase()}.uniqueReviewCount`,
         tolerance: 0,
         sampleSize: delayCount,
-        renderedTextFragment: `${sub.uniqueReviewCount} reseñas`,
+        renderedTextFragment: `${SUBTHEME_LABELS[sub.code] || sub.code} (${formatCount(sub.uniqueReviewCount)} reseñas)`,
       });
     }
   }
@@ -132,7 +168,7 @@ export function buildReviewComplaintFinding(
       sourcePath: 'topics.package_damage.uniqueReviewCount',
       tolerance: 0,
       sampleSize: totalComments,
-      renderedTextFragment: `${damageCount} reseñas relacionadas con daños`,
+      renderedTextFragment: `${formatCount(damageCount)} reseñas relacionadas con daños`,
     });
     numericClaims.push({
       claimId: `claim-damage-share-${Date.now()}`,
@@ -143,10 +179,10 @@ export function buildReviewComplaintFinding(
       sourcePath: 'topics.package_damage.shareOfCommentedPct',
       tolerance: 0.1,
       sampleSize: totalComments,
-      renderedTextFragment: `${damageShare}% de los comentarios`,
+      renderedTextFragment: `${formatPct(damageShare)} % de los comentarios`,
     });
 
-    for (const sub of damageTopic.subthemes) {
+    for (const sub of sortedDamageSubthemes) {
       numericClaims.push({
         claimId: `claim-subtheme-${sub.code}-${Date.now()}`,
         metricKey: `reviews.subtheme.${sub.code.toLowerCase()}.count`,
@@ -156,27 +192,30 @@ export function buildReviewComplaintFinding(
         sourcePath: `topics.package_damage.subthemes.${sub.code.toLowerCase()}.uniqueReviewCount`,
         tolerance: 0,
         sampleSize: damageCount,
-        renderedTextFragment: `${sub.uniqueReviewCount} reseñas`,
+        renderedTextFragment: `${SUBTHEME_LABELS[sub.code] || sub.code} (${formatCount(sub.uniqueReviewCount)} reseñas)`,
       });
     }
   }
 
   const descriptionLines: string[] = [];
   descriptionLines.push(
-    `Se analizaron ${totalComments} reseñas con comentario en el scope asignado.`,
+    `Se analizaron ${formatCount(totalComments)} reseñas con comentario en el scope asignado.`,
   );
   descriptionLines.push(
-    `Las quejas relacionadas con demoras aparecieron en ${delayCount} reseñas (${delayShare}% de los comentarios analizados), mientras que las relacionadas con paquetes o productos dañados aparecieron en ${damageCount} (${damageShare}%).`,
+    `Las quejas relacionadas con demoras aparecieron en ${formatCount(delayCount)} reseñas (${formatPct(delayShare)} % de los comentarios analizados), mientras que las relacionadas con paquetes o productos dañados aparecieron en ${formatCount(damageCount)} (${formatPct(damageShare)} %).`,
   );
 
-  if (delayTopic && delayTopic.subthemes.length > 0) {
-    const subNames = delayTopic.subthemes
-      .map((s) => `${s.code} (${s.uniqueReviewCount} reseñas)`)
+  if (sortedDelaySubthemes.length > 0) {
+    const subNames = sortedDelaySubthemes
+      .map(
+        (s) =>
+          `${SUBTHEME_LABELS[s.code] || s.code} (${formatCount(s.uniqueReviewCount)} reseñas)`,
+      )
       .join(', ');
     descriptionLines.push(
       `Dentro de las quejas de demora, los subtemas más frecuentes fueron: ${subNames}.`,
     );
-    const examples = delayTopic.subthemes.flatMap((s) => s.examples);
+    const examples = sortedDelaySubthemes.flatMap((s) => s.examples);
     if (examples.length > 0) {
       const quote = examples[0].originalText;
       descriptionLines.push(
@@ -185,14 +224,17 @@ export function buildReviewComplaintFinding(
     }
   }
 
-  if (damageTopic && damageTopic.subthemes.length > 0) {
-    const subNames = damageTopic.subthemes
-      .map((s) => `${s.code} (${s.uniqueReviewCount} reseñas)`)
+  if (sortedDamageSubthemes.length > 0) {
+    const subNames = sortedDamageSubthemes
+      .map(
+        (s) =>
+          `${SUBTHEME_LABELS[s.code] || s.code} (${formatCount(s.uniqueReviewCount)} reseñas)`,
+      )
       .join(', ');
     descriptionLines.push(
       `Dentro de las quejas por daño, los subtemas más frecuentes fueron: ${subNames}.`,
     );
-    const examples = damageTopic.subthemes.flatMap((s) => s.examples);
+    const examples = sortedDamageSubthemes.flatMap((s) => s.examples);
     if (examples.length > 0) {
       const quote = examples[0].originalText;
       descriptionLines.push(`Ejemplo real de cliente sobre daños: "${quote}"`);
@@ -201,6 +243,10 @@ export function buildReviewComplaintFinding(
 
   descriptionLines.push(
     `Nota metodológica: Los temas se clasificaron determinísticamente mediante taxonomía de léxico versionada ${complaintData.taxonomyVersion}. Los comentarios describen problemas observados pero no demuestran causalidad operacional sobre el proceso de embalaje o transporte.`,
+  );
+
+  descriptionLines.push(
+    `Nota sobre solapamiento: Una misma reseña puede pertenecer a más de un subtema; por eso la suma de subtemas puede superar el total único del tema.`,
   );
 
   const description = descriptionLines.join('\n\n');
@@ -239,6 +285,7 @@ export function buildReviewComplaintFinding(
       component: 'REVIEW_RATING_CONTEXT',
       status: ratingEvidence ? 'ANSWERED' : 'UNAVAILABLE_WITH_REASON',
       evidenceIds: ratingEvidence ? [ratingEvidence.id] : [],
+      reasonCode: ratingEvidence ? undefined : 'RATING_EVIDENCE_NOT_COLLECTED',
     });
   }
 

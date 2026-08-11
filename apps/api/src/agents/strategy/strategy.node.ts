@@ -75,7 +75,7 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
       "description": "Descripción detallada de la acción recomendada.",
       "priority": "HIGH",
       "kind": "MONITORING_ACTION",
-      "expectedImpact": "Métrica histórica afectada: lateRate. La magnitud futura requiere simulación cuantitativa.",
+      "expectedImpact": "Métrica histórica afectada: reviews.topic.delivery_delay.share_pct. La magnitud futura requiere simulación cuantitativa.",
       "assumptions": ["Los patrones históricos observados se mantienen."]
     }
   ]
@@ -144,7 +144,8 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
               'Verificar tamaño muestral, estabilidad temporal y composición por vendedor/categoría.',
             priority: 'HIGH',
             kind: 'MONITORING_ACTION',
-            expectedImpact: 'Métrica histórica afectada: lateRate.',
+            expectedImpact:
+              'Métrica histórica afectada: reviews.topic.delivery_delay.share_pct.',
             supportingFindingIds: Array.from(actionableIds),
             assumptions: ['Los datos históricos reflejan la tendencia actual.'],
             createdAt: new Date().toISOString(),
@@ -158,6 +159,67 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
           validatedRecs.push(valRes.recommendation);
         }
 
+        // Build evidenceBasis for CX complaint-derived recommendations
+        const reviewFindings = state.findings.filter(
+          (f) => f.findingType === 'REVIEW_COMPLAINT_ANALYSIS',
+        );
+        const reviewEvidenceIds = reviewFindings.flatMap(
+          (f) => f.evidenceIds || [],
+        );
+
+        const enrichedRecs = validatedRecs.map((rec: any) => {
+          // If this recommendation has no evidenceBasis and is related to CX review findings
+          if (!rec.evidenceBasis || rec.evidenceBasis.length === 0) {
+            const textLower = `${rec.title} ${rec.description}`.toLowerCase();
+            const isReviewRelated =
+              textLower.includes('review') ||
+              textLower.includes('reseña') ||
+              textLower.includes('queja') ||
+              textLower.includes('demora') ||
+              textLower.includes('delay') ||
+              textLower.includes('embalaje') ||
+              textLower.includes('daño') ||
+              textLower.includes('package');
+
+            if (isReviewRelated && reviewFindings.length > 0) {
+              const metricKeys: string[] = [
+                'reviews.topic.delivery_delay.share_pct',
+                'reviews.topic.delivery_delay.count',
+                'reviews.comments.total',
+              ];
+              const answerComponents: string[] = [
+                'REVIEW_COMPLAINT_THEMES',
+                'DELIVERY_DELAY_COMPLAINTS',
+              ];
+
+              if (
+                textLower.includes('embalaje') ||
+                textLower.includes('daño') ||
+                textLower.includes('package')
+              ) {
+                metricKeys.push('reviews.topic.package_damage.share_pct');
+                metricKeys.push('reviews.topic.package_damage.count');
+                answerComponents.push('PACKAGE_DAMAGE_COMPLAINTS');
+              }
+
+              rec = {
+                ...rec,
+                evidenceBasis: reviewEvidenceIds.map((evId: string) => ({
+                  evidenceId: evId,
+                  findingId: reviewFindings[0]?.id,
+                  metricKeys,
+                  answerComponents,
+                })),
+                supportingFindingIds: [
+                  ...(rec.supportingFindingIds || []),
+                  ...reviewFindings.map((f) => f.id),
+                ],
+              };
+            }
+          }
+          return rec;
+        });
+
         const answeredComponents = (state.answerCoverage || [])
           .filter((c) => c.status === 'ANSWERED')
           .map((c) => c.component);
@@ -170,7 +232,7 @@ Genera 2 recomendaciones ejecutivas en formato JSON estricto:
           .map((c) => c.component);
 
         const supportValidation = validateRecommendationSupport({
-          recommendations: validatedRecs as any[],
+          recommendations: enrichedRecs,
           findings,
           answeredComponents,
           unavailableComponents,

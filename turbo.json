@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "DATABASE_URL",
+    "SNAPSHOT_VERIFY_STRICT",
+    "SNAPSHOT_EXPECTATION",
+    "CI"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -11,6 +17,9 @@
     },
     "lint": {},
     "lint:fix": {},
-    "test": {}
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    }
   }
 }
