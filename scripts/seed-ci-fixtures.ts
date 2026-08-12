@@ -54,7 +54,7 @@ async function seed() {
     },
   });
 
-  // 3. Create Product
+  // 3. Create Products — 5 distinct categories for Sales Q4/Q7
   const product = await prisma.olistProduct.upsert({
     where: { id: 'prod-1' },
     update: {},
@@ -68,6 +68,70 @@ async function seed() {
       productLengthCm: 20,
       productHeightCm: 10,
       productWidthCm: 15,
+    },
+  });
+
+  const productMoveis = await prisma.olistProduct.upsert({
+    where: { id: 'prod-ci-moveis' },
+    update: {},
+    create: {
+      id: 'prod-ci-moveis',
+      productCategoryName: 'moveis_decoracao',
+      productNameLength: 35,
+      productDescriptionLength: 300,
+      productPhotosQty: 2,
+      productWeightG: 1200,
+      productLengthCm: 40,
+      productHeightCm: 20,
+      productWidthCm: 30,
+    },
+  });
+
+  const productInformatica = await prisma.olistProduct.upsert({
+    where: { id: 'prod-ci-informatica' },
+    update: {},
+    create: {
+      id: 'prod-ci-informatica',
+      productCategoryName: 'informatica_acessorios',
+      productNameLength: 30,
+      productDescriptionLength: 250,
+      productPhotosQty: 2,
+      productWeightG: 800,
+      productLengthCm: 30,
+      productHeightCm: 12,
+      productWidthCm: 20,
+    },
+  });
+
+  const productCama = await prisma.olistProduct.upsert({
+    where: { id: 'prod-ci-cama' },
+    update: {},
+    create: {
+      id: 'prod-ci-cama',
+      productCategoryName: 'cama_mesa_banho',
+      productNameLength: 30,
+      productDescriptionLength: 250,
+      productPhotosQty: 2,
+      productWeightG: 900,
+      productLengthCm: 35,
+      productHeightCm: 15,
+      productWidthCm: 25,
+    },
+  });
+
+  const productEsporte = await prisma.olistProduct.upsert({
+    where: { id: 'prod-ci-esporte' },
+    update: {},
+    create: {
+      id: 'prod-ci-esporte',
+      productCategoryName: 'esporte_lazer',
+      productNameLength: 30,
+      productDescriptionLength: 250,
+      productPhotosQty: 2,
+      productWeightG: 700,
+      productLengthCm: 30,
+      productHeightCm: 15,
+      productWidthCm: 20,
     },
   });
 
@@ -141,7 +205,79 @@ async function seed() {
 
   console.log(`✅ Seeded ${orderCount} orders across 24 months for CI.`);
 
-  // 5. Create Sample Order Reviews for Customer Experience Tests
+  // 5. Fetch all CI orders and build helper items
+  const allCiOrders = await prisma.olistOrder.findMany({
+    where: {
+      orderId: {
+        startsWith: 'ord-ci-',
+      },
+    },
+    orderBy: {
+      orderId: 'asc',
+    },
+    select: {
+      id: true,
+      orderId: true,
+      orderPurchaseTimestamp: true,
+      orderEstimatedDeliveryDate: true,
+    },
+  });
+
+  async function upsertCiItem(input: {
+    orderId: string;
+    orderItemId: number;
+    productId: string;
+    sellerId: string;
+    shippingLimitDate: Date;
+    price: number;
+    freightValue: number;
+  }) {
+    await prisma.olistOrderItem.upsert({
+      where: {
+        orderId_orderItemId: {
+          orderId: input.orderId,
+          orderItemId: input.orderItemId,
+        },
+      },
+      update: {
+        productId: input.productId,
+        sellerId: input.sellerId,
+        shippingLimitDate: input.shippingLimitDate,
+        price: input.price,
+        freightValue: input.freightValue,
+      },
+      create: {
+        orderId: input.orderId,
+        orderItemId: input.orderItemId,
+        productId: input.productId,
+        sellerId: input.sellerId,
+        shippingLimitDate: input.shippingLimitDate,
+        price: input.price,
+        freightValue: input.freightValue,
+      },
+    });
+  }
+
+  // 5-A: Furniture (moveis_decoracao) in Jan/Feb 2018 for Logistics comparison Q2
+  const janFeb2018Orders = allCiOrders.filter(
+    (order) =>
+      order.orderId.startsWith('ord-ci-2018-01') ||
+      order.orderId.startsWith('ord-ci-2018-02'),
+  );
+
+  for (const order of janFeb2018Orders) {
+    await upsertCiItem({
+      orderId: order.id,
+      orderItemId: 2,
+      productId: productMoveis.id,
+      sellerId: sellerSP.id,
+      shippingLimitDate: order.orderEstimatedDeliveryDate,
+      price: 80,
+      freightValue: 20,
+    });
+  }
+
+  // 5-B: Informatica items linked to review candidate orders (for Q7 CX)
   const sampleReviewTemplates = [
     // DELIVERY_DELAY - LATE_DELIVERY
     { score: 1, text: 'O produto chegou com muito atraso, a entrega demorou demais.' },
@@ -183,23 +319,99 @@ async function seed() {
     { score: 5, text: 'Excelente atendimento e envio muito agil.' },
   ];
 
-  const createdOrders = await prisma.olistOrder.findMany({
-    where: {
-      orderId: {
-        startsWith: 'ord-ci-',
-      },
-    },
-    orderBy: {
-      orderId: 'asc',
-    },
-    take: sampleReviewTemplates.length,
-    select: {
-      id: true,
-      orderId: true,
-      orderPurchaseTimestamp: true,
-    },
-  });
+  const reviewCandidateOrders = allCiOrders.slice(
+    0,
+    sampleReviewTemplates.length,
+  );
 
+  for (const order of reviewCandidateOrders) {
+    await upsertCiItem({
+      orderId: order.id,
+      orderItemId: 3,
+      productId: productInformatica.id,
+      sellerId: sellerSP.id,
+      shippingLimitDate: order.orderEstimatedDeliveryDate,
+      price: 120,
+      freightValue: 18,
+    });
+  }
+
+  const createdOrders = reviewCandidateOrders.map((order) => ({
+    id: order.id,
+    orderId: order.orderId,
+    orderPurchaseTimestamp: order.orderPurchaseTimestamp,
+  }));
+
+  // 5-C: cama_mesa_banho (first 40 orders)
+  for (const order of allCiOrders.slice(0, 40)) {
+    await upsertCiItem({
+      orderId: order.id,
+      orderItemId: 4,
+      productId: productCama.id,
+      sellerId: sellerSP.id,
+      shippingLimitDate: order.orderEstimatedDeliveryDate,
+      price: 90,
+      freightValue: 16,
+    });
+  }
+
+  // 5-D: esporte_lazer (orders 40-70)
+  for (const order of allCiOrders.slice(40, 70)) {
+    await upsertCiItem({
+      orderId: order.id,
+      orderItemId: 5,
+      productId: productEsporte.id,
+      sellerId: sellerSP.id,
+      shippingLimitDate: order.orderEstimatedDeliveryDate,
+      price: 70,
+      freightValue: 14,
+    });
+  }
+
+  // 5-E: sellerRJ high-value items (80 orders × R$1000) — sellerRJ becomes revenue leader
+  for (const order of allCiOrders.slice(0, 80)) {
+    await upsertCiItem({
+      orderId: order.id,
+      orderItemId: 9,
+      productId: product.id,
+      sellerId: sellerRJ.id,
+      shippingLimitDate: order.orderEstimatedDeliveryDate,
+      price: 1000,
+      freightValue: 25,
+    });
+  }
+
+  // 5-F: Payments for all CI orders (75% credit_card, 25% boleto)
+  for (let index = 0; index < allCiOrders.length; index++) {
+    const order = allCiOrders[index];
+    const paymentType = index % 4 === 0 ? 'boleto' : 'credit_card';
+    const paymentValue = paymentType === 'credit_card' ? 120 : 80;
+
+    await prisma.olistOrderPayment.upsert({
+      where: {
+        orderId_paymentSequential: {
+          orderId: order.id,
+          paymentSequential: 1,
+        },
+      },
+      update: {
+        paymentType,
+        paymentInstallments: paymentType === 'credit_card' ? 3 : 1,
+        paymentValue,
+      },
+      create: {
+        orderId: order.id,
+        paymentSequential: 1,
+        paymentType,
+        paymentInstallments: paymentType === 'credit_card' ? 3 : 1,
+        paymentValue,
+      },
+    });
+  }
+
+  console.log(`✅ Seeded ${allCiOrders.length} payment records.`);
+
+  // 6. Create Sample Order Reviews for Customer Experience Tests
   if (createdOrders.length < sampleReviewTemplates.length) {
     throw new Error(
       `CI seed expected at least ${sampleReviewTemplates.length} orders ` +
@@ -242,6 +454,68 @@ async function seed() {
   }
 
   console.log(`✅ Seeded ${reviewCount} order reviews for CX tests.`);
+
+  // 7. Create Jan/Feb 2018 Order Reviews for Temporal Rating Comparison (Q6)
+  const jan2018RatingOrders = allCiOrders
+    .filter((o) => o.orderId.startsWith('ord-ci-2018-01'))
+    .slice(0, 10);
+
+  const feb2018RatingOrders = allCiOrders
+    .filter((o) => o.orderId.startsWith('ord-ci-2018-02'))
+    .slice(0, 10);
+
+  const janScores = [5, 5, 5, 5, 4, 4, 5, 4, 5, 4];
+  const febScores = [3, 3, 2, 3, 2, 3, 3, 2, 3, 2];
+
+  for (let i = 0; i < jan2018RatingOrders.length; i++) {
+    const order = jan2018RatingOrders[i];
+    await prisma.olistOrderReview.upsert({
+      where: {
+        reviewId_orderId: {
+          reviewId: `rev-rating-jan-${i + 1}`,
+          orderId: order.id,
+        },
+      },
+      update: {},
+      create: {
+        reviewId: `rev-rating-jan-${i + 1}`,
+        orderId: order.id,
+        reviewScore: janScores[i],
+        reviewCommentTitle: 'Elogio',
+        reviewCommentMessage: 'Excelente produto, gostei bastante.',
+        reviewCreationDate: new Date('2018-01-20T12:00:00.000Z'),
+        reviewAnswerTimestamp: new Date('2018-01-21T12:00:00.000Z'),
+        embedding: [],
+        secondaryTopics: [],
+      },
+    });
+  }
+
+  for (let i = 0; i < feb2018RatingOrders.length; i++) {
+    const order = feb2018RatingOrders[i];
+    await prisma.olistOrderReview.upsert({
+      where: {
+        reviewId_orderId: {
+          reviewId: `rev-rating-feb-${i + 1}`,
+          orderId: order.id,
+        },
+      },
+      update: {},
+      create: {
+        reviewId: `rev-rating-feb-${i + 1}`,
+        orderId: order.id,
+        reviewScore: febScores[i],
+        reviewCommentTitle: 'Reclamacao',
+        reviewCommentMessage: 'Atraso na entrega e embalagem danificada.',
+        reviewCreationDate: new Date('2018-02-20T12:00:00.000Z'),
+        reviewAnswerTimestamp: new Date('2018-02-21T12:00:00.000Z'),
+        embedding: [],
+        secondaryTopics: [],
+      },
+    });
+  }
+
+  console.log('✅ Seeded Jan/Feb 2018 order reviews for temporal rating comparison.');
 }
 
 seed()

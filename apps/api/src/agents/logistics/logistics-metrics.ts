@@ -56,6 +56,7 @@ export function computeRouteDistribution(
   orders: ScopedDeliveredOrder[],
   minOrdersPerRoute = 10,
   topN = 10,
+  sortBy: 'DELIVERED_VOLUME' | 'LATE_RATE' = 'DELIVERED_VOLUME',
 ): RouteDistributionData | null {
   if (orders.length === 0) return null;
 
@@ -141,10 +142,19 @@ export function computeRouteDistribution(
     medianRouteLateRatePct = round1(rates[mid]);
   }
 
-  const sortedByVolumeAndRate = [...allRoutes].sort(
-    (a, b) => b.deliveredOrders - a.deliveredOrders,
-  );
-  const displayedRoutes = sortedByVolumeAndRate.slice(0, topN);
+  const sortedRoutes = [...allRoutes].sort((a, b) => {
+    if (sortBy === 'LATE_RATE') {
+      return (
+        b.lateRatePct - a.lateRatePct || b.deliveredOrders - a.deliveredOrders
+      );
+    }
+
+    return (
+      b.deliveredOrders - a.deliveredOrders || b.lateRatePct - a.lateRatePct
+    );
+  });
+
+  const displayedRoutes = sortedRoutes.slice(0, topN);
 
   return {
     eligibleRouteCount,

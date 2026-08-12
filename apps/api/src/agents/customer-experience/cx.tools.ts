@@ -1,7 +1,6 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { PrismaService } from '../../database/prisma.service';
-
 import { ReviewComplaintRepository } from './review-complaint.repository';
 
 export function createCustomerExperienceTools(prisma: PrismaService) {
@@ -36,7 +35,6 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
     async ({ dateFrom, dateTo, category, scopeHash }) => {
       const where: any = {};
 
-      // Filtro por fecha
       if (dateFrom || dateTo) {
         where.order = { orderPurchaseTimestamp: {} };
         if (dateFrom)
@@ -44,7 +42,6 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
         if (dateTo) where.order.orderPurchaseTimestamp.lte = new Date(dateTo);
       }
 
-      // Filtro por categoría de producto
       if (category) {
         if (!where.order) where.order = {};
         where.order.items = {
@@ -222,5 +219,193 @@ export function createCustomerExperienceTools(prisma: PrismaService) {
     },
   );
 
-  return [analyzeReviewComplaints, getRatingSummary, searchReviewsSemantic];
+  const compareRatingSummaryPeriods = tool(
+    async ({
+      dateFrom,
+      dateTo,
+      comparisonDateFrom,
+      comparisonDateTo,
+      category,
+      scopeHash,
+    }) => {
+      async function fetchRatingData(
+        dFrom?: string,
+        dTo?: string,
+        cat?: string,
+      ) {
+        const where: any = {};
+        if (dFrom || dTo) {
+          where.order = { orderPurchaseTimestamp: {} };
+          if (dFrom) where.order.orderPurchaseTimestamp.gte = new Date(dFrom);
+          if (dTo) where.order.orderPurchaseTimestamp.lte = new Date(dTo);
+        }
+        if (cat) {
+          if (!where.order) where.order = {};
+          where.order.items = {
+            some: {
+              product: {
+                productCategoryName: {
+                  contains: cat,
+                  mode: 'insensitive',
+                },
+              },
+            },
+          };
+        }
+
+        const agg = await prisma.olistOrderReview.aggregate({
+          _avg: { reviewScore: true },
+          _count: { id: true },
+          where,
+        });
+
+        const dist = await prisma.olistOrderReview.groupBy({
+          by: ['reviewScore'],
+          _count: { id: true },
+          where,
+        });
+
+        const distMap: Record<number, number> = {
+          1: 0,
+          2: 0,
+          3: 0,
+          4: 0,
+          5: 0,
+        };
+        for (const item of dist) {
+          distMap[item.reviewScore] = item._count.id;
+        }
+
+        const totalReviews = agg._count.id || 0;
+        const averageRating =
+          Math.round((agg._avg.reviewScore || 0) * 100) / 100;
+
+        return { averageRating, totalReviews, distribution: distMap };
+      }
+
+      const target = await fetchRatingData(dateFrom, dateTo, category);
+      const reference = await fetchRatingData(
+        comparisonDateFrom,
+        comparisonDateTo,
+        category,
+      );
+
+      if (target.totalReviews === 0 || reference.totalReviews === 0) {
+        return JSON.stringify({
+          status: 'NO_DATA',
+          reasonCode: 'RATING_COMPARISON_PERIOD_HAS_NO_REVIEWS',
+          scopeHash: scopeHash || 'global-scope',
+          appliedScope: {
+            category: category || null,
+            dateFrom: dateFrom || null,
+            dateTo: dateTo || null,
+            comparisonDateFrom,
+            comparisonDateTo,
+            scopeHash: scopeHash || 'global-scope',
+          },
+          rowCount: target.totalReviews + reference.totalReviews,
+          sampleSize: target.totalReviews + reference.totalReviews,
+          methods: ['TEMPORAL_COMPARISON'],
+          metrics: [],
+          data: {
+            target,
+            reference,
+          },
+        });
+      }
+
+      const deltaRating =
+        Math.round((target.averageRating - reference.averageRating) * 100) /
+        100;
+
+      const relativeChangePct =
+        reference.averageRating > 0
+          ? Math.round(
+              ((target.averageRating - reference.averageRating) /
+                reference.averageRating) *
+                1000,
+            ) / 10
+          : 0;
+
+      return JSON.stringify({
+        status: 'AVAILABLE',
+        scopeHash: scopeHash || 'global-scope',
+        appliedScope: {
+          category: category || null,
+          dateFrom: dateFrom || null,
+          dateTo: dateTo || null,
+          comparisonDateFrom,
+          comparisonDateTo,
+          scopeHash: scopeHash || 'global-scope',
+        },
+        rowCount: target.totalReviews + reference.totalReviews,
+        sampleSize: target.totalReviews + reference.totalReviews,
+        methods: ['TEMPORAL_COMPARISON'],
+        metrics: [
+          {
+            key: 'reviews.comparison.target_rating',
+            label: 'Rating promedio periodo objetivo',
+            value: target.averageRating,
+            unit: 'SCORE',
+            sampleSize: target.totalReviews,
+            sourcePath: '$.data.target.averageRating',
+            aggregation: 'MEAN',
+          },
+          {
+            key: 'reviews.comparison.reference_rating',
+            label: 'Rating promedio periodo referencia',
+            value: reference.averageRating,
+            unit: 'SCORE',
+            sampleSize: reference.totalReviews,
+            sourcePath: '$.data.reference.averageRating',
+            aggregation: 'MEAN',
+          },
+          {
+            key: 'reviews.comparison.delta_rating',
+            label: 'Diferencia en puntos de calificación',
+            value: deltaRating,
+            unit: 'SCORE',
+            sampleSize: target.totalReviews + reference.totalReviews,
+            sourcePath: '$.data.deltaRating',
+            aggregation: 'MEAN',
+          },
+          {
+            key: 'reviews.comparison.relative_change_pct',
+            label: 'Variación relativa de calificación promedio',
+            value: relativeChangePct,
+            unit: 'PERCENT',
+            sampleSize: target.totalReviews + reference.totalReviews,
+            sourcePath: '$.data.relativeChangePct',
+            aggregation: 'MEAN',
+          },
+        ],
+        data: {
+          target,
+          reference,
+          deltaRating,
+          relativeChangePct,
+        },
+      });
+    },
+    {
+      name: 'compare_rating_summary_periods',
+      description:
+        'Compara la calificación promedio de reseñas entre un periodo objetivo y un periodo de referencia.',
+      schema: z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        comparisonDateFrom: z.string(),
+        comparisonDateTo: z.string(),
+        category: z.string().optional(),
+        scopeHash: z.string().optional(),
+      }),
+    },
+  );
+
+  return [
+    analyzeReviewComplaints,
+    getRatingSummary,
+    searchReviewsSemantic,
+    compareRatingSummaryPeriods,
+  ];
 }

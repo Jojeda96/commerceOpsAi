@@ -15,6 +15,7 @@ export interface ResolveScopeInput {
     sellerIds?: string[];
     sellerStates?: string[];
     customerStates?: string[];
+    reviewScores?: number[];
     interstateOnly?: boolean;
   };
   criticScopePatch?: Partial<AnalysisScope>;

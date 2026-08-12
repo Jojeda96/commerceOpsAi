@@ -136,4 +136,46 @@ describe('PR-05: Recommendation Support Policy', () => {
     );
     expect(accepted.evidenceBasis![0].metricKeys).not.toContain('lateRate');
   });
+
+  it('reclassifies packaging action from review evidence as hypothesis', () => {
+    const rec = {
+      recommendationId: 'rec-packaging',
+      kind: 'EVIDENCE_BACKED_ACTION' as const,
+      title: 'Fortalecer el embalaje de productos',
+      description:
+        'Mejorar el embalaje para reducir daños durante el transporte.',
+      evidenceBasis: [
+        {
+          evidenceId: 'ev-cx-damage',
+          findingId: 'f-cx-damage',
+          metricKeys: ['reviews.topic.package_damage.share_pct'],
+          answerComponents: ['PACKAGE_DAMAGE_COMPLAINTS'],
+        },
+      ],
+      supportingFindingIds: ['f-cx-damage'],
+    };
+
+    const result = validateRecommendationSupport({
+      recommendations: [rec],
+      findings: [
+        {
+          id: 'f-cx-damage',
+          agent: 'CUSTOMER_EXPERIENCE',
+          findingType: 'REVIEW_COMPLAINT_ANALYSIS',
+          title: 'Quejas por productos dañados',
+          description: 'Se observaron reseñas relacionadas con daños.',
+        } as any,
+      ],
+      answeredComponents: [
+        'REVIEW_COMPLAINT_THEMES',
+        'PACKAGE_DAMAGE_COMPLAINTS',
+      ],
+      unavailableComponents: [],
+    });
+
+    const accepted = result.acceptedRecommendations[0];
+
+    expect(accepted.kind).toBe('HYPOTHESIS_TO_TEST');
+    expect(accepted.description).toMatch(/no demuestran causalidad/i);
+  });
 });

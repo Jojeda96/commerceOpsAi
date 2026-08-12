@@ -97,13 +97,87 @@ export function createLogisticsNode(
 
         let routeEvidence: Evidence | undefined;
         let stageEvidence: Evidence | undefined;
+        let comparisonEvidence: Evidence | undefined;
+
+        if (
+          state.analysisScope?.comparison ||
+          state.requiredAnswerComponents?.includes(
+            'TEMPORAL_LOGISTICS_COMPARISON',
+          )
+        ) {
+          const compScope = state.analysisScope?.comparison || {
+            dateFrom: '2018-01-01T00:00:00.000Z',
+            dateTo: '2018-01-31T23:59:59.999Z',
+          };
+          const compParams = {
+            ...commonScope,
+            dateFrom: commonScope.dateFrom || '2018-02-01T00:00:00.000Z',
+            dateTo: commonScope.dateTo || '2018-02-28T23:59:59.999Z',
+            comparisonDateFrom: compScope.dateFrom,
+            comparisonDateTo: compScope.dateTo,
+          };
+
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'LOGISTICS',
+            tool: 'compare_delivery_summary_periods',
+          });
+
+          const { result: compRes, trace: compTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'LOGISTICS',
+              iteration,
+              toolName: 'compare_delivery_summary_periods',
+              parameters: compParams,
+              execute: () =>
+                tools.compareDeliverySummaryPeriods.invoke(compParams as any),
+            });
+          toolTraces.push(compTrace);
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'LOGISTICS',
+            tool: 'compare_delivery_summary_periods',
+          });
+
+          const compResultStr =
+            typeof compRes === 'string' ? compRes : JSON.stringify(compRes);
+          const parsedComp = JSON.parse(compResultStr);
+          comparisonEvidence = {
+            id: `ev-logistics-comp-${Date.now()}`,
+            toolExecutionId: compTrace.localExecutionId,
+            localAgentRunId: localRunId,
+            localToolExecutionId: compTrace.localExecutionId,
+            sourceType: 'TOOL_EXECUTION',
+            agentName: 'LOGISTICS',
+            iteration,
+            toolName: 'compare_delivery_summary_periods',
+            scopeHash: commonScope.scopeHash,
+            appliedScope: state.analysisScope,
+            status: parsedComp.status,
+            reasonCode: parsedComp.reasonCode,
+            parameters: compParams,
+            resultSummary: compResultStr,
+            rowCount: parsedComp.rowCount || 0,
+            sampleSize: parsedComp.sampleSize || 0,
+            metrics: (parsedComp.metrics || []) as EvidenceMetric[],
+            generatedAt: new Date().toISOString(),
+          };
+          evidenceItems.push(comparisonEvidence);
+        }
 
         if (isRouteQuestion) {
           // 2. Route tool
+          const isLateRateRouteQuestion =
+            /ruta(?:s)?.*(mayor|alta).*tasa|mayor tasa.*ruta/i.test(
+              userQuestion,
+            );
+
           const routeParams = {
             ...commonScope,
             minOrders: 10,
             topN: 10,
+            sortBy: isLateRateRouteQuestion
+              ? ('LATE_RATE' as const)
+              : ('DELIVERED_VOLUME' as const),
           };
           streaming.emit(investigationId, 'tool.started', {
             agent: 'LOGISTICS',
@@ -207,6 +281,7 @@ export function createLogisticsNode(
           aggregateEvidence: summaryEvidence,
           routeEvidence,
           stageEvidence,
+          comparisonEvidence,
         });
 
         // Build answerCoverage for HISTORICAL_LOGISTICS_CONTEXT
@@ -232,6 +307,34 @@ export function createLogisticsNode(
                 : 'No se encontraron entregas en el scope.',
           },
         ];
+
+        if (
+          state.requiredAnswerComponents?.includes('ROUTE_RANKING_BY_LATE_RATE')
+        ) {
+          logisticsCoverage.push({
+            component: 'ROUTE_RANKING_BY_LATE_RATE',
+            status:
+              routeEvidence && routeEvidence.status === 'AVAILABLE'
+                ? 'ANSWERED'
+                : 'NO_DATA_WITH_REASON',
+            evidenceIds: routeEvidence ? [routeEvidence.id] : [],
+          });
+        }
+
+        if (
+          state.requiredAnswerComponents?.includes(
+            'TEMPORAL_LOGISTICS_COMPARISON',
+          )
+        ) {
+          logisticsCoverage.push({
+            component: 'TEMPORAL_LOGISTICS_COMPARISON',
+            status:
+              comparisonEvidence && comparisonEvidence.status === 'AVAILABLE'
+                ? 'ANSWERED'
+                : 'NO_DATA_WITH_REASON',
+            evidenceIds: comparisonEvidence ? [comparisonEvidence.id] : [],
+          });
+        }
 
         streaming.emit(investigationId, 'finding.created', {
           agent: 'LOGISTICS',

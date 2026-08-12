@@ -77,11 +77,56 @@ export function validateRecommendation(
     warnings.push('Causalidad directa reemplazada por hipótesis a validar.');
   }
 
-  // 4. Default kind based on supporting findings
-  if (!kind) {
-    const supportingFindings = findings.filter((f) =>
-      rec.supportingFindingIds?.includes(f.id),
+  // 4. Prohibit profitability claims when only revenue is available
+  const supportingFindings = findings.filter((finding) =>
+    rec.supportingFindingIds?.includes(finding.id),
+  );
+
+  const isSalesRevenueRecommendation = supportingFindings.some(
+    (finding) =>
+      finding.agent === 'SALES' &&
+      (finding.numericClaims || []).some(
+        (claim) =>
+          claim.metricKey.startsWith('sales.category.') &&
+          claim.metricKey.endsWith('.revenue'),
+      ),
+  );
+
+  const hasProfitabilityMetric = supportingFindings.some((finding) =>
+    (finding.numericClaims || []).some((claim) =>
+      /profit|margin|cost|rentabilidad/i.test(claim.metricKey),
+    ),
+  );
+
+  if (
+    isSalesRevenueRecommendation &&
+    !hasProfitabilityMetric &&
+    /rentabl/i.test(`${title} ${description}`)
+  ) {
+    title = title
+      .replace(/categor[ií]a más rentable/gi, 'categoría con mayores ingresos')
+      .replace(/más rentable/gi, 'con mayores ingresos');
+
+    description = description
+      .replace(
+        /ha demostrado ser la más rentable/gi,
+        'registró los mayores ingresos acumulados',
+      )
+      .replace(
+        /es la más rentable/gi,
+        'es la categoría con mayores ingresos acumulados',
+      )
+      .replace(/más rentable/gi, 'con mayores ingresos acumulados');
+
+    isModified = true;
+
+    warnings.push(
+      'Se reemplazó lenguaje de rentabilidad por ingresos porque no existen métricas de costo, margen o beneficio.',
     );
+  }
+
+  // 5. Default kind based on supporting findings
+  if (!kind) {
     const hasDataQuality = supportingFindings.some(
       (f) =>
         f.findingType === 'MODEL_GOVERNANCE' ||

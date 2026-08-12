@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { API_URL, fetchApi } from '@/lib/api-client';
-import { InvestigationScopeCard } from '@/components/investigations/InvestigationScopeCard';
-import { FindingConfidenceBadge } from '@/components/investigations/FindingConfidenceBadge';
-import { ModelGovernancePanel } from '@/components/investigations/ModelGovernancePanel';
-import { MlPredictionPanel } from '@/components/investigations/MlPredictionPanel';
-import { ModelExplanationPanel } from '@/components/investigations/ModelExplanationPanel';
-import { HistoricalAggregatePanel } from '@/components/investigations/HistoricalAggregatePanel';
-import { RouteDistributionPanel } from '@/components/investigations/RouteDistributionPanel';
-import { StageBreakdownPanel } from '@/components/investigations/StageBreakdownPanel';
-import { AnomalyEvidencePanel } from '@/components/investigations/AnomalyEvidencePanel';
-import { UnavailabilityReasonPanel } from '@/components/investigations/UnavailabilityReasonPanel';
-import { PanelDataUnavailable } from '@/components/investigations/PanelDataUnavailable';
-import { findEvidenceByTool } from '@/lib/investigation-evidence';
-import { parseToolResult } from '@/lib/tool-result-parser';
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { API_URL, fetchApi } from "@/lib/api-client";
+import { InvestigationScopeCard } from "@/components/investigations/InvestigationScopeCard";
+import { FindingConfidenceBadge } from "@/components/investigations/FindingConfidenceBadge";
+import { ModelGovernancePanel } from "@/components/investigations/ModelGovernancePanel";
+import { MlPredictionPanel } from "@/components/investigations/MlPredictionPanel";
+import { ModelExplanationPanel } from "@/components/investigations/ModelExplanationPanel";
+import { HistoricalAggregatePanel } from "@/components/investigations/HistoricalAggregatePanel";
+import { RouteDistributionPanel } from "@/components/investigations/RouteDistributionPanel";
+import { StageBreakdownPanel } from "@/components/investigations/StageBreakdownPanel";
+import { AnomalyEvidencePanel } from "@/components/investigations/AnomalyEvidencePanel";
+import { UnavailabilityReasonPanel } from "@/components/investigations/UnavailabilityReasonPanel";
+import { PanelDataUnavailable } from "@/components/investigations/PanelDataUnavailable";
+import { findEvidenceByTool } from "@/lib/investigation-evidence";
+import { parseToolResult } from "@/lib/tool-result-parser";
 
 export default function InvestigationDetailPage() {
   const params = useParams();
@@ -34,7 +34,9 @@ export default function InvestigationDetailPage() {
   useEffect(() => {
     loadData();
 
-    const eventSource = new EventSource(`${API_URL}/investigations/${id}/stream`);
+    const eventSource = new EventSource(
+      `${API_URL}/investigations/${id}/stream`,
+    );
 
     eventSource.onmessage = (event) => {
       try {
@@ -48,11 +50,11 @@ export default function InvestigationDetailPage() {
         });
 
         if (
-          parsed.type === 'investigation.completed' ||
-          parsed.type === 'report.completed' ||
-          parsed.type === 'investigation.failed' ||
-          parsed.type === 'finding.created' ||
-          parsed.type === 'recommendation.created'
+          parsed.type === "investigation.completed" ||
+          parsed.type === "report.completed" ||
+          parsed.type === "investigation.failed" ||
+          parsed.type === "finding.created" ||
+          parsed.type === "recommendation.created"
         ) {
           loadData();
         }
@@ -67,61 +69,91 @@ export default function InvestigationDetailPage() {
   }, [id, loadData]);
 
   if (!investigation) {
-    return <p className="text-gray-500">Cargando detalle de investigación...</p>;
+    return (
+      <p className="text-gray-500">Cargando detalle de investigación...</p>
+    );
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'COMPLETED':
-        return { label: 'COMPLETED', badgeClass: 'badge-completed' };
-      case 'COMPLETED_WITH_WARNINGS':
-        return { label: 'COMPLETADO CON OBSERVACIONES', badgeClass: 'badge-warnings' };
-      case 'REJECTED':
-        return { label: 'ANÁLISIS NO CONCLUYENTE (RECHAZADO POR AUDITORÍA)', badgeClass: 'badge-failed' };
-      case 'FAILED':
-        return { label: 'FALLIDA', badgeClass: 'badge-failed' };
-      case 'EXECUTING':
-        return { label: 'EJECUTANDO', badgeClass: 'badge-executing' };
+      case "COMPLETED":
+        return { label: "COMPLETED", badgeClass: "badge-completed" };
+      case "COMPLETED_WITH_WARNINGS":
+        return {
+          label: "COMPLETADO CON OBSERVACIONES",
+          badgeClass: "badge-warnings",
+        };
+      case "REJECTED":
+        return {
+          label: "ANÁLISIS NO CONCLUYENTE (RECHAZADO POR AUDITORÍA)",
+          badgeClass: "badge-failed",
+        };
+      case "FAILED":
+        return { label: "FALLIDA", badgeClass: "badge-failed" };
+      case "EXECUTING":
+        return { label: "EJECUTANDO", badgeClass: "badge-executing" };
       default:
-        return { label: status, badgeClass: 'badge-pending' };
+        return { label: status, badgeClass: "badge-pending" };
     }
   };
 
   const getRecKindBadge = (kind: string) => {
     switch (kind) {
-      case 'EVIDENCE_BACKED_ACTION':
-        return { label: 'RESPALDADA POR EVIDENCIA', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
-      case 'MONITORING_ACTION':
-        return { label: 'MONITOREO', color: 'bg-blue-100 text-blue-800 border-blue-300' };
-      case 'DATA_QUALITY_ACTION':
-        return { label: 'CALIDAD DE DATOS', color: 'bg-amber-100 text-amber-800 border-amber-300' };
+      case "EVIDENCE_BACKED_ACTION":
+        return {
+          label: "RESPALDADA POR EVIDENCIA",
+          color: "bg-emerald-100 text-emerald-800 border-emerald-300",
+        };
+      case "MONITORING_ACTION":
+        return {
+          label: "MONITOREO",
+          color: "bg-blue-100 text-blue-800 border-blue-300",
+        };
+      case "DATA_QUALITY_ACTION":
+        return {
+          label: "CALIDAD DE DATOS",
+          color: "bg-amber-100 text-amber-800 border-amber-300",
+        };
       default:
-        return { label: 'HIPÓTESIS A VALIDAR', color: 'bg-purple-100 text-purple-800 border-purple-300' };
+        return {
+          label: "HIPÓTESIS A VALIDAR",
+          color: "bg-purple-100 text-purple-800 border-purple-300",
+        };
     }
   };
 
   const statusInfo = getStatusBadge(investigation.status);
-  const activeFindings = (investigation.findings || []).filter((f: any) => f.status !== 'SUPERSEDED');
+  const activeFindings = (investigation.findings || []).filter(
+    (f: any) => f.status !== "SUPERSEDED",
+  );
   const scope = investigation.resolvedScopeJson || investigation.analysisScope;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-between items-center">
         <div>
-          <Link href="/investigations" className="text-indigo-600 hover:underline text-sm font-medium">
+          <Link
+            href="/investigations"
+            className="text-indigo-600 hover:underline text-sm font-medium"
+          >
             ← Volver a Investigaciones
           </Link>
-          <h1 className="text-2xl font-bold mt-1 text-slate-900">{investigation.question}</h1>
+          <h1 className="text-2xl font-bold mt-1 text-slate-900">
+            {investigation.question}
+          </h1>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`badge ${statusInfo.badgeClass} text-sm px-3.5 py-1.5`}>
+          <span
+            className={`badge ${statusInfo.badgeClass} text-sm px-3.5 py-1.5`}
+          >
             {statusInfo.label}
           </span>
-          {investigation.finalQualityScore !== undefined && investigation.finalQualityScore !== null && (
-            <span className="text-sm font-semibold text-emerald-600">
-              Calidad Global: {investigation.finalQualityScore}/100
-            </span>
-          )}
+          {investigation.finalQualityScore !== undefined &&
+            investigation.finalQualityScore !== null && (
+              <span className="text-sm font-semibold text-emerald-600">
+                Calidad Global: {investigation.finalQualityScore}/100
+              </span>
+            )}
         </div>
       </div>
 
@@ -132,33 +164,58 @@ export default function InvestigationDetailPage() {
         <div className="lg:col-span-2 flex flex-col gap-6">
           <div className="glass-card p-6">
             <h2 className="text-lg font-bold text-slate-900 mb-4">
-              🔬 Hallazgos Activos de Agentes Especialistas ({activeFindings.length})
+              🔬 Hallazgos Activos de Agentes Especialistas (
+              {activeFindings.length})
             </h2>
             {activeFindings.length > 0 ? (
               <div className="flex flex-col gap-4">
                 {activeFindings.map((finding: any) => {
-                  const isLogistics = finding.agent === 'LOGISTICS' || finding.agentName === 'LOGISTICS';
-                  const isAnomaly = finding.agent === 'ANOMALY' || finding.agentName === 'ANOMALY';
-                  const isDS = finding.agent === 'DATA_SCIENCE' || finding.agentName === 'DATA_SCIENCE';
+                  const isLogistics =
+                    finding.agent === "LOGISTICS" ||
+                    finding.agentName === "LOGISTICS";
+                  const isAnomaly =
+                    finding.agent === "ANOMALY" ||
+                    finding.agentName === "ANOMALY";
+                  const isDS =
+                    finding.agent === "DATA_SCIENCE" ||
+                    finding.agentName === "DATA_SCIENCE";
 
                   // Evidence extractions
-                  const summaryEvidence = findEvidenceByTool(finding, 'get_delivery_summary');
+                  const summaryEvidence = findEvidenceByTool(
+                    finding,
+                    "get_delivery_summary",
+                  );
                   const summaryResult = parseToolResult<any>(summaryEvidence);
 
-                  const routeEvidence = findEvidenceByTool(finding, 'get_delivery_performance_by_route');
+                  const routeEvidence = findEvidenceByTool(
+                    finding,
+                    "get_delivery_performance_by_route",
+                  );
                   const routeResult = parseToolResult<any>(routeEvidence);
 
-                  const stageEvidence = findEvidenceByTool(finding, 'get_delivery_stage_breakdown');
+                  const stageEvidence = findEvidenceByTool(
+                    finding,
+                    "get_delivery_stage_breakdown",
+                  );
                   const stageResult = parseToolResult<any>(stageEvidence);
 
-                  const anomalyEvidence = findEvidenceByTool(finding, 'detect_metric_anomalies');
+                  const anomalyEvidence = findEvidenceByTool(
+                    finding,
+                    "detect_metric_anomalies",
+                  );
                   const anomalyResult = parseToolResult<any>(anomalyEvidence);
 
-                  const scenarioEvidence = findEvidenceByTool(finding, 'get_delivery_prediction_scenarios');
+                  const scenarioEvidence = findEvidenceByTool(
+                    finding,
+                    "get_delivery_prediction_scenarios",
+                  );
                   const scenarioResult = parseToolResult<any>(scenarioEvidence);
 
                   return (
-                    <div key={finding.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-3">
+                    <div
+                      key={finding.id}
+                      className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-3"
+                    >
                       <div className="flex justify-between items-start">
                         <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide">
                           🤖 {finding.agentName || finding.agent}
@@ -173,20 +230,38 @@ export default function InvestigationDetailPage() {
                         />
                       </div>
 
-                      <h3 className="text-base font-bold text-slate-900">{finding.title}</h3>
-                      <p className="text-sm text-slate-600 leading-relaxed">{finding.description}</p>
+                      <h3 className="text-base font-bold text-slate-900">
+                        {finding.title}
+                      </h3>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        {finding.description}
+                      </p>
 
                       {/* Specialized Logistics Panels */}
                       {isLogistics && (
                         <div className="flex flex-col gap-3 mt-2">
-                          {summaryResult?.status === 'AVAILABLE' && summaryResult?.data ? (
+                          {summaryResult?.status === "AVAILABLE" &&
+                          summaryResult?.data ? (
                             <HistoricalAggregatePanel
-                              deliveredOrders={summaryResult.data.deliveredOrders}
+                              deliveredOrders={
+                                summaryResult.data.deliveredOrders
+                              }
                               lateOrders={summaryResult.data.lateOrders}
-                              aggregateLateRatePct={summaryResult.data.aggregateLateRatePct}
-                              avgDeliveryDays={summaryResult.data.averageDeliveryDays}
+                              aggregateLateRatePct={
+                                summaryResult.data.aggregateLateRatePct
+                              }
+                              avgDeliveryDays={
+                                summaryResult.data.averageDeliveryDays
+                              }
                               avgDelayDays={summaryResult.data.averageDelayDays}
-                              interstateOnly={Boolean(summaryResult.appliedScope?.interstateOnly || scope?.interstateOnly)}
+                              interstateOnly={Boolean(
+                                summaryResult.appliedScope?.interstateOnly ||
+                                scope?.interstateOnly,
+                              )}
+                              categories={
+                                summaryResult.appliedScope?.categories ||
+                                scope?.categories
+                              }
                             />
                           ) : (
                             <PanelDataUnavailable
@@ -195,46 +270,73 @@ export default function InvestigationDetailPage() {
                             />
                           )}
 
-                          {routeResult?.status === 'AVAILABLE' && routeResult?.data && (
-                            <RouteDistributionPanel
-                              eligibleRouteCount={routeResult.data.eligibleRouteCount}
-                              weightedRouteLateRatePct={routeResult.data.weightedRouteLateRatePct}
-                              unweightedMeanRouteLateRatePct={routeResult.data.unweightedMeanRouteLateRatePct}
-                              medianRouteLateRatePct={routeResult.data.medianRouteLateRatePct}
-                              routes={routeResult.data.routes || []}
-                              minOrdersPerRoute={routeResult.data.minOrdersPerRoute || 10}
-                            />
-                          )}
+                          {routeResult?.status === "AVAILABLE" &&
+                            routeResult?.data && (
+                              <RouteDistributionPanel
+                                eligibleRouteCount={
+                                  routeResult.data.eligibleRouteCount
+                                }
+                                weightedRouteLateRatePct={
+                                  routeResult.data.weightedRouteLateRatePct
+                                }
+                                unweightedMeanRouteLateRatePct={
+                                  routeResult.data
+                                    .unweightedMeanRouteLateRatePct
+                                }
+                                medianRouteLateRatePct={
+                                  routeResult.data.medianRouteLateRatePct
+                                }
+                                routes={routeResult.data.routes || []}
+                                minOrdersPerRoute={
+                                  routeResult.data.minOrdersPerRoute || 10
+                                }
+                              />
+                            )}
 
-                          {stageResult?.status === 'AVAILABLE' && stageResult?.data && (
-                            <StageBreakdownPanel
-                              data={stageResult.data}
-                              interstateOnly={Boolean(stageResult.appliedScope?.interstateOnly || scope?.interstateOnly)}
-                            />
-                          )}
+                          {stageResult?.status === "AVAILABLE" &&
+                            stageResult?.data && (
+                              <StageBreakdownPanel
+                                data={stageResult.data}
+                                interstateOnly={Boolean(
+                                  stageResult.appliedScope?.interstateOnly ||
+                                  scope?.interstateOnly,
+                                )}
+                              />
+                            )}
                         </div>
                       )}
 
                       {/* Specialized Anomaly Panel */}
                       {isAnomaly && (
                         <div className="mt-2">
-                          {anomalyResult?.status === 'AVAILABLE' && anomalyResult?.data ? (
+                          {anomalyResult?.status === "AVAILABLE" &&
+                          anomalyResult?.data ? (
                             <AnomalyEvidencePanel
-                              method={anomalyResult.data.method || 'Robust Z-Score'}
+                              method={
+                                anomalyResult.data.method || "Robust Z-Score"
+                              }
                               threshold={anomalyResult.data.threshold}
-                              monthsEvaluated={anomalyResult.data.monthsEvaluated}
-                              medianMonthlyLateRatePct={anomalyResult.data.medianMonthlyLateRatePct}
+                              monthsEvaluated={
+                                anomalyResult.data.monthsEvaluated
+                              }
+                              medianMonthlyLateRatePct={
+                                anomalyResult.data.medianMonthlyLateRatePct
+                              }
                               mad={anomalyResult.data.mad}
                               anomalies={anomalyResult.data.anomalies || []}
                             />
                           ) : (
                             <PanelDataUnavailable
                               message={
-                                anomalyEvidence?.reasonCode === 'MINIMUM_THREE_MONTHS_REQUIRED'
-                                  ? 'No fue posible calcular Robust Z-Score porque se requieren al menos tres meses con muestra válida.'
-                                  : 'La evidencia del análisis de anomalías no está disponible.'
+                                anomalyEvidence?.reasonCode ===
+                                "MINIMUM_THREE_MONTHS_REQUIRED"
+                                  ? "No fue posible calcular Robust Z-Score porque se requieren al menos tres meses con muestra válida."
+                                  : "La evidencia del análisis de anomalías no está disponible."
                               }
-                              reasonCode={anomalyEvidence?.reasonCode || anomalyResult?.reasonCode}
+                              reasonCode={
+                                anomalyEvidence?.reasonCode ||
+                                anomalyResult?.reasonCode
+                              }
                             />
                           )}
                         </div>
@@ -243,15 +345,27 @@ export default function InvestigationDetailPage() {
                       {/* Specialized Data Science Panels */}
                       {isDS && (
                         <div className="flex flex-col gap-3 mt-2">
-                          <ModelGovernancePanel governance={finding.modelGovernance} />
-                          {(scenarioEvidence?.reasonCode || scenarioResult?.status === 'UNAVAILABLE' || finding.operationalStatus === 'EXPERIMENTAL_CONTEXT') && (
+                          <ModelGovernancePanel
+                            governance={finding.modelGovernance}
+                          />
+                          {(scenarioEvidence?.reasonCode ||
+                            scenarioResult?.status === "UNAVAILABLE" ||
+                            finding.operationalStatus ===
+                              "EXPERIMENTAL_CONTEXT") && (
                             <UnavailabilityReasonPanel
-                              reasonCode={scenarioEvidence?.reasonCode || scenarioResult?.reasonCode}
+                              reasonCode={
+                                scenarioEvidence?.reasonCode ||
+                                scenarioResult?.reasonCode
+                              }
                               diagnostics={scenarioResult?.diagnostics}
                             />
                           )}
-                          <MlPredictionPanel modelPredictions={investigation.modelPredictions} />
-                          <ModelExplanationPanel modelPredictions={investigation.modelPredictions} />
+                          <MlPredictionPanel
+                            modelPredictions={investigation.modelPredictions}
+                          />
+                          <ModelExplanationPanel
+                            modelPredictions={investigation.modelPredictions}
+                          />
                         </div>
                       )}
                     </div>
@@ -259,46 +373,60 @@ export default function InvestigationDetailPage() {
                 })}
               </div>
             ) : (
-              <p className="text-gray-500 text-sm">No hay hallazgos activos disponibles.</p>
+              <p className="text-gray-500 text-sm">
+                No hay hallazgos activos disponibles.
+              </p>
             )}
           </div>
 
           {/* Strategic Recommendations */}
-          {investigation.recommendations && investigation.recommendations.length > 0 && (
-            <div className="glass-card p-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                💡 Recomendaciones Estratégicas Priorizadas
-              </h2>
-              <div className="flex flex-col gap-3">
-                {investigation.recommendations.map((rec: any) => {
-                  const kindBadge = getRecKindBadge(rec.kind);
-                  return (
-                    <div key={rec.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${kindBadge.color}`}>
-                            {kindBadge.label}
-                          </span>
-                          <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-                            {rec.priority} PRIORITY
-                          </span>
+          {investigation.recommendations &&
+            investigation.recommendations.length > 0 && (
+              <div className="glass-card p-6">
+                <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  💡 Recomendaciones Estratégicas Priorizadas
+                </h2>
+                <div className="flex flex-col gap-3">
+                  {investigation.recommendations.map((rec: any) => {
+                    const kindBadge = getRecKindBadge(rec.kind);
+                    return (
+                      <div
+                        key={rec.id}
+                        className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col gap-2"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border ${kindBadge.color}`}
+                            >
+                              {kindBadge.label}
+                            </span>
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                              {rec.priority} PRIORITY
+                            </span>
+                          </div>
                         </div>
+
+                        <h3 className="text-base font-bold text-slate-900 mt-1">
+                          {rec.title}
+                        </h3>
+                        <p className="text-sm text-slate-600">
+                          {rec.description}
+                        </p>
+
+                        {rec.validationRequirements &&
+                          rec.validationRequirements.length > 0 && (
+                            <div className="text-xs text-purple-900 bg-purple-50 p-2 rounded border border-purple-100 mt-1">
+                              📋 <strong>Requisitos de validación:</strong>{" "}
+                              {rec.validationRequirements.join(" | ")}
+                            </div>
+                          )}
                       </div>
-
-                      <h3 className="text-base font-bold text-slate-900 mt-1">{rec.title}</h3>
-                      <p className="text-sm text-slate-600">{rec.description}</p>
-
-                      {rec.validationRequirements && rec.validationRequirements.length > 0 && (
-                        <div className="text-xs text-purple-900 bg-purple-50 p-2 rounded border border-purple-100 mt-1">
-                          📋 <strong>Requisitos de validación:</strong> {rec.validationRequirements.join(' | ')}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
 
         {/* Streaming Event Sidebar */}
@@ -307,7 +435,9 @@ export default function InvestigationDetailPage() {
             <span className="animate-pulse">🔴</span> Eventos SSE en Tiempo Real
           </h3>
           {events.length === 0 ? (
-            <p className="text-xs text-gray-500">Escuchando eventos de agentes en streaming...</p>
+            <p className="text-xs text-gray-500">
+              Escuchando eventos de agentes en streaming...
+            </p>
           ) : (
             <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto">
               {events.map((ev) => (

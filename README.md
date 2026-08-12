@@ -5,10 +5,10 @@
 
 CommerceOps AI coordina un equipo de **agentes especializados** en ventas, logística, experiencia de cliente, rendimiento de vendedores, detección de anomalías, machine learning y estrategia empresarial. Un **Evidence Critic** audita y evalúa la evidencia numérica antes de generar el informe final.
 
-### 📋 Estado del Proyecto (V4.4 Final Closure Validation)
+### 📋 Estado del Proyecto — Portfolio MVP
 
-> **Final closure validation in progress.**  
-> **Do not treat the repository as release-complete until all V4.4 required checks pass.**
+> **Final closure validation completed.**  
+> **La matriz de aceptación E2E, build, lint, migraciones, schema parity, integración y contratos ML se encuentran verificados.**
 
 | Capacidad | Estado verificado | Evidencia |
 |---|---|---|
@@ -48,7 +48,8 @@ Every quantitative finding contains structured `NumericClaims` linked to `Eviden
 
 ## 📌 Estado del Proyecto (MVP)
 
-Este repositorio es un **MVP en desarrollo activo** de una plataforma multiagente para inteligencia operacional de e-commerce.
+Este repositorio corresponde a un **Portfolio MVP funcionalmente cerrado**.
+El desarrollo de nuevas capacidades está congelado; los cambios futuros se limitan a mantenimiento, documentación o corrección de defectos.
 
 ### ✅ Implementado y Auditado (V2 Critical Hardening)
 - **Orquestación Multiagente Real:** Grafo de ejecuciones paralelas coordinado con **LangGraph JS** y **NestJS** (`StateGraph` con `Send`).
@@ -121,7 +122,7 @@ flowchart TD
 | 📊 **Sales Intelligence** | `SALES` | Analiza ingresos, volumen de pedidos, ticket promedio, facturación por categoría, métodos de pago y tendencia AOV. | `get_revenue_summary`, `get_sales_by_category`, `get_sales_by_payment_method`, `get_average_order_value_trend` |
 | 🚚 **Logistics Agent** | `LOGISTICS` | Investiga tasas de retraso en entregas, tiempos de transporte, rendimiento por rutas y desglose preparación vs tránsito. | `get_delivery_summary`, `get_delivery_prediction_scenarios`, `get_delivery_performance_by_route`, `get_delivery_stage_breakdown` |
 | ⭐ **Customer Experience** | `CUSTOMER_EXPERIENCE` | Analiza calificaciones (1-5 estrellas), distribución de reseñas y búsqueda semántica con filtros. | `get_rating_summary`, `search_reviews_semantic` |
-| 🏪 **Seller Performance** | `SELLER_PERFORMANCE` | Genera scorecards operacionales por vendedor y evalúa riesgo acumulado por pedido único. | `get_seller_scorecard` |
+| 🏪 **Seller Performance** | `SELLER_PERFORMANCE` | Genera scorecards operacionales por vendedor y evalúa riesgo acumulado por pedido único. | `get_top_seller_by_revenue`, `get_seller_scorecard` |
 | 🚨 **Anomaly Detection** | `ANOMALY` | Aplica Z-Score robusto (mediana + MAD) en series temporales para detectar desviaciones atípicas. | `detect_metric_anomalies` |
 | 🧪 **Data Science Agent** | `DATA_SCIENCE` | Modela y predice riesgos operacionales usando el champion actual (genérico: Logistic o XGBoost). Usa snapshots point-in-time y el contrato de features V3. | `predict_delivery_delay`, `explain_delivery_delay` |
 | ⚖️ **Evidence Critic** | `CRITIC` | Audita la calidad y consistencia entre las evidencias SQL/ML y las conclusiones mediante gates deterministas incorruptibles. | `performDeterministicAudit`, `enforceDeterministicDecision` |
@@ -248,7 +249,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 curl -X POST http://localhost:3001/api/investigations \
   -H "Authorization: Bearer <TU_ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"question": "¿Por qué aumentaron las entregas tardías en la categoría muebles durante febrero de 2018?"}'
+  -d '{"question": "¿Cómo cambió la tasa de entregas tardías de la categoría muebles en febrero de 2018 respecto de enero de 2018?"}'
 ```
 
 ---
@@ -259,55 +260,70 @@ Puedes copiar y probar cualquiera de las siguientes preguntas en el Dashboard (`
 
 Cada consulta activa dinámicamente una combinación diferente de agentes especialistas, ejecuta consultas deterministas en PostgreSQL/ML y genera recomendaciones accionables auditadas por el **Evidence Critic**.
 
+### ✅ Preguntas verificadas por E2E
+
+> El Supervisor soporta las familias de intención verificadas en la matriz E2E del repositorio. El sistema realiza análisis descriptivo, comparativo, predictivo y de anomalías; no realiza inferencia causal.
+
+1. **Q-A (CX Quejas):** `¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?`
+2. **Q-B (Anomalía Logística):** `Detecta desviaciones o picos anómalos en la tasa de retraso de entregas mediante Z-Score robusto.`
+3. **Q-C (Predictivo ML & Gobernanza):** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales, el estado de gobernanza del modelo y los factores SHAP de mayor impacto?`
+4. **Q1 (Vendedor):** `Evalúa el riesgo operacional y rendimiento acumulado del vendedor con mayores ventas.`
+5. **Q2 (Comparación Logística):** `¿Cómo cambió la tasa de entregas tardías de la categoría muebles en febrero de 2018 respecto de enero de 2018?`
+6. **Q3 (Rutas tardías):** `¿Cuáles son las rutas interestatales con mayor tasa de atrasos en entregas?`
+7. **Q4 (Categorías ventas):** `¿Cuáles son las 5 categorías que concentran mayores ingresos y cuál es su ticket promedio?`
+8. **Q5 (Métodos de pago):** `¿Cuál es la diferencia en volumen de transacciones e ingresos entre pagos con tarjeta de crédito y boleto bancario?`
+9. **Q6 (Comparación Ratings):** `¿Cómo cambió la calificación promedio de los clientes en febrero de 2018 respecto de enero de 2018?`
+10. **Q7 (Reseñas 1 estrella):** `¿Cuáles son las quejas principales en las reseñas de 1 estrella sobre la categoría informatica_acessorios?`
+
+---
+
 ### 🚚 1. Logística y SLA de Entregas
-> **Pregunta:** `¿Por qué aumentaron las entregas tardías en la categoría muebles durante febrero de 2018?`
-- **Agentes Invocados:** `LOGISTICS`, `SELLER_PERFORMANCE`, `ANOMALY`, `CRITIC`, `STRATEGY`
-- **Lo que evalúa:** Mide el impacto del tiempo de preparación del vendedor frente al tiempo en tránsito de transportistas en la categoría muebles.
-- **Resultado Esperado:** Detección de picos en la tasa de atrasos y clasificación de cuellos de botella por estado.
+> **Pregunta:** `¿Cómo cambió la tasa de entregas tardías de la categoría muebles en febrero de 2018 respecto de enero de 2018?`
+- **Agentes Invocados:** `LOGISTICS`, `CRITIC`, `STRATEGY`
+- **Lo que evalúa:** Mide comparativamente la variación en puntos porcentuales de la tasa de atrasos en la categoría muebles entre dos periodos mensuales.
 
 > **Pregunta:** `¿Cuáles son las rutas interestatales con mayor tasa de atrasos en entregas?`
-- **Agentes Invocados:** `LOGISTICS`, `ANOMALY`, `CRITIC`
-- **Lo que evalúa:** Comparativa regional de SLAs de entrega por origen (vendedor) y destino (cliente).
+- **Agentes Invocados:** `LOGISTICS`, `CRITIC`
+- **Lo que evalúa:** Comparativa regional de SLAs de entrega ordenados por tasa de atraso por origen (vendedor) y destino (cliente).
 
 ---
 
 ### ⭐ 2. Satisfacción del Cliente y Experiencia (CX)
-> **Pregunta:** `¿Por qué disminuyó la calificación promedio de los clientes en febrero de 2018?`
-- **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `LOGISTICS`, `SALES`, `CRITIC`, `STRATEGY`
-- **Lo que evalúa:** Correlación entre la caída en estrellas (1-5) y el incremento de demoras logísticas.
-- **Resultado Esperado:** Búsqueda semántica sobre comentarios en portugués y hallazgos con nivel de confianza.
+> **Pregunta:** `¿Cómo cambió la calificación promedio de los clientes en febrero de 2018 respecto de enero de 2018?`
+- **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `CRITIC`, `STRATEGY`
+- **Lo que evalúa:** Variación cuantitativa determinista en la calificación promedio mensual del marketplace.
 
 > **Pregunta:** `¿Cuáles son las quejas principales en las reseñas de 1 estrella sobre la categoría informatica_acessorios?`
 - **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `CRITIC`
-- **Lo que evalúa:** Análisis de sentimientos y clasificación de temas sobre reseñas con bajas calificaciones.
+- **Lo que evalúa:** Búsqueda y agrupación léxica determinista de quejas en reseñas filtradas por 1 estrella.
 
 ---
 
 ### 📊 3. Ventas, Facturación y Métodos de Pago
-> **Pregunta:** `¿Cuáles son las 5 categorías que concentran mayores ingresos y cómo varió su ticket promedio?`
+> **Pregunta:** `¿Cuáles son las 5 categorías que concentran mayores ingresos y cuál es su ticket promedio?`
 - **Agentes Invocados:** `SALES`, `CRITIC`
-- **Lo que evalúa:** Agregaciones financieras directas en SQL para identificar las categorías más rentables del marketplace.
+- **Lo que evalúa:** Agregaciones financieras directas en SQL para identificar las categorías con mayores ingresos y su AOV.
 
-> **Pregunta:** `¿Cuál es la diferencia en volumen de ventas e ingresos entre pagos con tarjeta de crédito y boleto bancario?`
+> **Pregunta:** `¿Cuál es la diferencia en volumen de transacciones e ingresos entre pagos con tarjeta de crédito y boleto bancario?`
 - **Agentes Invocados:** `SALES`, `CRITIC`
-- **Lo que evalúa:** Análisis de distribución de métodos de pago y cantidad de cuotas.
+- **Lo que evalúa:** Análisis comparativo directo entre volumen transaccional e ingresos por método de pago.
 
 ---
 
 ### 🏪 4. Evaluación de Riesgo de Vendedores
 > **Pregunta:** `Evalúa el riesgo operacional y rendimiento acumulado del vendedor con mayores ventas.`
-- **Agentes Invocados:** `SELLER_PERFORMANCE`, `LOGISTICS`, `CUSTOMER_EXPERIENCE`, `STRATEGY`
-- **Lo que evalúa:** Generación de scorecard de vendedor (tasa de entregas a tiempo, facturación total, rating promedio) y clasificación de riesgo (`HIGH` / `LOW`).
+- **Agentes Invocados:** `SELLER_PERFORMANCE`, `CRITIC`, `STRATEGY`
+- **Lo que evalúa:** Identificación determinista del top seller por ingresos y generación de scorecard completo con nivel de riesgo (`HIGH` / `MEDIUM` / `LOW`).
 
 ---
 
-### 🧪 5. Machine Learning Predictivo y Gobernanza ML
+### 🧪 5. Machine Learning Predictivo y Detección de Anomalías
 > **Pregunta:** `¿Cuál es la probabilidad predictiva de atraso en envíos interestatales, el estado de gobernanza del modelo y los factores SHAP de mayor impacto?`
-- **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `ANOMALY`, `CRITIC`, `STRATEGY`
+- **Agentes Invocados:** `DATA_SCIENCE`, `LOGISTICS`, `CRITIC`, `STRATEGY`
 - **Lo que evalúa:** Inferencia sobre escenarios representativos reales en FastAPI (`/models/delivery-delay/predict`), atribución explicable (SHAP para árboles, log-odds para Logistic) y reflejo transparente del estado del Quality Gate (`EXPERIMENTAL_NOT_APPROVED`).
 
 > **Pregunta:** `¿Cuáles son las quejas principales en las reseñas de clientes sobre demoras en la entrega y paquetes dañados?`
-- **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `LOGISTICS`, `CRITIC`, `STRATEGY`
+- **Agentes Invocados:** `CUSTOMER_EXPERIENCE`, `CRITIC`, `STRATEGY`
 - **Lo que evalúa:** Búsqueda semántica sobre comentarios reales de Olist en portugués enviando filtros por puntuación de estrellas (1-5), fechas y categorías al microservicio NLP.
 
 > **Pregunta:** `Detecta desviaciones o picos anómalos en la tasa de retraso de entregas mediante Z-Score robusto.`

@@ -1,4 +1,7 @@
-import { auditMethodProvenance } from './method-provenance';
+import {
+  auditMethodProvenance,
+  TOOL_METHOD_REGISTRY,
+} from './method-provenance';
 import { Finding, Evidence } from '@commerce-ops/shared-types';
 
 describe('Method Provenance Audit', () => {
@@ -58,5 +61,18 @@ describe('Method Provenance Audit', () => {
 
     const violations = auditMethodProvenance([finding], [evidence]);
     expect(violations.length).toBe(0);
+  });
+});
+
+describe('portfolio final tool method registry', () => {
+  it.each([
+    ['get_sales_by_category', 'CATEGORY_REVENUE_AGGREGATION'],
+    ['get_sales_by_payment_method', 'PAYMENT_METHOD_AGGREGATION'],
+    ['get_top_seller_by_revenue', 'SELLER_REVENUE_RANKING'],
+    ['get_seller_scorecard', 'SELLER_SCORECARD_AGGREGATION'],
+    ['compare_delivery_summary_periods', 'TEMPORAL_COMPARISON'],
+    ['compare_rating_summary_periods', 'TEMPORAL_COMPARISON'],
+  ])('%s allows %s', (toolName, method) => {
+    expect(TOOL_METHOD_REGISTRY[toolName]).toContain(method);
   });
 });

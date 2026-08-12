@@ -5,12 +5,23 @@ export const TOOL_METHOD_REGISTRY: Record<string, AnalysisMethod[]> = {
   get_delivery_summary: ['DESCRIPTIVE_AGGREGATION'],
   get_delivery_performance_by_route: ['ROUTE_AGGREGATION'],
   get_delivery_stage_breakdown: ['STAGE_BREAKDOWN'],
+  compare_delivery_summary_periods: ['TEMPORAL_COMPARISON'],
+
   detect_metric_anomalies: ['ROBUST_Z_SCORE'],
+
   predict_delivery_delay: ['MODEL_INFERENCE'],
   explain_delivery_delay: ['LOCAL_SHAP', 'LINEAR_CONTRIBUTION'],
+
   analyze_review_complaints: ['REVIEW_LEXICON_AGGREGATION'],
   get_rating_summary: ['RATING_DISTRIBUTION', 'DESCRIPTIVE_AGGREGATION'],
+  compare_rating_summary_periods: ['TEMPORAL_COMPARISON'],
   search_reviews_semantic: ['SEMANTIC_REVIEW_RETRIEVAL'],
+
+  get_sales_by_category: ['CATEGORY_REVENUE_AGGREGATION'],
+  get_sales_by_payment_method: ['PAYMENT_METHOD_AGGREGATION'],
+
+  get_top_seller_by_revenue: ['SELLER_REVENUE_RANKING'],
+  get_seller_scorecard: ['SELLER_SCORECARD_AGGREGATION'],
 };
 
 export interface MethodProvenanceViolation {

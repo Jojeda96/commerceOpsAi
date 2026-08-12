@@ -33,6 +33,14 @@ export type AnswerComponent =
   | 'PACKAGE_DAMAGE_COMPLAINTS'
   | 'REVIEW_RATING_CONTEXT'
   | 'HISTORICAL_LOGISTICS_CONTEXT'
+  | 'ROUTE_RANKING_BY_LATE_RATE'
+  | 'TEMPORAL_LOGISTICS_COMPARISON'
+  | 'TEMPORAL_RATING_COMPARISON'
+  | 'TOP_REVENUE_CATEGORIES'
+  | 'PAYMENT_METHOD_COMPARISON'
+  | 'TOP_SELLER_IDENTIFICATION'
+  | 'SELLER_CUMULATIVE_PERFORMANCE'
+  | 'SELLER_OPERATIONAL_RISK'
   | 'MODEL_GOVERNANCE'
   | 'PREDICTION'
   | 'LOCAL_EXPLANATION'
@@ -52,6 +60,7 @@ export interface FilterState {
   sellerIds?: string[];
   categories?: string[];
   customerStates?: string[];
+  reviewScores?: number[];
 }
 
 export type ScopeSource =
@@ -59,6 +68,13 @@ export type ScopeSource =
   | 'DETERMINISTIC_QUESTION_PARSER'
   | 'CRITIC_PATCH'
   | 'UNSPECIFIED';
+
+export interface ScopeComparison {
+  mode: 'PREVIOUS_PERIOD';
+  dateFrom: string;
+  dateTo: string;
+  label?: string;
+}
 
 export interface ScopeProvenanceEntry {
   field:
@@ -68,7 +84,9 @@ export interface ScopeProvenanceEntry {
     | 'sellerIds'
     | 'sellerStates'
     | 'customerStates'
-    | 'interstateOnly';
+    | 'interstateOnly'
+    | 'reviewScores'
+    | 'comparison';
   source: ScopeSource;
   rawText?: string;
 }
@@ -80,6 +98,8 @@ export interface AnalysisScope {
   sellerIds?: string[];
   sellerStates?: string[];
   customerStates?: string[];
+  reviewScores?: number[];
+  comparison?: ScopeComparison;
   interstateOnly: boolean;
   provenance: ScopeProvenanceEntry[];
   scopeHash: string;

@@ -148,6 +148,7 @@ export function createLogisticsTools(prisma: PrismaService) {
       interstateOnly = false,
       minOrders = 10,
       topN = 10,
+      sortBy = 'DELIVERED_VOLUME',
       scopeHash = 'unspecified',
     }) => {
       const scope: AnalysisScope = {
@@ -163,7 +164,12 @@ export function createLogisticsTools(prisma: PrismaService) {
 
       const { orders, diagnostics } =
         await scopeRepo.getScopedDeliveredOrders(scope);
-      const distribution = computeRouteDistribution(orders, minOrders, topN);
+      const distribution = computeRouteDistribution(
+        orders,
+        minOrders,
+        topN,
+        sortBy,
+      );
 
       if (!distribution || distribution.eligibleRouteCount === 0) {
         return JSON.stringify({
@@ -264,6 +270,9 @@ export function createLogisticsTools(prisma: PrismaService) {
         interstateOnly: z.boolean().default(false),
         minOrders: z.number().default(10),
         topN: z.number().default(10),
+        sortBy: z
+          .enum(['DELIVERED_VOLUME', 'LATE_RATE'])
+          .default('DELIVERED_VOLUME'),
         scopeHash: z.string(),
       }),
     },
@@ -373,9 +382,153 @@ export function createLogisticsTools(prisma: PrismaService) {
     },
   );
 
+  const compareDeliverySummaryPeriods = tool(
+    async ({
+      dateFrom,
+      dateTo,
+      comparisonDateFrom,
+      comparisonDateTo,
+      categories,
+      sellerStates,
+      customerStates,
+      interstateOnly = false,
+      scopeHash = 'unspecified',
+    }) => {
+      const targetScope: AnalysisScope = {
+        dateFrom,
+        dateTo,
+        categories,
+        sellerStates,
+        customerStates,
+        interstateOnly: Boolean(interstateOnly),
+        provenance: [],
+        scopeHash,
+      };
+
+      const referenceScope: AnalysisScope = {
+        dateFrom: comparisonDateFrom,
+        dateTo: comparisonDateTo,
+        categories,
+        sellerStates,
+        customerStates,
+        interstateOnly: Boolean(interstateOnly),
+        provenance: [],
+        scopeHash,
+      };
+
+      const { orders: targetOrders } =
+        await scopeRepo.getScopedDeliveredOrders(targetScope);
+      const { orders: refOrders } =
+        await scopeRepo.getScopedDeliveredOrders(referenceScope);
+
+      const targetAgg = computeDeliveryAggregate(targetOrders);
+      const refAgg = computeDeliveryAggregate(refOrders);
+
+      const targetRate = targetAgg ? targetAgg.aggregateLateRatePct : 0;
+      const refRate = refAgg ? refAgg.aggregateLateRatePct : 0;
+
+      const deltaPercentagePoints =
+        Math.round((targetRate - refRate) * 10) / 10;
+      const relativeChangePct =
+        refRate > 0
+          ? Math.round(((targetRate - refRate) / refRate) * 1000) / 10
+          : 0;
+
+      const comparisonData = {
+        target: {
+          dateFrom,
+          dateTo,
+          deliveredOrders: targetAgg?.deliveredOrders || 0,
+          lateOrders: targetAgg?.lateOrders || 0,
+          lateRatePct: targetRate,
+        },
+        reference: {
+          dateFrom: comparisonDateFrom,
+          dateTo: comparisonDateTo,
+          deliveredOrders: refAgg?.deliveredOrders || 0,
+          lateOrders: refAgg?.lateOrders || 0,
+          lateRatePct: refRate,
+        },
+        deltaPercentagePoints,
+        relativeChangePct,
+      };
+
+      const metrics = [
+        {
+          key: 'delivery.comparison.target_late_rate_pct',
+          label: 'Tasa de atraso periodo objetivo (%)',
+          value: targetRate,
+          unit: 'PERCENT' as const,
+          sampleSize: targetAgg?.deliveredOrders || 0,
+          sourcePath: '$.data.target.lateRatePct',
+          aggregation: 'WEIGHTED_RATE' as const,
+        },
+        {
+          key: 'delivery.comparison.reference_late_rate_pct',
+          label: 'Tasa de atraso periodo referencia (%)',
+          value: refRate,
+          unit: 'PERCENT' as const,
+          sampleSize: refAgg?.deliveredOrders || 0,
+          sourcePath: '$.data.reference.lateRatePct',
+          aggregation: 'WEIGHTED_RATE' as const,
+        },
+        {
+          key: 'delivery.comparison.delta_percentage_points',
+          label: 'Diferencia en puntos porcentuales',
+          value: deltaPercentagePoints,
+          unit: 'PERCENT' as const,
+          sampleSize:
+            (targetAgg?.deliveredOrders || 0) + (refAgg?.deliveredOrders || 0),
+          sourcePath: '$.data.deltaPercentagePoints',
+          aggregation: 'MEAN' as const,
+        },
+        {
+          key: 'delivery.comparison.relative_change_pct',
+          label: 'Variación relativa de tasa de atraso',
+          value: relativeChangePct,
+          unit: 'PERCENT' as const,
+          sampleSize:
+            (targetAgg?.deliveredOrders || 0) + (refAgg?.deliveredOrders || 0),
+          sourcePath: '$.data.relativeChangePct',
+          aggregation: 'MEAN' as const,
+        },
+      ];
+
+      return JSON.stringify({
+        status: 'AVAILABLE',
+        scopeHash,
+        appliedScope: targetScope,
+        rowCount:
+          (targetAgg?.deliveredOrders || 0) + (refAgg?.deliveredOrders || 0),
+        sampleSize:
+          (targetAgg?.deliveredOrders || 0) + (refAgg?.deliveredOrders || 0),
+        methods: ['TEMPORAL_COMPARISON'],
+        metrics,
+        data: comparisonData,
+      });
+    },
+    {
+      name: 'compare_delivery_summary_periods',
+      description:
+        'Compara métricas de desempeño logístico entre un periodo objetivo y un periodo de referencia.',
+      schema: z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        comparisonDateFrom: z.string(),
+        comparisonDateTo: z.string(),
+        categories: z.array(z.string()).optional(),
+        sellerStates: z.array(z.string()).optional(),
+        customerStates: z.array(z.string()).optional(),
+        interstateOnly: z.boolean().default(false),
+        scopeHash: z.string(),
+      }),
+    },
+  );
+
   return {
     getDeliverySummary,
     getDeliveryPerformanceByRoute,
     getDeliveryStageBreakdown,
+    compareDeliverySummaryPeriods,
   };
 }

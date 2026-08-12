@@ -21,7 +21,13 @@ export type AnalysisMethod =
   | 'LINEAR_CONTRIBUTION'
   | 'REVIEW_LEXICON_AGGREGATION'
   | 'SEMANTIC_REVIEW_RETRIEVAL'
-  | 'RATING_DISTRIBUTION';
+  | 'RATING_DISTRIBUTION'
+  | 'SALES_AGGREGATION'
+  | 'CATEGORY_REVENUE_AGGREGATION'
+  | 'PAYMENT_METHOD_AGGREGATION'
+  | 'SELLER_REVENUE_RANKING'
+  | 'SELLER_SCORECARD_AGGREGATION'
+  | 'TEMPORAL_COMPARISON';
 
 export interface EvidenceMetric {
   key: string;
@@ -32,6 +38,7 @@ export interface EvidenceMetric {
   sourcePath: string;
   aggregation?:
     | 'COUNT'
+    | 'SUM'
     | 'WEIGHTED_RATE'
     | 'UNWEIGHTED_MEAN'
     | 'MEDIAN'

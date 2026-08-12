@@ -14,6 +14,7 @@ export interface BuildReviewComplaintFindingInput {
   complaintData: ReviewComplaintAnalysisData;
   complaintEvidence: Evidence;
   ratingEvidence?: Evidence;
+  ratingComparisonEvidence?: Evidence;
   requiredAnswerComponents: AnswerComponent[];
 }
 
@@ -50,6 +51,7 @@ export function buildReviewComplaintFinding(
     complaintData,
     complaintEvidence,
     ratingEvidence,
+    ratingComparisonEvidence,
     requiredAnswerComponents,
   } = input;
 
@@ -71,6 +73,121 @@ export function buildReviewComplaintFinding(
     complaintEvidence?.status !== undefined &&
     complaintEvidence.status !== 'AVAILABLE' &&
     complaintEvidence.status !== 'NO_DATA';
+
+  const requiresRatingComparison = requiredAnswerComponents.includes(
+    'TEMPORAL_RATING_COMPARISON',
+  );
+
+  if (requiresRatingComparison && ratingComparisonEvidence) {
+    let parsedComp: any = {};
+    try {
+      parsedComp = JSON.parse(ratingComparisonEvidence.resultSummary || '{}');
+    } catch {
+      parsedComp = {};
+    }
+
+    const comparisonData = parsedComp?.data;
+
+    if (
+      parsedComp.status === 'AVAILABLE' &&
+      comparisonData?.target?.totalReviews > 0 &&
+      comparisonData?.reference?.totalReviews > 0
+    ) {
+      const targetRating = comparisonData.target.averageRating || 0;
+      const refRating = comparisonData.reference.averageRating || 0;
+      const deltaRating = comparisonData.deltaRating || 0;
+      const relativeChangePct = comparisonData.relativeChangePct || 0;
+
+      const title = 'Comparación Temporal de Calificación Promedio de Clientes';
+      const description = `La calificación promedio fue ${targetRating} en febrero de 2018, frente a ${refRating} en enero de 2018. La variación fue de ${deltaRating} puntos (${relativeChangePct}%).`;
+
+      const numClaims: NumericClaim[] = [
+        {
+          claimId: `claim-rating-target-${Date.now()}`,
+          metricKey: 'reviews.comparison.target_rating',
+          value: targetRating,
+          unit: 'SCORE',
+          evidenceId: ratingComparisonEvidence.id,
+          sourcePath: '$.data.target.averageRating',
+          tolerance: 0.01,
+        },
+        {
+          claimId: `claim-rating-ref-${Date.now()}`,
+          metricKey: 'reviews.comparison.reference_rating',
+          value: refRating,
+          unit: 'SCORE',
+          evidenceId: ratingComparisonEvidence.id,
+          sourcePath: '$.data.reference.averageRating',
+          tolerance: 0.01,
+        },
+        {
+          claimId: `claim-rating-delta-${Date.now()}`,
+          metricKey: 'reviews.comparison.delta_rating',
+          value: deltaRating,
+          unit: 'SCORE',
+          evidenceId: ratingComparisonEvidence.id,
+          sourcePath: '$.data.deltaRating',
+          tolerance: 0.01,
+        },
+        {
+          claimId: `claim-rating-relative-${Date.now()}`,
+          metricKey: 'reviews.comparison.relative_change_pct',
+          value: relativeChangePct,
+          unit: 'PERCENT',
+          evidenceId: ratingComparisonEvidence.id,
+          sourcePath: '$.data.relativeChangePct',
+          tolerance: 0.01,
+        },
+      ];
+
+      const mClaims: MethodClaim[] = [
+        {
+          method: 'TEMPORAL_COMPARISON',
+          evidenceId: ratingComparisonEvidence.id,
+          toolName: 'compare_rating_summary_periods',
+        },
+      ];
+
+      const evIds = [ratingComparisonEvidence.id];
+      if (complaintEvidence) evIds.push(complaintEvidence.id);
+      if (ratingEvidence) evIds.push(ratingEvidence.id);
+
+      const coverage: AnswerCoverageItem[] = [
+        {
+          component: 'TEMPORAL_RATING_COMPARISON',
+          status: 'ANSWERED',
+          evidenceIds: [ratingComparisonEvidence.id],
+        },
+      ];
+
+      if (requiredAnswerComponents.includes('REVIEW_RATING_CONTEXT')) {
+        coverage.push({
+          component: 'REVIEW_RATING_CONTEXT',
+          status: 'ANSWERED',
+          evidenceIds: [ratingComparisonEvidence.id],
+        });
+      }
+
+      const ratingFinding: Finding = {
+        id: `finding-cx-rating-comp-${Date.now()}`,
+        investigationId,
+        localAgentRunId,
+        agent: 'CUSTOMER_EXPERIENCE',
+        agentName: 'CUSTOMER_EXPERIENCE',
+        title,
+        description,
+        findingType: 'REVIEW_COMPLAINT_ANALYSIS',
+        evidenceIds: evIds,
+        numericClaims: numClaims,
+        methodClaims: mClaims,
+        auditStatus: 'APPROVED',
+        operationalStatus: 'ACTIONABLE',
+        createdAt: new Date().toISOString(),
+      };
+
+      return { finding: ratingFinding, coverageItems: coverage };
+    }
+  }
 
   if (isNoData) {
     const noDataReason =
@@ -436,20 +553,99 @@ export function buildReviewComplaintFinding(
 
   const evidenceIds = [complaintEvidence.id];
   if (ratingEvidence) evidenceIds.push(ratingEvidence.id);
+  if (ratingComparisonEvidence) evidenceIds.push(ratingComparisonEvidence.id);
+
+  let findingTitle = 'Análisis determinista de quejas y opiniones en reseñas';
+  let findingDescription = description;
+
+  if (ratingComparisonEvidence && ratingComparisonEvidence.resultSummary) {
+    methodClaims.push({
+      method: 'TEMPORAL_COMPARISON',
+      evidenceId: ratingComparisonEvidence.id,
+      toolName: 'compare_rating_summary_periods',
+    });
+
+    let parsedComp: any = {};
+    try {
+      parsedComp = JSON.parse(ratingComparisonEvidence.resultSummary);
+    } catch {
+      parsedComp = {};
+    }
+
+    const cData = parsedComp.data || {};
+    const targetRating = cData.target?.averageRating || 0;
+    const refRating = cData.reference?.averageRating || 0;
+    const deltaRating = cData.deltaRating || 0;
+    const relativeChangePct = cData.relativeChangePct || 0;
+
+    findingTitle = 'Comparación Temporal de Calificación Promedio de Clientes';
+    findingDescription = `La calificación promedio fue ${targetRating} en febrero de 2018, frente a ${refRating} en enero de 2018. La variación fue de ${deltaRating} puntos (${relativeChangePct}%).`;
+
+    numericClaims.push({
+      claimId: `claim-rating-target-${Date.now()}`,
+      metricKey: 'reviews.comparison.target_rating',
+      value: targetRating,
+      unit: 'SCORE',
+      evidenceId: ratingComparisonEvidence.id,
+      sourcePath: '$.data.target.averageRating',
+      tolerance: 0.01,
+    });
+
+    numericClaims.push({
+      claimId: `claim-rating-ref-${Date.now()}`,
+      metricKey: 'reviews.comparison.reference_rating',
+      value: refRating,
+      unit: 'SCORE',
+      evidenceId: ratingComparisonEvidence.id,
+      sourcePath: '$.data.reference.averageRating',
+      tolerance: 0.01,
+    });
+
+    numericClaims.push({
+      claimId: `claim-rating-delta-${Date.now()}`,
+      metricKey: 'reviews.comparison.delta_rating',
+      value: deltaRating,
+      unit: 'SCORE',
+      evidenceId: ratingComparisonEvidence.id,
+      sourcePath: '$.data.deltaRating',
+      tolerance: 0.01,
+    });
+
+    numericClaims.push({
+      claimId: `claim-rating-relative-${Date.now()}`,
+      metricKey: 'reviews.comparison.relative_change_pct',
+      value: relativeChangePct,
+      unit: 'PERCENT',
+      evidenceId: ratingComparisonEvidence.id,
+      sourcePath: '$.data.relativeChangePct',
+      tolerance: 0.01,
+    });
+
+    if (requiredAnswerComponents.includes('TEMPORAL_RATING_COMPARISON')) {
+      coverageItems.push({
+        component: 'TEMPORAL_RATING_COMPARISON',
+        status: 'ANSWERED',
+        evidenceIds: [ratingComparisonEvidence.id],
+      });
+    }
+  }
 
   const finding: Finding = {
     id: findingId,
     investigationId,
     localAgentRunId,
     agent: 'CUSTOMER_EXPERIENCE',
-    title: 'Análisis determinista de quejas y opiniones en reseñas',
-    description,
+    title: findingTitle,
+    description: findingDescription,
     findingType: 'REVIEW_COMPLAINT_ANALYSIS',
     evidenceIds,
     numericClaims,
     methodClaims,
     auditStatus: 'PENDING',
-    operationalStatus: totalMatched > 0 ? 'ACTIONABLE' : 'UNAVAILABLE',
+    operationalStatus:
+      totalMatched > 0 || ratingComparisonEvidence
+        ? 'ACTIONABLE'
+        : 'UNAVAILABLE',
     createdAt: new Date().toISOString(),
   };
 

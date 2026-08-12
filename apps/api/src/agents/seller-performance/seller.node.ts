@@ -1,4 +1,3 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { CommerceOpsStateType } from '../state/commerce-ops-state';
 import { PrismaService } from '../../database/prisma.service';
 import { StreamingService } from '../../streaming/streaming.service';
@@ -7,8 +6,14 @@ import {
   runAgentWithTrace,
   executeToolWithTrace,
 } from '../../observability/agent-runner';
-import { extractModelUsage } from '../../observability/usage';
-import { ToolExecutionTrace } from '@commerce-ops/shared-types';
+import {
+  ToolExecutionTrace,
+  Evidence,
+  Finding,
+  AnswerCoverageItem,
+  NumericClaim,
+  MethodClaim,
+} from '@commerce-ops/shared-types';
 
 export function createSellerPerformanceNode(
   prisma: PrismaService,
@@ -24,18 +29,10 @@ export function createSellerPerformanceNode(
     });
 
     const tools = createSellerPerformanceTools(prisma);
+    const topSellerTool = tools.find(
+      (t) => t.name === 'get_top_seller_by_revenue',
+    )!;
     const scorecardTool = tools.find((t) => t.name === 'get_seller_scorecard')!;
-
-    let targetSellerId = state.filters.sellerIds?.[0];
-    if (!targetSellerId) {
-      const topSeller = await prisma.olistOrderItem.groupBy({
-        by: ['sellerId'],
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
-        take: 1,
-      });
-      targetSellerId = topSeller[0]?.sellerId || 'seller-sample';
-    }
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'SELLER_PERFORMANCE',
@@ -43,7 +40,131 @@ export function createSellerPerformanceNode(
       modelName,
       execute: async ({ localRunId }) => {
         const toolTraces: ToolExecutionTrace[] = [];
-        const scorecardParams = { sellerId: targetSellerId };
+        const evidenceItems: Evidence[] = [];
+        const numericClaims: NumericClaim[] = [];
+        const methodClaims: MethodClaim[] = [];
+
+        const scopeHash = state.analysisScope?.scopeHash || 'global-scope';
+
+        let targetSellerId = state.filters?.sellerIds?.[0];
+        let topSellerEvidence: Evidence | undefined;
+
+        if (!targetSellerId) {
+          const topSellerParams = { scopeHash };
+
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'SELLER_PERFORMANCE',
+            tool: 'get_top_seller_by_revenue',
+          });
+
+          const { result: topRes, trace: topTrace } =
+            await executeToolWithTrace({
+              localAgentRunId: localRunId,
+              agentName: 'SELLER_PERFORMANCE',
+              iteration,
+              toolName: 'get_top_seller_by_revenue',
+              parameters: topSellerParams,
+              execute: () => topSellerTool.invoke(topSellerParams),
+            });
+          toolTraces.push(topTrace);
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'SELLER_PERFORMANCE',
+            tool: 'get_top_seller_by_revenue',
+          });
+
+          const topStr =
+            typeof topRes === 'string' ? topRes : JSON.stringify(topRes);
+
+          const parsedTopEnvelope = JSON.parse(topStr);
+          const topData = parsedTopEnvelope?.data || null;
+
+          topSellerEvidence = {
+            id: `ev-seller-top-${Date.now()}`,
+            localAgentRunId: localRunId,
+            localToolExecutionId: topTrace.localExecutionId,
+            sourceType: 'TOOL_EXECUTION',
+            agentName: 'SELLER_PERFORMANCE',
+            iteration,
+            toolName: 'get_top_seller_by_revenue',
+            scopeHash,
+            appliedScope: state.analysisScope,
+            status: parsedTopEnvelope.status,
+            reasonCode: parsedTopEnvelope.reasonCode,
+            parameters: topSellerParams,
+            resultSummary: topStr,
+            rowCount: parsedTopEnvelope.rowCount || 0,
+            sampleSize: parsedTopEnvelope.sampleSize || 0,
+            metrics: parsedTopEnvelope.metrics || [],
+            generatedAt: new Date().toISOString(),
+          };
+          evidenceItems.push(topSellerEvidence);
+
+          if (topData?.sellerId) {
+            targetSellerId = topData.sellerId;
+          }
+
+          methodClaims.push({
+            method: 'SELLER_REVENUE_RANKING',
+            evidenceId: topSellerEvidence.id,
+            toolName: 'get_top_seller_by_revenue',
+          });
+        }
+
+        // If still no targetSellerId, return UNAVAILABLE finding
+        if (!targetSellerId) {
+          const findingItem: Finding = {
+            id: `finding-seller-${Date.now()}`,
+            investigationId,
+            localAgentRunId: localRunId,
+            agent: 'SELLER_PERFORMANCE',
+            agentName: 'SELLER_PERFORMANCE',
+            title: 'Rendimiento y riesgo del vendedor líder',
+            description:
+              'No se encontró un vendedor con ventas suficientes en el scope analizado.',
+            findingType: 'SELLER_PERFORMANCE',
+            evidenceIds: topSellerEvidence ? [topSellerEvidence.id] : [],
+            numericClaims: [],
+            methodClaims,
+            auditStatus: 'PENDING',
+            operationalStatus: 'UNAVAILABLE',
+            createdAt: new Date().toISOString(),
+          };
+
+          const coverageItems: AnswerCoverageItem[] = [
+            {
+              component: 'TOP_SELLER_IDENTIFICATION',
+              status: 'NO_DATA_WITH_REASON',
+              reasonCode: 'NO_SELLERS_WITH_REVENUE',
+              evidenceIds: topSellerEvidence ? [topSellerEvidence.id] : [],
+            },
+            {
+              component: 'SELLER_CUMULATIVE_PERFORMANCE',
+              status: 'NO_DATA_WITH_REASON',
+              reasonCode: 'NO_SELLERS_WITH_REVENUE',
+              evidenceIds: topSellerEvidence ? [topSellerEvidence.id] : [],
+            },
+            {
+              component: 'SELLER_OPERATIONAL_RISK',
+              status: 'NO_DATA_WITH_REASON',
+              reasonCode: 'NO_SELLERS_WITH_REVENUE',
+              evidenceIds: topSellerEvidence ? [topSellerEvidence.id] : [],
+            },
+          ];
+
+          return {
+            result: {
+              finding: findingItem,
+              evidence: evidenceItems,
+              toolTraces,
+              coverageItems,
+            },
+          };
+        }
+
+        const scorecardParams = {
+          sellerId: targetSellerId,
+          scopeHash,
+        };
 
         streaming.emit(investigationId, 'tool.started', {
           agent: 'SELLER_PERFORMANCE',
@@ -65,79 +186,156 @@ export function createSellerPerformanceNode(
           tool: 'get_seller_scorecard',
         });
 
-        const evidenceItem = {
-          id: `ev-seller-${Date.now()}`,
+        const scorecardStr =
+          typeof scorecardResult === 'string'
+            ? scorecardResult
+            : JSON.stringify(scorecardResult);
+
+        const parsedScoreEnvelope = JSON.parse(scorecardStr);
+        const sc = parsedScoreEnvelope?.data || {};
+
+        const scorecardEvidence: Evidence = {
+          id: `ev-seller-scorecard-${Date.now()}`,
           localAgentRunId: localRunId,
           localToolExecutionId: scorecardTrace.localExecutionId,
-          sourceType: 'TOOL_EXECUTION' as const,
-          agentName: 'SELLER_PERFORMANCE' as const,
+          sourceType: 'TOOL_EXECUTION',
+          agentName: 'SELLER_PERFORMANCE',
           iteration,
           toolName: 'get_seller_scorecard',
+          scopeHash,
+          appliedScope: state.analysisScope,
+          status: parsedScoreEnvelope.status,
+          reasonCode: parsedScoreEnvelope.reasonCode,
           parameters: scorecardParams,
-          resultSummary: scorecardResult,
+          resultSummary: scorecardStr,
+          rowCount: parsedScoreEnvelope.rowCount || 0,
+          sampleSize: parsedScoreEnvelope.sampleSize || 0,
+          metrics: parsedScoreEnvelope.metrics || [],
           generatedAt: new Date().toISOString(),
         };
+        evidenceItems.push(scorecardEvidence);
 
-        const model = new ChatOpenAI({
-          modelName,
-          temperature: 0.2,
-          apiKey: process.env.OPENAI_API_KEY,
+        methodClaims.push({
+          method: 'SELLER_SCORECARD_AGGREGATION',
+          evidenceId: scorecardEvidence.id,
+          toolName: 'get_seller_scorecard',
         });
 
-        const prompt = `Eres el Seller Performance Agent de CommerceOps AI.
-Pregunta del usuario: "${userQuestion}"
+        const sellerId = sc.sellerId || targetSellerId || 'desconocido';
+        const totalRevenue = Number(sc.totalRevenue || 0);
+        const totalGmv = Number(sc.totalGmv || 0);
+        const uniqueOrders = Number(sc.totalUniqueOrders || 0);
+        const itemsSold = Number(sc.totalItemsSold || 0);
+        const lateRate = Number(sc.lateRate || 0);
+        const averageRating = Number(sc.averageRating || 0);
+        const riskScore = sc.riskScore || 'LOW';
 
-Scorecard del vendedor analizado:
-${scorecardResult}
+        const description =
+          `Vendedor con mayores ventas: ${sellerId}\n` +
+          `Ingresos acumulados: R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+          `GMV: R$ ${totalGmv.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+          `Pedidos únicos: ${uniqueOrders}\n` +
+          `Items vendidos: ${itemsSold}\n` +
+          `Tasa de atraso: ${lateRate}%\n` +
+          `Rating promedio: ${averageRating}\n` +
+          `Riesgo operacional: ${riskScore}`;
 
-Genera un hallazgo de evaluación de riesgo en formato JSON:
-{
-  "title": "Evaluación de riesgo operacional del vendedor",
-  "description": "Análisis cuantitativo de entregas a tiempo, facturación y calificaciones acumuladas.",
-  "confidence": 0.91,
-  "findingType": "SELLER_RISK"
-}`;
+        // NumericClaims: all sourcePaths point to $.data.*
+        numericClaims.push({
+          claimId: 'claim-seller-revenue',
+          metricKey: 'seller.revenue',
+          value: totalRevenue,
+          unit: 'BRL',
+          evidenceId: scorecardEvidence.id,
+          sourcePath: '$.data.totalRevenue',
+          tolerance: 0.01,
+        });
 
-        let title = 'Ficha de rendimiento de vendedor evaluada';
-        let description = 'Se analizó el desempeño operativo del vendedor.';
-        let confidence = 0.91;
-        let inputTokens: number | undefined;
-        let outputTokens: number | undefined;
+        numericClaims.push({
+          claimId: 'claim-seller-gmv',
+          metricKey: 'seller.gmv',
+          value: totalGmv,
+          unit: 'BRL',
+          evidenceId: scorecardEvidence.id,
+          sourcePath: '$.data.totalGmv',
+          tolerance: 0.01,
+        });
 
-        try {
-          const response = await model.invoke(prompt);
-          const usage = extractModelUsage(response);
-          inputTokens = usage.inputTokens;
-          outputTokens = usage.outputTokens;
+        numericClaims.push({
+          claimId: 'claim-seller-orders',
+          metricKey: 'seller.unique_orders',
+          value: uniqueOrders,
+          unit: 'COUNT',
+          evidenceId: scorecardEvidence.id,
+          sourcePath: '$.data.totalUniqueOrders',
+          tolerance: 0,
+        });
 
-          const content =
-            typeof response.content === 'string'
-              ? response.content
-              : JSON.stringify(response.content);
-          const match = content.match(/\{[\s\S]*\}/);
-          if (match) {
-            const parsed = JSON.parse(match[0]);
-            if (parsed.title) title = parsed.title;
-            if (parsed.description) description = parsed.description;
-            if (parsed.confidence) confidence = parsed.confidence;
-          }
-        } catch (err) {
-          console.warn('[SellerNode] Error executing LLM call:', err);
-        }
+        numericClaims.push({
+          claimId: 'claim-seller-items',
+          metricKey: 'seller.items_sold',
+          value: itemsSold,
+          unit: 'COUNT',
+          evidenceId: scorecardEvidence.id,
+          sourcePath: '$.data.totalItemsSold',
+          tolerance: 0,
+        });
 
-        const findingItem = {
+        numericClaims.push({
+          claimId: 'claim-seller-late-rate',
+          metricKey: 'seller.late_rate_pct',
+          value: lateRate,
+          unit: 'PERCENT',
+          evidenceId: scorecardEvidence.id,
+          sourcePath: '$.data.lateRate',
+          tolerance: 0.1,
+        });
+
+        numericClaims.push({
+          claimId: 'claim-seller-rating',
+          metricKey: 'seller.average_rating',
+          value: averageRating,
+          unit: 'SCORE',
+          evidenceId: scorecardEvidence.id,
+          sourcePath: '$.data.averageRating',
+          tolerance: 0.01,
+        });
+
+        const findingItem: Finding = {
           id: `finding-seller-${Date.now()}`,
           investigationId,
           localAgentRunId: localRunId,
-          agent: 'SELLER_PERFORMANCE' as const,
-          title,
+          agent: 'SELLER_PERFORMANCE',
+          agentName: 'SELLER_PERFORMANCE',
+          title: `Rendimiento Acumulado y Riesgo Operacional del Vendedor ${sellerId}`,
           description,
-          findingType: 'SELLER_RISK',
-          confidence,
-          evidenceIds: [evidenceItem.id],
-          operationalStatus: 'ACTIONABLE' as const,
+          findingType: 'SELLER_PERFORMANCE',
+          evidenceIds: evidenceItems.map((e) => e.id),
+          numericClaims,
+          methodClaims,
+          auditStatus: 'PENDING',
           createdAt: new Date().toISOString(),
         };
+
+        const coverageItems: AnswerCoverageItem[] = [
+          {
+            component: 'TOP_SELLER_IDENTIFICATION',
+            status: 'ANSWERED',
+            evidenceIds: topSellerEvidence
+              ? [topSellerEvidence.id]
+              : [scorecardEvidence.id],
+          },
+          {
+            component: 'SELLER_CUMULATIVE_PERFORMANCE',
+            status: 'ANSWERED',
+            evidenceIds: [scorecardEvidence.id],
+          },
+          {
+            component: 'SELLER_OPERATIONAL_RISK',
+            status: 'ANSWERED',
+            evidenceIds: [scorecardEvidence.id],
+          },
+        ];
 
         streaming.emit(investigationId, 'finding.created', {
           agent: 'SELLER_PERFORMANCE',
@@ -150,11 +348,10 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
         return {
           result: {
             finding: findingItem,
-            evidence: [evidenceItem],
+            evidence: evidenceItems,
             toolTraces,
+            coverageItems,
           },
-          inputTokens,
-          outputTokens,
         };
       },
     });
@@ -168,6 +365,7 @@ Genera un hallazgo de evaluación de riesgo en formato JSON:
       toolExecutionTraces: result.toolTraces,
       findings: [result.finding],
       evidence: result.evidence,
+      answerCoverage: result.coverageItems,
     };
   };
 }

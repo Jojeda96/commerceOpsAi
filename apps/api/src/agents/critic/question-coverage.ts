@@ -120,6 +120,29 @@ export function auditQuestionCoverage(
     }
   }
 
+  const requiresSales = requiredCapabilities.includes('SALES_ANALYSIS');
+
+  if (requiresSales && !selectedAgents.includes('SALES')) {
+    violations.push({
+      code: 'MISSING_REQUIRED_AGENT',
+      severity: 'CRITICAL',
+      details: 'La pregunta requiere SALES pero SALES no fue seleccionado.',
+    });
+    missingAgentsSet.add('SALES');
+  }
+
+  const requiresSeller = requiredCapabilities.includes('SELLER_ANALYSIS');
+
+  if (requiresSeller && !selectedAgents.includes('SELLER_PERFORMANCE')) {
+    violations.push({
+      code: 'MISSING_REQUIRED_AGENT',
+      severity: 'CRITICAL',
+      details:
+        'La pregunta requiere SELLER_PERFORMANCE pero no fue seleccionado.',
+    });
+    missingAgentsSet.add('SELLER_PERFORMANCE');
+  }
+
   // 2. Component-by-Component Coverage Audit
   const coverageMap = new Map<AnswerComponent, AnswerCoverageItem>();
   for (const item of answerCoverage) {

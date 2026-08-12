@@ -14,10 +14,10 @@ export function sanitizeAnalyticalText(text: string): string {
     ' ',
   );
 
-  // 2. Remove semantic versions (e.g., delivery-risk-v2.0.0, v2.0.0, xgboost-2.1.3, 2.0.0)
-  // Preserves simple decimals like 3.46 or 7.8
+  // 2. Remove semantic versions (e.g., delivery-risk-v2.0.0, v2.0.0, xgboost-2.1.3)
+  // Preserves formatted numbers like 12.617.684,19
   sanitized = sanitized.replace(
-    /\b(?:[a-z][a-z0-9_-]*-v?\d+\.\d+(?:\.\d+)?|v\d+\.\d+(?:\.\d+)?|\d+\.\d+\.\d+)\b/gi,
+    /\b(?:[a-z][a-z0-9_-]*-v?\d+\.\d+(?:\.\d+)?|v\d+\.\d+(?:\.\d+)?)\b/gi,
     ' ',
   );
 

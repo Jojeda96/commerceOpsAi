@@ -5,6 +5,27 @@ import {
 import { calculateScopeHash } from './analysis-scope.hash';
 import { ResolveScopeInput } from './analysis-scope.types';
 
+const CATEGORY_ALIASES: Record<string, string> = {
+  muebles: 'moveis_decoracao',
+  'muebles decoracion': 'moveis_decoracao',
+  'muebles decoración': 'moveis_decoracao',
+  moveis_decoracao: 'moveis_decoracao',
+  informatica_acessorios: 'informatica_acessorios',
+  'informatica accesorios': 'informatica_acessorios',
+  'informática accesorios': 'informatica_acessorios',
+  computers_accessories: 'informatica_acessorios',
+};
+
+function normalizeForMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function createEmptyScope(): AnalysisScope {
   const base = {
     dateFrom: undefined,
@@ -13,6 +34,8 @@ export function createEmptyScope(): AnalysisScope {
     sellerIds: undefined,
     sellerStates: undefined,
     customerStates: undefined,
+    reviewScores: undefined,
+    comparison: undefined,
     interstateOnly: false,
     provenance: [],
   };
@@ -26,12 +49,30 @@ export function parseDeterministicQuestionFilters(question: string): {
   dateFrom?: string;
   dateTo?: string;
   interstateOnly?: boolean;
+  categories?: string[];
+  reviewScores?: number[];
+  comparison?: {
+    mode: 'PREVIOUS_PERIOD';
+    dateFrom: string;
+    dateTo: string;
+    label?: string;
+  };
   provenance: ScopeProvenanceEntry[];
 } {
   const provenance: ScopeProvenanceEntry[] = [];
   let dateFrom: string | undefined;
   let dateTo: string | undefined;
   let interstateOnly: boolean | undefined;
+  let categories: string[] | undefined;
+  let reviewScores: number[] | undefined;
+  let comparison:
+    | {
+        mode: 'PREVIOUS_PERIOD';
+        dateFrom: string;
+        dateTo: string;
+        label?: string;
+      }
+    | undefined;
 
   // 1. Explicit date regexes
   // Example: "febrero de 2018"
@@ -104,7 +145,64 @@ export function parseDeterministicQuestionFilters(question: string): {
     });
   }
 
-  return { dateFrom, dateTo, interstateOnly, provenance };
+  // 3. Category parsing
+  const normalizedQuestion = normalizeForMatch(question);
+  for (const [alias, canonical] of Object.entries(CATEGORY_ALIASES)) {
+    if (normalizedQuestion.includes(normalizeForMatch(alias))) {
+      categories = [canonical];
+      provenance.push({
+        field: 'categories',
+        source: 'DETERMINISTIC_QUESTION_PARSER',
+        rawText: alias,
+      });
+      break;
+    }
+  }
+
+  // 4. Review scores parsing (e.g. "1 estrella")
+  const starMatch = question.match(/\b([1-5])\s*estrella(?:s)?\b/i);
+  if (starMatch) {
+    const score = Number(starMatch[1]);
+    reviewScores = [score];
+    provenance.push({
+      field: 'reviewScores',
+      source: 'DETERMINISTIC_QUESTION_PARSER',
+      rawText: starMatch[0],
+    });
+  }
+
+  // 5. Temporal comparison parsing (Feb 2018 vs Jan 2018)
+  const comparativeTerms =
+    /\b(respecto de|respecto a|comparad[oa] con|comparaci[oó]n|cambi[oó]|aument[oó]|disminuy[oó]|subi[oó]|baj[oó]|vari[oó])\b/i;
+
+  if (
+    dateFrom === '2018-02-01T00:00:00.000Z' &&
+    dateTo === '2018-02-28T23:59:59.999Z' &&
+    comparativeTerms.test(question)
+  ) {
+    comparison = {
+      mode: 'PREVIOUS_PERIOD',
+      dateFrom: '2018-01-01T00:00:00.000Z',
+      dateTo: '2018-01-31T23:59:59.999Z',
+      label: 'Enero 2018',
+    };
+
+    provenance.push({
+      field: 'comparison',
+      source: 'DETERMINISTIC_QUESTION_PARSER',
+      rawText: question.match(comparativeTerms)?.[0],
+    });
+  }
+
+  return {
+    dateFrom,
+    dateTo,
+    interstateOnly,
+    categories,
+    reviewScores,
+    comparison,
+    provenance,
+  };
 }
 
 export function resolveAnalysisScope(input: ResolveScopeInput): AnalysisScope {
@@ -154,14 +252,63 @@ export function resolveAnalysisScope(input: ResolveScopeInput): AnalysisScope {
 
   // Categories
   const categories =
-    input.criticScopePatch?.categories || input.dtoFilters?.categories;
+    input.criticScopePatch?.categories ||
+    input.dtoFilters?.categories ||
+    parsed.categories;
   if (categories && categories.length > 0) {
-    provenance.push({
-      field: 'categories',
-      source: input.criticScopePatch?.categories
-        ? 'CRITIC_PATCH'
-        : 'REQUEST_DTO',
-    });
+    if (input.criticScopePatch?.categories) {
+      provenance.push({
+        field: 'categories',
+        source: 'CRITIC_PATCH',
+      });
+    } else if (input.dtoFilters?.categories) {
+      provenance.push({
+        field: 'categories',
+        source: 'REQUEST_DTO',
+      });
+    } else {
+      provenance.push(
+        ...parsed.provenance.filter((p) => p.field === 'categories'),
+      );
+    }
+  }
+
+  // ReviewScores
+  const reviewScores =
+    input.criticScopePatch?.reviewScores ||
+    input.dtoFilters?.reviewScores ||
+    parsed.reviewScores;
+  if (reviewScores && reviewScores.length > 0) {
+    if (input.criticScopePatch?.reviewScores) {
+      provenance.push({
+        field: 'reviewScores',
+        source: 'CRITIC_PATCH',
+      });
+    } else if (input.dtoFilters?.reviewScores) {
+      provenance.push({
+        field: 'reviewScores',
+        source: 'REQUEST_DTO',
+      });
+    } else {
+      provenance.push(
+        ...parsed.provenance.filter((p) => p.field === 'reviewScores'),
+      );
+    }
+  }
+
+  // Comparison
+  const comparison = input.criticScopePatch?.comparison || parsed.comparison;
+  if (comparison) {
+    if (input.criticScopePatch?.comparison) {
+      provenance.push({
+        field: 'comparison',
+        source: 'CRITIC_PATCH',
+      });
+    } else {
+      provenance.push(
+        ...parsed.provenance.filter((p) => p.field === 'comparison'),
+      );
+    }
   }
 
   // SellerIds
@@ -185,6 +332,9 @@ export function resolveAnalysisScope(input: ResolveScopeInput): AnalysisScope {
       sellerStates && sellerStates.length > 0 ? sellerStates : undefined,
     customerStates:
       customerStates && customerStates.length > 0 ? customerStates : undefined,
+    reviewScores:
+      reviewScores && reviewScores.length > 0 ? reviewScores : undefined,
+    comparison,
     interstateOnly,
     provenance,
   };

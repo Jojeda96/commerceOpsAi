@@ -13,6 +13,16 @@ export function calculateScopeHash(
     customerStates: scope.customerStates
       ? [...scope.customerStates].sort()
       : [],
+    reviewScores: scope.reviewScores
+      ? [...scope.reviewScores].sort((a, b) => a - b)
+      : [],
+    comparison: scope.comparison
+      ? {
+          mode: scope.comparison.mode,
+          dateFrom: scope.comparison.dateFrom,
+          dateTo: scope.comparison.dateTo,
+        }
+      : null,
     interstateOnly: Boolean(scope.interstateOnly),
   };
 

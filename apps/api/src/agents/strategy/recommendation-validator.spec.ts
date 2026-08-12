@@ -36,4 +36,47 @@ describe('Recommendation Validator', () => {
       0,
     );
   });
+
+  it('does not claim profitability from revenue-only sales findings', () => {
+    const rec: Recommendation = {
+      id: 'rec-sales',
+      investigationId: 'inv-1',
+      title: 'Monitoreo de la categoría más rentable',
+      description: 'beleza_saude ha demostrado ser la más rentable.',
+      priority: 'HIGH',
+      kind: 'MONITORING_ACTION',
+      supportingFindingIds: ['finding-sales'],
+      assumptions: [],
+    };
+
+    const result = validateRecommendation(
+      rec,
+      [
+        {
+          id: 'finding-sales',
+          investigationId: 'inv-1',
+          agent: 'SALES',
+          title: 'Top Categorías',
+          description: '',
+          findingType: 'SALES_ANALYSIS',
+          evidenceIds: [],
+          numericClaims: [
+            {
+              claimId: 'claim-revenue',
+              metricKey: 'sales.category.beleza_saude.revenue',
+              value: 1380681.34,
+              unit: 'BRL',
+              evidenceId: 'ev-sales',
+              sourcePath: '$.data.revenue',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        } as any,
+      ],
+      [],
+    );
+
+    expect(result.recommendation.description).not.toMatch(/rentabl/i);
+    expect(result.recommendation.description).toMatch(/ingresos/i);
+  });
 });

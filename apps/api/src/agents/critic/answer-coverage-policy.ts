@@ -80,6 +80,62 @@ export const COMPONENT_COVERAGE_POLICIES: Record<
     allowUnavailableWithReason: false,
     allowNoDataWithReason: true,
   },
+  ROUTE_RANKING_BY_LATE_RATE: {
+    component: 'ROUTE_RANKING_BY_LATE_RATE',
+    requiredAgent: 'LOGISTICS',
+    requiredTool: 'get_delivery_performance_by_route',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  TEMPORAL_LOGISTICS_COMPARISON: {
+    component: 'TEMPORAL_LOGISTICS_COMPARISON',
+    requiredAgent: 'LOGISTICS',
+    requiredTool: 'compare_delivery_summary_periods',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  TEMPORAL_RATING_COMPARISON: {
+    component: 'TEMPORAL_RATING_COMPARISON',
+    requiredAgent: 'CUSTOMER_EXPERIENCE',
+    requiredTool: 'compare_rating_summary_periods',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  TOP_REVENUE_CATEGORIES: {
+    component: 'TOP_REVENUE_CATEGORIES',
+    requiredAgent: 'SALES',
+    requiredTool: 'get_sales_by_category',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  PAYMENT_METHOD_COMPARISON: {
+    component: 'PAYMENT_METHOD_COMPARISON',
+    requiredAgent: 'SALES',
+    requiredTool: 'get_sales_by_payment_method',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  TOP_SELLER_IDENTIFICATION: {
+    component: 'TOP_SELLER_IDENTIFICATION',
+    requiredAgent: 'SELLER_PERFORMANCE',
+    requiredTool: 'get_top_seller_by_revenue',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  SELLER_CUMULATIVE_PERFORMANCE: {
+    component: 'SELLER_CUMULATIVE_PERFORMANCE',
+    requiredAgent: 'SELLER_PERFORMANCE',
+    requiredTool: 'get_seller_scorecard',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
+  SELLER_OPERATIONAL_RISK: {
+    component: 'SELLER_OPERATIONAL_RISK',
+    requiredAgent: 'SELLER_PERFORMANCE',
+    requiredTool: 'get_seller_scorecard',
+    allowUnavailableWithReason: true,
+    allowNoDataWithReason: true,
+  },
 };
 
 export function validateAnswerCoverageItemPolicy(item: AnswerCoverageItem): {

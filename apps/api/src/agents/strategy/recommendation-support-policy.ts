@@ -56,15 +56,11 @@ export function validateRecommendationSupport(
 
   const hasPackageDamageEvidence =
     answeredComponents.includes('PACKAGE_DAMAGE_COMPLAINTS') ||
-    findings.some((f) => {
-      const text = `${f.title} ${f.description}`.toLowerCase();
-      return (
-        text.includes('daño') ||
-        text.includes('quebrado') ||
-        text.includes('package_damage') ||
-        (f as any).findingType === 'REVIEW_COMPLAINT_ANALYSIS'
-      );
-    });
+    findings.some((finding) =>
+      (finding.numericClaims || []).some((claim) =>
+        claim.metricKey.startsWith('reviews.topic.package_damage.'),
+      ),
+    );
 
   for (let idx = 0; idx < recommendations.length; idx++) {
     const rec = { ...recommendations[idx] };
@@ -102,11 +98,28 @@ export function validateRecommendationSupport(
         continue;
       }
 
-      // Ensure non-causal phrasing
-      rec.description = rec.description.replace(
-        /corregir las causas del embalaje deficiente/i,
-        'Auditar el proceso de embalaje y manipulación para evaluar si contribuye a las quejas observadas.',
-      );
+      // Las reseñas demuestran que existen reportes de daño,
+      // pero no demuestran que el embalaje sea la causa operacional.
+      rec.kind = 'HYPOTHESIS_TO_TEST';
+
+      rec.title = 'Auditar relación entre embalaje y daños reportados';
+
+      rec.description =
+        'Auditar el proceso de embalaje y manipulación para evaluar ' +
+        'si está asociado con las quejas observadas sobre productos ' +
+        'o paquetes dañados. Las reseñas justifican esta investigación, ' +
+        'pero no demuestran causalidad operacional.';
+
+      const requirements = rec.validationRequirements || [];
+
+      const causalRequirement =
+        'Validar con evidencia operacional de embalaje, manipulación y transporte antes de atribuir causalidad.';
+
+      if (!requirements.includes(causalRequirement)) {
+        requirements.push(causalRequirement);
+      }
+
+      rec.validationRequirements = requirements;
     }
 
     // Rule 3: LOCAL_EXPLANATION_ANALYSIS requires available LOCAL_EXPLANATION component

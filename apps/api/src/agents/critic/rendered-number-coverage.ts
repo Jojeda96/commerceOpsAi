@@ -11,21 +11,21 @@ export function extractNumbersFromText(
   text: string,
 ): { rawText: string; value: number; index: number }[] {
   const sanitizedText = sanitizeAnalyticalText(text);
-  // Matches integer and floating-point numbers, including formatted numbers like 61,779 or 61.779 or 9.3%
-  const regex = /(?<![vV\w-])\b\d+(?:[.,]\d+)*%?\b/g;
+  // Matches integer and floating-point numbers, including optional negative signs and percentages
+  const regex = /(?<![vV\w-])-?\b\d+(?:[.,]\d+)*%?\b/g;
   const results: { rawText: string; value: number; index: number }[] = [];
 
   let match: RegExpExecArray | null;
   while ((match = regex.exec(sanitizedText)) !== null) {
     const rawText = match[0];
-    const isYear = /^(?:201[6-9]|202[0-9])$/.test(rawText);
+    const isYear = /^(?:201[6-9]|202[0-9])$/.test(rawText.replace('-', ''));
     if (isYear) continue;
 
     let cleaned = rawText.replace('%', '');
     // If text has ',' as thousands separator like 61,779
-    if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(cleaned)) {
+    if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(cleaned)) {
       cleaned = cleaned.replace(/,/g, '');
-    } else if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(cleaned)) {
+    } else if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(cleaned)) {
       // European 61.779,50
       cleaned = cleaned.replace(/\./g, '').replace(',', '.');
     } else {
@@ -56,7 +56,10 @@ export function findUncoveredNumbers(
     const isClaimed = claims.some((c: NumericClaim) => {
       const tol = c.tolerance || 0.05;
       if (Math.abs(c.value - num.value) <= tol) return true;
+      if (Math.abs(Math.abs(c.value) - Math.abs(num.value)) <= tol) return true;
       if (Math.abs(c.value * 100 - num.value) <= 0.1) return true;
+      if (Math.abs(Math.abs(c.value * 100) - Math.abs(num.value)) <= 0.1)
+        return true;
       return false;
     });
 

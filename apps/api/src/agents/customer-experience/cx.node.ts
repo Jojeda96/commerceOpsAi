@@ -98,6 +98,8 @@ export function createCustomerExperienceNode(
     const ratingTool = tools.find((t) => t.name === 'get_rating_summary')!;
     const searchTool = tools.find((t) => t.name === 'search_reviews_semantic')!;
     const detectedCategory = extractCategory(userQuestion);
+    const scopedCategories = analysisScope?.categories;
+    const scopedReviewScores = analysisScope?.reviewScores;
 
     const { result, trace: agentTrace } = await runAgentWithTrace({
       agentName: 'CUSTOMER_EXPERIENCE',
@@ -112,9 +114,20 @@ export function createCustomerExperienceNode(
           topics: ['DELIVERY_DELAY', 'PACKAGE_DAMAGE'],
           dateFrom: state.filters.dateFrom,
           dateTo: state.filters.dateTo,
-          categories: detectedCategory
-            ? [detectedCategory]
-            : state.filters.categories,
+          categories:
+            scopedCategories && scopedCategories.length > 0
+              ? scopedCategories
+              : detectedCategory
+                ? [detectedCategory]
+                : undefined,
+          minimumReviewScore:
+            scopedReviewScores && scopedReviewScores.length === 1
+              ? scopedReviewScores[0]
+              : undefined,
+          maximumReviewScore:
+            scopedReviewScores && scopedReviewScores.length === 1
+              ? scopedReviewScores[0]
+              : undefined,
           scopeHash,
         };
 
@@ -255,54 +268,129 @@ export function createCustomerExperienceNode(
           evidenceItems.push(ratingEvidence);
         }
 
-        // 3. Optional semantic search enrichment
-        const searchParams = {
-          query: userQuestion,
-          topK: 3,
-          categories: detectedCategory
-            ? [detectedCategory]
-            : state.filters.categories,
-          dateFrom: state.filters.dateFrom,
-          dateTo: state.filters.dateTo,
-        };
+        // 2b. Tool 2b: compare_rating_summary_periods (optional or if required)
+        let ratingComparisonEvidence: Evidence | undefined = undefined;
+        const compareRatingTool = tools.find(
+          (t) => t.name === 'compare_rating_summary_periods',
+        );
 
-        try {
-          const { result: rawSearchResult, trace: searchTrace } =
+        if (
+          compareRatingTool &&
+          (analysisScope?.comparison ||
+            requiredAnswerComponents.includes('TEMPORAL_RATING_COMPARISON'))
+        ) {
+          const compScope = analysisScope?.comparison || {
+            dateFrom: '2018-01-01T00:00:00.000Z',
+            dateTo: '2018-01-31T23:59:59.999Z',
+          };
+          const ratingCompParams = {
+            dateFrom: state.filters.dateFrom || '2018-02-01T00:00:00.000Z',
+            dateTo: state.filters.dateTo || '2018-02-28T23:59:59.999Z',
+            comparisonDateFrom: compScope.dateFrom,
+            comparisonDateTo: compScope.dateTo,
+            category: scopedCategories?.[0] || detectedCategory,
+            scopeHash,
+          };
+
+          streaming.emit(investigationId, 'tool.started', {
+            agent: 'CUSTOMER_EXPERIENCE',
+            tool: 'compare_rating_summary_periods',
+          });
+
+          const { result: rawCompResult, trace: compTrace } =
             await executeToolWithTrace({
               localAgentRunId: localRunId,
               agentName: 'CUSTOMER_EXPERIENCE',
               iteration,
-              toolName: 'search_reviews_semantic',
-              parameters: searchParams,
-              execute: () => searchTool.invoke(searchParams),
+              toolName: 'compare_rating_summary_periods',
+              parameters: ratingCompParams,
+              execute: () => compareRatingTool.invoke(ratingCompParams as any),
             });
-          const searchResultStr =
-            typeof rawSearchResult === 'string'
-              ? rawSearchResult
-              : typeof (rawSearchResult as any)?.content === 'string'
-                ? (rawSearchResult as any).content
-                : JSON.stringify(rawSearchResult);
+          const compResultStr =
+            typeof rawCompResult === 'string'
+              ? rawCompResult
+              : JSON.stringify(rawCompResult);
 
-          toolTraces.push(searchTrace);
+          toolTraces.push(compTrace);
+          streaming.emit(investigationId, 'tool.completed', {
+            agent: 'CUSTOMER_EXPERIENCE',
+            tool: 'compare_rating_summary_periods',
+          });
 
-          const searchEvidence = createEvidenceFromToolEnvelope({
-            id: `ev-cx-semantic-${Date.now()}`,
+          ratingComparisonEvidence = createEvidenceFromToolEnvelope({
+            id: `ev-cx-rating-comp-${Date.now()}`,
             localAgentRunId: localRunId,
-            localToolExecutionId: searchTrace.localExecutionId,
+            localToolExecutionId: compTrace.localExecutionId,
             agentName: 'CUSTOMER_EXPERIENCE',
             iteration,
-            toolName: 'search_reviews_semantic',
+            toolName: 'compare_rating_summary_periods',
             scopeHash,
             appliedScope: analysisScope,
-            parameters: searchParams,
-            rawResultString: searchResultStr,
+            parameters: ratingCompParams,
+            rawResultString: compResultStr,
           });
-          evidenceItems.push(searchEvidence);
-        } catch (e) {
-          console.warn(
-            '[CXNode] Optional semantic search enrichment failed or skipped:',
-            e,
-          );
+          evidenceItems.push(ratingComparisonEvidence);
+        }
+
+        // 3. Optional semantic search enrichment
+        const needsSemanticSearch =
+          requiredAnswerComponents.includes('REVIEW_COMPLAINT_THEMES') ||
+          requiredAnswerComponents.includes('DELIVERY_DELAY_COMPLAINTS') ||
+          requiredAnswerComponents.includes('PACKAGE_DAMAGE_COMPLAINTS');
+
+        if (needsSemanticSearch) {
+          const searchParams = {
+            query: userQuestion,
+            topK: 3,
+            categories:
+              scopedCategories && scopedCategories.length > 0
+                ? scopedCategories
+                : detectedCategory
+                  ? [detectedCategory]
+                  : undefined,
+            reviewScores: scopedReviewScores,
+            dateFrom: state.filters.dateFrom,
+            dateTo: state.filters.dateTo,
+          };
+
+          try {
+            const { result: rawSearchResult, trace: searchTrace } =
+              await executeToolWithTrace({
+                localAgentRunId: localRunId,
+                agentName: 'CUSTOMER_EXPERIENCE',
+                iteration,
+                toolName: 'search_reviews_semantic',
+                parameters: searchParams,
+                execute: () => searchTool.invoke(searchParams),
+              });
+            const searchResultStr =
+              typeof rawSearchResult === 'string'
+                ? rawSearchResult
+                : typeof (rawSearchResult as any)?.content === 'string'
+                  ? (rawSearchResult as any).content
+                  : JSON.stringify(rawSearchResult);
+
+            toolTraces.push(searchTrace);
+
+            const searchEvidence = createEvidenceFromToolEnvelope({
+              id: `ev-cx-semantic-${Date.now()}`,
+              localAgentRunId: localRunId,
+              localToolExecutionId: searchTrace.localExecutionId,
+              agentName: 'CUSTOMER_EXPERIENCE',
+              iteration,
+              toolName: 'search_reviews_semantic',
+              scopeHash,
+              appliedScope: analysisScope,
+              parameters: searchParams,
+              rawResultString: searchResultStr,
+            });
+            evidenceItems.push(searchEvidence);
+          } catch (e) {
+            console.warn(
+              '[CXNode] Optional semantic search enrichment failed or skipped:',
+              e,
+            );
+          }
         }
 
         // 4. Build deterministic finding and coverage items
@@ -320,6 +408,7 @@ export function createCustomerExperienceNode(
           complaintData,
           complaintEvidence,
           ratingEvidence,
+          ratingComparisonEvidence,
           requiredAnswerComponents,
         });
 

@@ -15,6 +15,7 @@ export interface BuildLogisticsFindingParams {
   aggregateEvidence: Evidence;
   routeEvidence?: Evidence;
   stageEvidence?: Evidence;
+  comparisonEvidence?: Evidence;
 }
 
 export function buildLogisticsFinding(
@@ -27,6 +28,7 @@ export function buildLogisticsFinding(
     aggregateEvidence,
     routeEvidence,
     stageEvidence,
+    comparisonEvidence,
   } = params;
 
   const numericClaims: NumericClaim[] = [];
@@ -144,9 +146,73 @@ export function buildLogisticsFinding(
     });
   }
 
-  const title = scope.interstateOnly
-    ? 'Análisis histórico de entregas interestatales'
-    : 'Análisis histórico de comportamiento logístico';
+  if (comparisonEvidence && comparisonEvidence.resultSummary) {
+    evidenceIds.push(comparisonEvidence.id);
+    methodClaims.push({
+      method: 'TEMPORAL_COMPARISON',
+      evidenceId: comparisonEvidence.id,
+      toolName: 'compare_delivery_summary_periods',
+    });
+
+    const parsedComp =
+      typeof comparisonEvidence.resultSummary === 'string'
+        ? JSON.parse(comparisonEvidence.resultSummary)
+        : comparisonEvidence.resultSummary;
+    const cData = parsedComp?.data || {};
+    const targetRate = cData.target?.lateRatePct || 0;
+    const refRate = cData.reference?.lateRatePct || 0;
+    const delta = cData.deltaPercentagePoints || 0;
+    const relative = cData.relativeChangePct || 0;
+    const catName = scope.categories?.[0] || 'la categoría analizada';
+
+    description = `En febrero de 2018 la tasa de atraso de ${catName} fue ${targetRate}%, frente a ${refRate}% en enero de 2018. La variación fue de ${delta} puntos porcentuales (${relative}% relativo).`;
+
+    numericClaims.push({
+      claimId: 'claim-comp-target-rate',
+      metricKey: 'delivery.comparison.target_late_rate_pct',
+      value: targetRate,
+      unit: 'PERCENT',
+      evidenceId: comparisonEvidence.id,
+      sourcePath: '$.data.target.lateRatePct',
+      tolerance: 0.1,
+    });
+
+    numericClaims.push({
+      claimId: 'claim-comp-ref-rate',
+      metricKey: 'delivery.comparison.reference_late_rate_pct',
+      value: refRate,
+      unit: 'PERCENT',
+      evidenceId: comparisonEvidence.id,
+      sourcePath: '$.data.reference.lateRatePct',
+      tolerance: 0.1,
+    });
+
+    numericClaims.push({
+      claimId: 'claim-comp-delta-pp',
+      metricKey: 'delivery.comparison.delta_percentage_points',
+      value: delta,
+      unit: 'PERCENT',
+      evidenceId: comparisonEvidence.id,
+      sourcePath: '$.data.deltaPercentagePoints',
+      tolerance: 0.1,
+    });
+
+    numericClaims.push({
+      claimId: 'claim-comp-relative-pct',
+      metricKey: 'delivery.comparison.relative_change_pct',
+      value: relative,
+      unit: 'PERCENT',
+      evidenceId: comparisonEvidence.id,
+      sourcePath: '$.data.relativeChangePct',
+      tolerance: 0.1,
+    });
+  }
+
+  const title = scope.comparison
+    ? 'Comparación temporal de tasa de atraso en entregas'
+    : scope.interstateOnly
+      ? 'Análisis histórico de entregas interestatales'
+      : 'Análisis histórico de comportamiento logístico';
 
   return {
     id: `finding-logistics-${Date.now()}`,
